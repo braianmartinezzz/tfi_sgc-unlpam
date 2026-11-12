@@ -40,6 +40,19 @@ class ConvenioStoreTest extends TestCase
             ->assertJsonPath('data.subtipo.id_instrumento', $marcoResponse->json('data.convenio.id_instrumento'))
             ->assertJsonPath('data.instituciones_firmantes.0.id_institucion', $institutionId);
 
+        $this->postJson('/api/convenios', [
+            'titulo' => 'Marco inválido',
+            'id_unidad_academica' => $unitId,
+            'tipo' => 'Colaboración',
+            'es_marco' => true,
+            'id_convenio_marco' => $marcoResponse->json('data.convenio.id_instrumento'),
+            'instituciones_ids' => [$institutionId],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['id_convenio_marco']);
+
+        $this->assertDatabaseCount('instrumento', 1);
+
         $specificResponse = $this->postJson('/api/convenios', [
             'titulo' => 'Convenio específico',
             'id_unidad_academica' => $unitId,

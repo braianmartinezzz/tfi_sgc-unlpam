@@ -65,6 +65,7 @@ class AuthTest extends TestCase
             'password' => 'password-segura',
         ])
             ->assertUnprocessable()
+            ->assertJsonPath('message', 'Los datos enviados no son válidos.')
             ->assertJsonValidationErrors(['mail']);
 
         $this->assertDatabaseCount('personal_access_tokens', 0);

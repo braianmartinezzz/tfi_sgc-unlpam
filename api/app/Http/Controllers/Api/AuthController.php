@@ -3,52 +3,28 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Usuario;
+use App\Http\Requests\LoginRequest;
+use App\Services\AuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
-    public function login(Request $request): JsonResponse
+    public function login(LoginRequest $request, AuthService $service): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'mail' => ['required', 'email'],
-            'password' => ['required', 'string'],
-        ]);
+        $result = $service->login($request->validated());
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Los datos enviados no son válidos.',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        $credentials = $validator->validated();
-        $usuario = Usuario::query()
-            ->where('mail', $credentials['mail'])
-            ->first();
-
-        if (
-            ! $usuario
-            || ! $usuario->activo
-            || ! Hash::check($credentials['password'], $usuario->password)
-        ) {
+        if ($result === null) {
             return response()->json([
                 'message' => 'Credenciales inválidas.',
             ], 401);
         }
 
-        $token = $usuario->createToken('auth-token')->plainTextToken;
-        $usuario->load(['rol', 'unidadAcademica']);
-
         return response()->json([
             'message' => 'Inicio de sesión exitoso.',
-            'access_token' => $token,
+            'access_token' => $result['access_token'],
             'token_type' => 'Bearer',
-            'user' => $usuario,
+            'user' => $result['user'],
         ]);
     }
 
@@ -61,13 +37,9 @@ class AuthController extends Controller
         ]);
     }
 
-    public function logout(Request $request): JsonResponse
+    public function logout(Request $request, AuthService $service): JsonResponse
     {
-        $token = $request->user()->currentAccessToken();
-
-        if ($token instanceof PersonalAccessToken) {
-            $token->delete();
-        }
+        $service->logout($request->user());
 
         return response()->json([
             'message' => 'Sesión cerrada correctamente.',
