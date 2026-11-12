@@ -12,5 +12,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/convenios', [ConvenioController::class, 'index']);
     Route::get('/convenios/{id}', [ConvenioController::class, 'show'])->whereNumber('id');
     Route::put('/convenios/{id}', [ConvenioController::class, 'update'])->whereNumber('id');
+    Route::delete('/convenios/{id}', [ConvenioController::class, 'destroy'])->whereNumber('id');
     Route::post('/convenios', [ConvenioController::class, 'store']);
 });

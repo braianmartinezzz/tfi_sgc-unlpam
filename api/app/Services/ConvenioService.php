@@ -144,6 +144,102 @@ class ConvenioService
         });
     }
 
+    public function destroy(string $id): void
+    {
+        DB::transaction(function () use ($id) {
+            $convenio = Convenio::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $instrumento = $convenio->instrumento()
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($instrumento->estado !== 'Borrador') {
+                throw new \DomainException(
+                    'Solo se pueden eliminar convenios en estado Borrador.'
+                );
+            }
+
+            $marco = $convenio->marco()
+                ->lockForUpdate()
+                ->first();
+
+            if ($marco !== null && $marco->especificos()->exists()) {
+                throw new \DomainException(
+                    'No se puede eliminar un Convenio Marco que posee Convenios Específicos vinculados.'
+                );
+            }
+
+            $referenciado = DB::table('adenda')
+                ->where('id_instrumento_modificado', $id)
+                ->exists()
+                || DB::table('sustitucion')
+                    ->where('id_instrumento_sustituido', $id)
+                    ->exists()
+                || DB::table('renovacion')
+                    ->where('id_instrumento_renovado', $id)
+                    ->exists();
+
+            if ($referenciado) {
+                throw new \DomainException(
+                    'No se puede eliminar el convenio porque está referenciado por otros instrumentos.'
+                );
+            }
+
+            DB::table('registro_auditoria')
+                ->where('id_instrumento', $id)
+                ->update(['id_instrumento' => null]);
+
+            DB::table('notificacion')
+                ->where('id_instrumento', $id)
+                ->update(['id_instrumento' => null]);
+
+            DB::table('historial_estado')
+                ->where('id_instrumento', $id)
+                ->delete();
+            DB::table('observacion')
+                ->where('id_instrumento', $id)
+                ->delete();
+
+            $convenio->institucionesFirmantes()->detach();
+            $convenio->personasFirmantes()->detach();
+
+            $especifico = $convenio->especifico()->first();
+
+            if ($especifico !== null) {
+                DB::table('pasantia')
+                    ->where('id_convenio_especifico', $id)
+                    ->delete();
+            }
+
+            $documentIds = DB::table('documento')
+                ->where('id_instrumento', $id)
+                ->pluck('id_documento');
+
+            DB::table('version')
+                ->whereIn('id_documento', $documentIds)
+                ->delete();
+            DB::table('documento')
+                ->where('id_instrumento', $id)
+                ->delete();
+
+            DB::table('adenda')
+                ->where('id_instrumento', $id)
+                ->delete();
+            DB::table('sustitucion')
+                ->where('id_instrumento', $id)
+                ->delete();
+            DB::table('renovacion')
+                ->where('id_instrumento', $id)
+                ->delete();
+
+            $convenio->marco()->delete();
+            $convenio->especifico()->delete();
+            $convenio->delete();
+            $instrumento->delete();
+        });
+    }
+
     public function store(array $data, Usuario $usuario): Instrumento
     {
         return DB::transaction(function () use ($data, $usuario) {

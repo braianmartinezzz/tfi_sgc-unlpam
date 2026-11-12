@@ -75,6 +75,31 @@ class ConvenioController extends Controller
         ]);
     }
 
+    public function destroy(string $id, ConvenioService $service): JsonResponse
+    {
+        try {
+            $service->destroy($id);
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al eliminar el convenio.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Convenio eliminado correctamente.',
+        ]);
+    }
+
     public function store(StoreConvenioRequest $request, ConvenioService $service): JsonResponse
     {
         try {
