@@ -6,10 +6,39 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreConvenioRequest;
 use App\Services\ConvenioService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Throwable;
 
 class ConvenioController extends Controller
 {
+    public function index(Request $request, ConvenioService $service): JsonResponse
+    {
+        $convenios = $service->paginate($request->only([
+            'estado',
+            'tipo',
+            'es_marco',
+            'id_unidad_academica',
+            'buscar',
+        ]));
+
+        return response()->json($convenios);
+    }
+
+    public function show(string $id, ConvenioService $service): JsonResponse
+    {
+        $convenio = $service->findById($id);
+
+        if ($convenio === null) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        }
+
+        return response()->json([
+            'data' => $convenio,
+        ]);
+    }
+
     public function store(StoreConvenioRequest $request, ConvenioService $service): JsonResponse
     {
         try {

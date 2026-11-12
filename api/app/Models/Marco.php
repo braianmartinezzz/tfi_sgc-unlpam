@@ -29,6 +29,15 @@ class Marco extends Model
         );
     }
 
+    public function instrumento(): BelongsTo
+    {
+        return $this->belongsTo(
+            Instrumento::class,
+            'id_instrumento',
+            'id_instrumento'
+        );
+    }
+
     public function especificos(): HasMany
     {
         return $this->hasMany(
