@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class ConvenioStoreTest extends TestCase
@@ -20,6 +22,7 @@ class ConvenioStoreTest extends TestCase
             'nombre' => 'Unidad Académica',
             'id_institucion' => $institutionId,
         ]);
+        $this->authenticate($unitId);
 
         $marcoResponse = $this->postJson('/api/convenios', [
             'titulo' => 'Convenio marco',
@@ -66,6 +69,7 @@ class ConvenioStoreTest extends TestCase
             'nombre' => 'Unidad Académica',
             'id_institucion' => $institutionId,
         ]);
+        $this->authenticate($unitId);
 
         $this->postJson('/api/convenios', [
             'titulo' => 'Convenio inválido',
@@ -78,5 +82,22 @@ class ConvenioStoreTest extends TestCase
             ->assertJsonValidationErrors(['id_convenio_marco', 'instituciones_ids.1']);
 
         $this->assertDatabaseCount('instrumento', 0);
+    }
+
+    private function authenticate(int $unitId): void
+    {
+        $rolId = DB::table('rol')->insertGetId([
+            'nombre' => 'Prueba',
+        ]);
+        $usuario = Usuario::query()->create([
+            'mail' => 'convenio@example.com',
+            'nombre' => 'Usuario de prueba',
+            'password' => Hash::make('password-segura'),
+            'activo' => true,
+            'id_rol' => $rolId,
+            'id_unidad' => $unitId,
+        ]);
+
+        $this->withToken($usuario->createToken('test')->plainTextToken);
     }
 }
