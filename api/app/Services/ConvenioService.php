@@ -72,6 +72,78 @@ class ConvenioService
             ->find($id);
     }
 
+    public function update(string $id, array $data): Convenio
+    {
+        return DB::transaction(function () use ($id, $data) {
+            $convenio = Convenio::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $instrumento = $convenio->instrumento()
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($instrumento->estado !== 'Borrador') {
+                throw new \DomainException('El convenio no está en fase de edición.');
+            }
+
+            $instrumentoFields = array_intersect_key($data, array_flip([
+                'titulo',
+                'objeto',
+                'expediente',
+                'resolucion',
+                'fecha_firma',
+                'inicio',
+                'vencimiento',
+                'dias_preaviso',
+                'notas',
+            ]));
+
+            if ($instrumentoFields !== []) {
+                $instrumento->fill($instrumentoFields)->save();
+            }
+
+            $convenioFields = array_intersect_key($data, array_flip([
+                'tipo',
+                'alcance',
+                'obligaciones',
+                'condiciones_recision',
+                'marco_legal',
+                'condicion_renovacion',
+                'confidencialidad',
+                'id_unidad_academica',
+            ]));
+
+            if ($convenioFields !== []) {
+                $convenio->fill($convenioFields)->save();
+            }
+
+            if (array_key_exists('id_convenio_marco', $data)) {
+                $especifico = $convenio->especifico()->first();
+
+                if ($especifico === null) {
+                    throw new \DomainException('No se puede modificar el subtipo del convenio.');
+                }
+
+                $especifico->fill([
+                    'id_convenio_marco' => $data['id_convenio_marco'],
+                ])->save();
+            }
+
+            if (array_key_exists('instituciones_ids', $data)) {
+                $convenio->institucionesFirmantes()->sync($data['instituciones_ids']);
+            }
+
+            return $convenio->load([
+                'instrumento',
+                'unidadAcademica',
+                'institucionesFirmantes',
+                'marco',
+                'especifico.marco.instrumento',
+                'historialEstados',
+            ]);
+        });
+    }
+
     public function store(array $data, Usuario $usuario): Instrumento
     {
         return DB::transaction(function () use ($data, $usuario) {

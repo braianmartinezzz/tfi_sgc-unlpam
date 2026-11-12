@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreConvenioRequest;
+use App\Http\Requests\UpdateConvenioRequest;
 use App\Services\ConvenioService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -36,6 +38,40 @@ class ConvenioController extends Controller
 
         return response()->json([
             'data' => $convenio,
+        ]);
+    }
+
+    public function update(
+        UpdateConvenioRequest $request,
+        string $id,
+        ConvenioService $service
+    ): JsonResponse {
+        try {
+            $convenio = $service->update($id, $request->validated());
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al actualizar el convenio.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Convenio actualizado correctamente.',
+            'data' => [
+                'instrumento' => $convenio->instrumento,
+                'convenio' => $convenio,
+                'subtipo' => $convenio->marco ?? $convenio->especifico,
+                'instituciones_firmantes' => $convenio->institucionesFirmantes,
+            ],
         ]);
     }
 

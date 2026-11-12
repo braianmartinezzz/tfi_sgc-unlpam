@@ -11,5 +11,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/convenios', [ConvenioController::class, 'index']);
     Route::get('/convenios/{id}', [ConvenioController::class, 'show'])->whereNumber('id');
+    Route::put('/convenios/{id}', [ConvenioController::class, 'update'])->whereNumber('id');
     Route::post('/convenios', [ConvenioController::class, 'store']);
 });
