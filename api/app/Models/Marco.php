@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Marco extends Model
 {
@@ -17,16 +18,23 @@ class Marco extends Model
 
     protected $fillable = [
         'id_instrumento',
-        'id_convenio_especifico',
     ];
 
     public function convenio(): BelongsTo
     {
-        return $this->belongsTo(Convenio::class, 'id_instrumento', 'id_instrumento');
+        return $this->belongsTo(
+            Convenio::class,
+            'id_instrumento',
+            'id_instrumento'
+        );
     }
 
-    public function convenioEspecifico(): BelongsTo
+    public function especificos(): HasMany
     {
-        return $this->belongsTo(Especifico::class, 'id_convenio_especifico', 'id_instrumento');
+        return $this->hasMany(
+            Especifico::class,
+            'id_convenio_marco',
+            'id_instrumento'
+        );
     }
 }
