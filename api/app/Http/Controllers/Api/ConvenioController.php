@@ -13,7 +13,10 @@ class ConvenioController extends Controller
     public function store(StoreConvenioRequest $request, ConvenioService $service): JsonResponse
     {
         try {
-            $instrumento = $service->store($request->validated());
+            $instrumento = $service->store(
+                $request->validated(),
+                $request->user()
+            );
         } catch (Throwable $exception) {
             report($exception);
 

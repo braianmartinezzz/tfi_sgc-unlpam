@@ -4,15 +4,17 @@ namespace App\Services;
 
 use App\Models\Convenio;
 use App\Models\Especifico;
+use App\Models\HistorialEstado;
 use App\Models\Instrumento;
 use App\Models\Marco;
+use App\Models\Usuario;
 use Illuminate\Support\Facades\DB;
 
 class ConvenioService
 {
-    public function store(array $data): Instrumento
+    public function store(array $data, Usuario $usuario): Instrumento
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $usuario) {
             $instrumento = Instrumento::create([
                 'titulo' => $data['titulo'],
                 'objeto' => $data['objeto'] ?? null,
@@ -39,6 +41,14 @@ class ConvenioService
             }
 
             $convenio->institucionesFirmantes()->attach($data['instituciones_ids']);
+
+            HistorialEstado::create([
+                'estado_anterior' => null,
+                'estado_nuevo' => 'Borrador',
+                'motivo' => 'Creación del convenio',
+                'id_instrumento' => $instrumento->id_instrumento,
+                'id_usuario' => $usuario->id_usuario,
+            ]);
 
             return $instrumento->load([
                 'convenio',
