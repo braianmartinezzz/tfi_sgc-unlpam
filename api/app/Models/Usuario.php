@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Sanctum\HasApiTokens;
 
-class Usuario extends Model
+class Usuario extends Authenticatable
 {
+    use HasApiTokens;
+
     protected $table = 'usuario';
 
     protected $primaryKey = 'id_usuario';
@@ -23,6 +26,10 @@ class Usuario extends Model
         'id_unidad',
     ];
 
+    protected $hidden = [
+        'password',
+    ];
+
     protected $casts = [
         'activo' => 'boolean',
     ];
@@ -34,7 +41,11 @@ class Usuario extends Model
 
     public function unidadAcademica(): BelongsTo
     {
-        return $this->belongsTo(UnidadAcademica::class, 'id_unidad', 'id_unidad_academica');
+        return $this->belongsTo(
+            UnidadAcademica::class,
+            'id_unidad',
+            'id_unidad_academica'
+        );
     }
 
     public function versiones(): HasMany
@@ -44,6 +55,10 @@ class Usuario extends Model
 
     public function historialesEstado(): HasMany
     {
-        return $this->hasMany(HistorialEstado::class, 'id_usuario', 'id_usuario');
+        return $this->hasMany(
+            HistorialEstado::class,
+            'id_usuario',
+            'id_usuario'
+        );
     }
 }
