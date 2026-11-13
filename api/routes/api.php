@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConvenioController;
 use App\Http\Controllers\Api\DocumentoController;
+use App\Http\Controllers\Api\InstitucionFirmanteController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -23,4 +24,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/documentos/{id}/descargar', [DocumentoController::class, 'downloadLatest'])->whereNumber('id');
     Route::get('/documentos/versiones/{idVersion}/descargar', [DocumentoController::class, 'downloadSpecific'])
         ->whereNumber('idVersion');
+    Route::get('/instituciones-firmantes', [InstitucionFirmanteController::class, 'index']);
+    Route::get('/instituciones-firmantes/{id}', [InstitucionFirmanteController::class, 'show'])->whereNumber('id');
+    Route::post('/instituciones-firmantes', [InstitucionFirmanteController::class, 'store']);
+    Route::put('/instituciones-firmantes/{id}', [InstitucionFirmanteController::class, 'update'])
+        ->whereNumber('id');
+    Route::delete('/instituciones-firmantes/{id}', [InstitucionFirmanteController::class, 'destroy'])
+        ->whereNumber('id');
 });
