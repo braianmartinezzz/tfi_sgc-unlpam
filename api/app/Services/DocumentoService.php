@@ -91,6 +91,97 @@ class DocumentoService
         }
     }
 
+    public function update(
+        string $documentoId,
+        array $data,
+        ?UploadedFile $file,
+        Usuario $usuario
+    ): Documento {
+        $rutaInterna = null;
+
+        try {
+            return DB::transaction(function () use (
+                $documentoId,
+                $data,
+                $file,
+                $usuario,
+                &$rutaInterna
+            ) {
+                $documento = Documento::query()
+                    ->lockForUpdate()
+                    ->findOrFail($documentoId);
+
+                if ($file !== null) {
+                    $convenio = Convenio::query()
+                        ->lockForUpdate()
+                        ->findOrFail($documento->id_instrumento);
+                    $instrumento = $convenio->instrumento()
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($instrumento === null) {
+                        throw (new ModelNotFoundException)->setModel(
+                            Instrumento::class,
+                            [$convenio->id_instrumento]
+                        );
+                    }
+
+                    if (! in_array($instrumento->estado, ['Borrador', 'EnCorreccion'], true)) {
+                        throw new \DomainException(
+                            'Solo se pueden cargar documentos en estado Borrador o EnCorreccion.'
+                        );
+                    }
+
+                    $versionAnterior = $documento->versiones()
+                        ->orderByDesc('numero')
+                        ->lockForUpdate()
+                        ->first();
+                    $numeroVersion = ($versionAnterior?->numero ?? 0) + 1;
+
+                    $hashSha256 = hash_file('sha256', $file->getRealPath());
+
+                    if ($hashSha256 === false) {
+                        throw new RuntimeException('No se pudo calcular el hash del archivo.');
+                    }
+
+                    $rutaInterna = $file->store('documentos', 'private');
+
+                    if ($rutaInterna === false) {
+                        throw new RuntimeException('No se pudo almacenar el archivo.');
+                    }
+
+                    $documento->fill(array_intersect_key(
+                        $data,
+                        array_flip(['tipo', 'titulo'])
+                    ))->save();
+
+                    $documento->versiones()->create([
+                        'numero' => $numeroVersion,
+                        'nombre_archivo' => $file->getClientOriginalName(),
+                        'tamanio_bytes' => $file->getSize(),
+                        'hash_sha256' => $hashSha256,
+                        'ruta_interna' => $rutaInterna,
+                        'fecha_carga' => now(),
+                        'id_usuario' => $usuario->id_usuario,
+                    ]);
+                } else {
+                    $documento->fill(array_intersect_key(
+                        $data,
+                        array_flip(['tipo', 'titulo'])
+                    ))->save();
+                }
+
+                return $documento->load('ultimaVersion');
+            });
+        } catch (Throwable $exception) {
+            if ($rutaInterna !== null) {
+                Storage::disk('private')->delete($rutaInterna);
+            }
+
+            throw $exception;
+        }
+    }
+
     public function listForConvenio(string $convenioId)
     {
         $convenio = Convenio::query()->findOrFail($convenioId);

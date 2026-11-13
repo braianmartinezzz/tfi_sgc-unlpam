@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDocumentoRequest;
+use App\Http\Requests\UpdateDocumentoRequest;
 use App\Models\Documento;
 use App\Models\Version;
 use App\Services\DocumentoService;
@@ -15,6 +16,45 @@ use Throwable;
 
 class DocumentoController extends Controller
 {
+    public function update(
+        UpdateDocumentoRequest $request,
+        string $id,
+        DocumentoService $service
+    ): JsonResponse {
+        try {
+            $documento = $service->update(
+                $id,
+                $request->validated(),
+                $request->file('archivo'),
+                $request->user()
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Documento o convenio asociado no encontrado.',
+            ], 404);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al actualizar el documento.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Documento actualizado correctamente.',
+            'data' => [
+                'documento' => $this->documentoData($documento),
+                'version' => $documento->ultimaVersion === null
+                    ? null
+                    : $this->versionData($documento->ultimaVersion),
+            ],
+        ]);
+    }
+
     public function store(
         StoreDocumentoRequest $request,
         string $id,

@@ -247,6 +247,187 @@ class DocumentoTest extends TestCase
         $this->get('/api/documentos/999999/descargar')->assertNotFound();
     }
 
+    public function test_it_updates_document_metadata_without_creating_a_version(): void
+    {
+        [$documento, $usuario, , $version] = $this->createDocumentWithVersion();
+        $documentId = $documento->id_documento;
+
+        $this->actingAs($usuario, 'sanctum')
+            ->putJson("/api/documentos/{$documentId}", ['titulo' => 'Nuevo título'])
+            ->assertOk()
+            ->assertJsonPath('data.documento.id_documento', $documentId)
+            ->assertJsonPath('data.documento.titulo', 'Nuevo título')
+            ->assertJsonPath('data.documento.tipo', 'Convenio')
+            ->assertJsonPath('data.version.id_version', $version->id_version);
+
+        $this->putJson("/api/documentos/{$documentId}", ['tipo' => 'Adenda'])
+            ->assertOk()
+            ->assertJsonPath('data.documento.id_documento', $documentId)
+            ->assertJsonPath('data.documento.tipo', 'Adenda')
+            ->assertJsonPath('data.documento.titulo', 'Nuevo título')
+            ->assertJsonPath('data.version.numero', 1);
+
+        $this->assertDatabaseCount('version', 1);
+        $this->putJson("/api/documentos/{$documentId}", [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['documento']);
+    }
+
+    public function test_it_adds_a_second_pdf_version_and_preserves_the_previous_file(): void
+    {
+        [$documento, $usuario, , $versionAnterior] = $this->createDocumentWithVersion();
+        $idDocumento = $documento->id_documento;
+        $contenidoNuevo = '%PDF-1.4 segunda versión';
+
+        $response = $this->actingAs($usuario, 'sanctum')->put(
+            "/api/documentos/{$idDocumento}",
+            [
+                'archivo' => UploadedFile::fake()->createWithContent(
+                    'segunda.pdf',
+                    $contenidoNuevo
+                ),
+            ]
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.documento.id_documento', $idDocumento)
+            ->assertJsonPath('data.version.numero', 2)
+            ->assertJsonPath('data.version.nombre_archivo', 'segunda.pdf')
+            ->assertJsonPath('data.version.hash_sha256', hash('sha256', $contenidoNuevo))
+            ->assertJsonPath('data.version.id_usuario', $usuario->id_usuario)
+            ->assertJsonMissingPath('data.version.ruta_interna');
+
+        $this->assertDatabaseHas('version', [
+            'id_version' => $versionAnterior->id_version,
+            'numero' => 1,
+        ]);
+        $this->assertDatabaseCount('version', 2);
+        Storage::disk('private')->assertExists($versionAnterior->ruta_interna);
+        Storage::disk('private')->assertExists(
+            Version::query()->findOrFail($response->json('data.version.id_version'))->ruta_interna
+        );
+    }
+
+    public function test_it_updates_metadata_and_creates_a_version_in_the_same_request(): void
+    {
+        [$documento, $usuario] = $this->createDocumentWithVersion();
+        $idDocumento = $documento->id_documento;
+
+        $this->actingAs($usuario, 'sanctum')->put(
+            "/api/documentos/{$idDocumento}",
+            [
+                'tipo' => 'Adenda',
+                'titulo' => 'Título actualizado',
+                'archivo' => UploadedFile::fake()->createWithContent(
+                    'actualizado.pdf',
+                    '%PDF-1.4 actualizado'
+                ),
+            ]
+        )
+            ->assertOk()
+            ->assertJsonPath('data.documento.id_documento', $idDocumento)
+            ->assertJsonPath('data.documento.tipo', 'Adenda')
+            ->assertJsonPath('data.documento.titulo', 'Título actualizado')
+            ->assertJsonPath('data.version.numero', 2);
+
+        $this->assertDatabaseCount('version', 2);
+    }
+
+    public function test_it_rejects_invalid_or_oversized_update_files(): void
+    {
+        [$documento, $usuario] = $this->createDocumentWithVersion();
+        $url = "/api/documentos/{$documento->id_documento}";
+
+        $this->actingAs($usuario, 'sanctum')->put($url, [
+            'archivo' => UploadedFile::fake()->create('documento.txt', 5, 'text/plain'),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['archivo']);
+
+        $this->put($url, [
+            'archivo' => UploadedFile::fake()->create(
+                'grande.pdf',
+                10241,
+                'application/pdf'
+            ),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['archivo']);
+
+        $this->assertDatabaseCount('version', 1);
+    }
+
+    public function test_it_returns_not_found_for_a_missing_document_update(): void
+    {
+        [$documento, $usuario] = $this->createDocumentWithVersion();
+
+        $this->actingAs($usuario, 'sanctum')
+            ->putJson('/api/documentos/999999', ['titulo' => 'No existe'])
+            ->assertNotFound();
+    }
+
+    public function test_document_update_requires_authentication(): void
+    {
+        [$documento] = $this->createDocumentWithVersion();
+        $this->withToken('')
+            ->putJson("/api/documentos/{$documento->id_documento}", [
+                'titulo' => 'Sin autenticación',
+            ])
+            ->assertUnauthorized();
+    }
+
+    public function test_it_only_blocks_new_versions_when_the_convenio_state_disallows_uploads(): void
+    {
+        [$documento, $usuario, $instrumento, $version] = $this->createDocumentWithVersion('Firmado');
+        $url = "/api/documentos/{$documento->id_documento}";
+
+        $this->actingAs($usuario, 'sanctum')
+            ->put($url, [
+                'archivo' => UploadedFile::fake()->createWithContent('tercera.pdf', '%PDF-1.4'),
+            ])
+            ->assertStatus(409);
+
+        $this->putJson($url, ['titulo' => 'Metadatos permitidos'])
+            ->assertOk()
+            ->assertJsonPath('data.documento.titulo', 'Metadatos permitidos')
+            ->assertJsonPath('data.version.id_version', $version->id_version);
+
+        $instrumento->update(['estado' => 'EnCorreccion']);
+        $this->put($url, [
+            'archivo' => UploadedFile::fake()->createWithContent(
+                'tercera.pdf',
+                '%PDF-1.4'
+            ),
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.version.numero', 2);
+    }
+
+    public function test_it_removes_a_new_file_if_version_persistence_fails(): void
+    {
+        [$documento, , , $versionAnterior] = $this->createDocumentWithVersion();
+        $usuarioInexistente = new Usuario;
+        $usuarioInexistente->id_usuario = 999999;
+
+        try {
+            app(DocumentoService::class)->update(
+                (string) $documento->id_documento,
+                [],
+                UploadedFile::fake()->createWithContent('fallo.pdf', '%PDF-1.4'),
+                $usuarioInexistente
+            );
+            $this->fail('Se esperaba que fallara la clave foránea del usuario.');
+        } catch (QueryException) {
+            $this->assertDatabaseCount('version', 1);
+            $this->assertDatabaseHas('version', [
+                'id_version' => $versionAnterior->id_version,
+            ]);
+            Storage::disk('private')->assertExists($versionAnterior->ruta_interna);
+            $this->assertCount(1, Storage::disk('private')->allFiles());
+        }
+    }
+
     private function createConvenio(string $estado = 'Borrador'): array
     {
         $institucionId = DB::table('institucion_firmante')->insertGetId([
@@ -282,6 +463,22 @@ class DocumentoTest extends TestCase
         $this->withToken($usuario->createToken('test')->plainTextToken);
 
         return [$convenio, $usuario, $instrumento];
+    }
+
+    private function createDocumentWithVersion(string $estado = 'Borrador'): array
+    {
+        [$convenio, $usuario, $instrumento] = $this->createConvenio($estado);
+        $documento = $this->createDocument($convenio);
+        Storage::disk('private')->put('documentos/original.pdf', '%PDF-1.4 original');
+        $version = $this->createVersion(
+            $documento,
+            $usuario,
+            1,
+            'original.pdf',
+            'documentos/original.pdf'
+        );
+
+        return [$documento, $usuario, $instrumento, $version];
     }
 
     private function createDocument(Convenio $convenio): Documento
