@@ -19,6 +19,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/convenios/{id}/documentos', [DocumentoController::class, 'index'])->whereNumber('id');
     Route::get('/documentos/{id}', [DocumentoController::class, 'show'])->whereNumber('id');
     Route::put('/documentos/{id}', [DocumentoController::class, 'update'])->whereNumber('id');
+    Route::delete('/documentos/{id}', [DocumentoController::class, 'destroy'])->whereNumber('id');
     Route::get('/documentos/{id}/descargar', [DocumentoController::class, 'downloadLatest'])->whereNumber('id');
     Route::get('/documentos/versiones/{idVersion}/descargar', [DocumentoController::class, 'downloadSpecific'])
         ->whereNumber('idVersion');

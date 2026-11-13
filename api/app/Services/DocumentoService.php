@@ -10,6 +10,7 @@ use App\Models\Version;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
@@ -180,6 +181,65 @@ class DocumentoService
 
             throw $exception;
         }
+    }
+
+    public function destroy(string $documentoId): void
+    {
+        DB::transaction(function () use ($documentoId) {
+            $documento = Documento::query()
+                ->lockForUpdate()
+                ->findOrFail($documentoId);
+            $convenio = Convenio::query()
+                ->lockForUpdate()
+                ->findOrFail($documento->id_instrumento);
+            $instrumento = $convenio->instrumento()
+                ->lockForUpdate()
+                ->first();
+
+            if ($instrumento === null) {
+                throw (new ModelNotFoundException)->setModel(
+                    Instrumento::class,
+                    [$convenio->id_instrumento]
+                );
+            }
+
+            if (! in_array($instrumento->estado, ['Borrador', 'EnCorreccion'], true)) {
+                throw new \DomainException(
+                    'Solo se pueden eliminar documentos en estado Borrador o EnCorreccion.'
+                );
+            }
+
+            $rutasInternas = $documento->versiones()
+                ->lockForUpdate()
+                ->pluck('ruta_interna')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $documento->versiones()->delete();
+
+            if (! $documento->delete()) {
+                throw new RuntimeException('No se pudo eliminar el documento.');
+            }
+
+            DB::afterCommit(function () use ($documentoId, $rutasInternas) {
+                foreach ($rutasInternas as $rutaInterna) {
+                    try {
+                        if (! Storage::disk('private')->delete($rutaInterna)) {
+                            Log::error('No se pudo eliminar un archivo de documento.', [
+                                'id_documento' => $documentoId,
+                            ]);
+                        }
+                    } catch (Throwable $exception) {
+                        Log::error('Falló la eliminación de un archivo de documento.', [
+                            'id_documento' => $documentoId,
+                            'exception' => $exception,
+                        ]);
+                    }
+                }
+            });
+        });
     }
 
     public function listForConvenio(string $convenioId)

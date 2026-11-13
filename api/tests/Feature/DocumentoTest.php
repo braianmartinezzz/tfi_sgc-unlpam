@@ -9,16 +9,18 @@ use App\Models\Usuario;
 use App\Models\Version;
 use App\Services\DocumentoService;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Mockery;
 use Tests\TestCase;
 
 class DocumentoTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseMigrations;
 
     protected function setUp(): void
     {
@@ -426,6 +428,137 @@ class DocumentoTest extends TestCase
             Storage::disk('private')->assertExists($versionAnterior->ruta_interna);
             $this->assertCount(1, Storage::disk('private')->allFiles());
         }
+    }
+
+    public function test_it_deletes_a_document_versions_and_only_its_files(): void
+    {
+        [$documento, $usuario, , $versionUno] = $this->createDocumentWithVersion();
+        $versionDos = $this->createVersion(
+            $documento,
+            $usuario,
+            2,
+            'segunda.pdf',
+            'documentos/segunda.pdf'
+        );
+        Storage::disk('private')->put($versionDos->ruta_interna, '%PDF-1.4 segunda');
+
+        $convenio = $documento->instrumento->convenio;
+        $otroDocumento = $this->createDocument($convenio);
+        $otraVersion = $this->createVersion(
+            $otroDocumento,
+            $usuario,
+            1,
+            'otro.pdf',
+            'documentos/otro.pdf'
+        );
+        Storage::disk('private')->put($otraVersion->ruta_interna, '%PDF-1.4 otro');
+
+        $this->actingAs($usuario, 'sanctum')
+            ->deleteJson("/api/documentos/{$documento->id_documento}")
+            ->assertOk()
+            ->assertExactJson(['message' => 'Documento eliminado correctamente.']);
+
+        $this->assertDatabaseMissing('documento', [
+            'id_documento' => $documento->id_documento,
+        ]);
+        $this->assertDatabaseMissing('version', [
+            'id_version' => $versionUno->id_version,
+        ]);
+        $this->assertDatabaseMissing('version', [
+            'id_version' => $versionDos->id_version,
+        ]);
+        $this->assertDatabaseHas('documento', [
+            'id_documento' => $otroDocumento->id_documento,
+        ]);
+        $this->assertDatabaseHas('convenio', [
+            'id_instrumento' => $convenio->id_instrumento,
+        ]);
+        Storage::disk('private')->assertMissing($versionUno->ruta_interna);
+        Storage::disk('private')->assertMissing($versionDos->ruta_interna);
+        Storage::disk('private')->assertExists($otraVersion->ruta_interna);
+    }
+
+    public function test_it_returns_not_found_when_deleting_an_unknown_document(): void
+    {
+        [, $usuario] = $this->createConvenio();
+
+        $this->actingAs($usuario, 'sanctum')
+            ->deleteJson('/api/documentos/999999')
+            ->assertNotFound();
+    }
+
+    public function test_it_rejects_document_deletion_when_the_convenio_state_is_not_allowed(): void
+    {
+        [$documento, $usuario, , $version] = $this->createDocumentWithVersion('Firmado');
+
+        $this->actingAs($usuario, 'sanctum')
+            ->deleteJson("/api/documentos/{$documento->id_documento}")
+            ->assertStatus(409);
+
+        $this->assertDatabaseHas('documento', [
+            'id_documento' => $documento->id_documento,
+        ]);
+        $this->assertDatabaseHas('version', [
+            'id_version' => $version->id_version,
+        ]);
+        Storage::disk('private')->assertExists($version->ruta_interna);
+    }
+
+    public function test_document_deletion_requires_authentication(): void
+    {
+        [$documento] = $this->createDocumentWithVersion();
+
+        $this->withToken('')
+            ->deleteJson("/api/documentos/{$documento->id_documento}")
+            ->assertUnauthorized();
+    }
+
+    public function test_a_rollback_does_not_remove_document_files_prematurely(): void
+    {
+        [$documento, , , $version] = $this->createDocumentWithVersion();
+        $connection = DB::connection();
+        $connection->beginTransaction();
+
+        app(DocumentoService::class)->destroy((string) $documento->id_documento);
+
+        Storage::disk('private')->assertExists($version->ruta_interna);
+        $connection->rollBack();
+
+        $this->assertDatabaseHas('documento', [
+            'id_documento' => $documento->id_documento,
+        ]);
+        $this->assertDatabaseHas('version', [
+            'id_version' => $version->id_version,
+        ]);
+        Storage::disk('private')->assertExists($version->ruta_interna);
+    }
+
+    public function test_it_logs_file_deletion_failures_after_the_database_commit(): void
+    {
+        [$documento, $usuario] = $this->createDocumentWithVersion();
+        $idDocumento = $documento->id_documento;
+        $disk = Mockery::mock();
+        $disk->shouldReceive('delete')
+            ->once()
+            ->with('documentos/original.pdf')
+            ->andReturn(false);
+
+        Storage::shouldReceive('disk')
+            ->once()
+            ->with('private')
+            ->andReturn($disk);
+        Log::shouldReceive('error')
+            ->once()
+            ->withArgs(fn ($message, $context) => $message === 'No se pudo eliminar un archivo de documento.'
+                && (string) $context['id_documento'] === (string) $idDocumento);
+
+        $this->actingAs($usuario, 'sanctum')
+            ->deleteJson("/api/documentos/{$idDocumento}")
+            ->assertOk();
+
+        $this->assertDatabaseMissing('documento', [
+            'id_documento' => $idDocumento,
+        ]);
     }
 
     private function createConvenio(string $estado = 'Borrador'): array

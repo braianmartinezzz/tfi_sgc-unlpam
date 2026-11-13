@@ -16,6 +16,31 @@ use Throwable;
 
 class DocumentoController extends Controller
 {
+    public function destroy(string $id, DocumentoService $service): JsonResponse
+    {
+        try {
+            $service->destroy($id);
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Documento o convenio asociado no encontrado.',
+            ], 404);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al eliminar el documento.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Documento eliminado correctamente.',
+        ]);
+    }
+
     public function update(
         UpdateDocumentoRequest $request,
         string $id,
