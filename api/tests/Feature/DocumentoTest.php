@@ -1,0 +1,322 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Convenio;
+use App\Models\Documento;
+use App\Models\Instrumento;
+use App\Models\Usuario;
+use App\Models\Version;
+use App\Services\DocumentoService;
+use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
+
+class DocumentoTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Storage::fake('private');
+    }
+
+    public function test_it_uploads_a_pdf_with_metadata_and_first_version(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio();
+        $contenido = '%PDF-1.4 documento de prueba';
+
+        $response = $this->actingAs($usuario, 'sanctum')->post(
+            "/api/convenios/{$convenio->id_instrumento}/documentos",
+            [
+                'tipo' => 'Convenio',
+                'titulo' => 'Convenio firmado',
+                'archivo' => UploadedFile::fake()->createWithContent(
+                    'original.pdf',
+                    $contenido
+                ),
+            ]
+        );
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.documento.tipo', 'Convenio')
+            ->assertJsonPath('data.documento.id_instrumento', $convenio->id_instrumento)
+            ->assertJsonPath('data.version.numero', 1)
+            ->assertJsonPath('data.version.nombre_archivo', 'original.pdf')
+            ->assertJsonPath('data.version.hash_sha256', hash('sha256', $contenido))
+            ->assertJsonMissingPath('data.version.ruta_interna');
+
+        $this->assertDatabaseHas('documento', [
+            'id_documento' => $response->json('data.documento.id_documento'),
+            'id_instrumento' => $convenio->id_instrumento,
+        ]);
+        $this->assertDatabaseHas('version', [
+            'numero' => 1,
+            'id_documento' => $response->json('data.documento.id_documento'),
+            'id_usuario' => $usuario->id_usuario,
+            'nombre_archivo' => 'original.pdf',
+            'tamanio_bytes' => strlen($contenido),
+            'hash_sha256' => hash('sha256', $contenido),
+        ]);
+        Storage::disk('private')->assertExists(
+            $response->json('data.version.ruta_interna')
+        );
+    }
+
+    public function test_it_rejects_invalid_missing_and_oversized_uploads(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio();
+        $url = "/api/convenios/{$convenio->id_instrumento}/documentos";
+
+        $this->actingAs($usuario, 'sanctum')
+            ->post($url, [
+                'tipo' => 'Convenio',
+                'titulo' => 'No es PDF',
+                'archivo' => UploadedFile::fake()->create(
+                    'documento.txt',
+                    5,
+                    'text/plain'
+                ),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['archivo']);
+
+        $this->post($url, [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['tipo', 'titulo', 'archivo']);
+
+        $this->post($url, [
+            'tipo' => 'Convenio',
+            'titulo' => 'Demasiado grande',
+            'archivo' => UploadedFile::fake()->create(
+                'grande.pdf',
+                10241,
+                'application/pdf'
+            ),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['archivo']);
+
+        $this->assertDatabaseCount('documento', 0);
+    }
+
+    public function test_it_returns_not_found_or_conflict_when_upload_is_not_allowed(): void
+    {
+        [$convenio, $usuario, $instrumento] = $this->createConvenio('Firmado');
+
+        $this->actingAs($usuario, 'sanctum')
+            ->post("/api/convenios/{$convenio->id_instrumento}/documentos", $this->validUpload())
+            ->assertStatus(409);
+
+        $this->post('/api/convenios/999999/documentos', $this->validUpload())
+            ->assertNotFound();
+
+        $instrumento->update(['estado' => 'EnCorreccion']);
+        $this->post(
+            "/api/convenios/{$convenio->id_instrumento}/documentos",
+            $this->validUpload()
+        )->assertCreated();
+    }
+
+    public function test_it_removes_the_uploaded_file_when_database_persistence_fails(): void
+    {
+        [$convenio] = $this->createConvenio();
+        $usuarioInexistente = new Usuario;
+        $usuarioInexistente->id_usuario = 999999;
+
+        try {
+            app(DocumentoService::class)->storeInitial(
+                (string) $convenio->id_instrumento,
+                ['tipo' => 'Convenio', 'titulo' => 'Fallo'],
+                UploadedFile::fake()->createWithContent('fallo.pdf', '%PDF-1.4'),
+                $usuarioInexistente
+            );
+            $this->fail('Se esperaba que fallara la clave foránea del usuario.');
+        } catch (QueryException) {
+            $this->assertDatabaseCount('documento', 0);
+            $this->assertDatabaseCount('version', 0);
+            $this->assertSame([], Storage::disk('private')->allFiles());
+        }
+    }
+
+    public function test_it_lists_documents_and_returns_an_empty_list_for_a_convenio_without_them(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio();
+
+        $this->actingAs($usuario, 'sanctum')
+            ->getJson("/api/convenios/{$convenio->id_instrumento}/documentos")
+            ->assertOk()
+            ->assertExactJson(['data' => []]);
+
+        $documento = $this->createDocument($convenio);
+        $this->createVersion($documento, $usuario, 1, 'uno.pdf', 'documentos/uno.pdf');
+        $this->createVersion($documento, $usuario, 2, 'dos.pdf', 'documentos/dos.pdf');
+
+        $response = $this->getJson(
+            "/api/convenios/{$convenio->id_instrumento}/documentos"
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.0.ultima_version.numero', 2)
+            ->assertJsonMissingPath('data.0.ultima_version.ruta_interna');
+
+        $this->getJson('/api/convenios/999999/documentos')->assertNotFound();
+    }
+
+    public function test_it_returns_document_history_in_descending_order_without_internal_paths(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio();
+        $documento = $this->createDocument($convenio);
+        $this->createVersion($documento, $usuario, 1, 'uno.pdf', 'private/one.pdf');
+        $this->createVersion($documento, $usuario, 2, 'dos.pdf', 'private/two.pdf');
+
+        $this->actingAs($usuario, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}")
+            ->assertOk()
+            ->assertJsonPath('data.versiones.0.numero', 2)
+            ->assertJsonPath('data.versiones.1.numero', 1)
+            ->assertJsonMissingPath('data.versiones.0.ruta_interna');
+
+        $this->getJson('/api/documentos/999999')->assertNotFound();
+    }
+
+    public function test_it_downloads_latest_and_historical_versions_privately(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio();
+        $documento = $this->createDocument($convenio);
+        Storage::disk('private')->put('documentos/uno.pdf', '%PDF-1.4 uno');
+        Storage::disk('private')->put('documentos/dos.pdf', '%PDF-1.4 dos');
+        $primeraVersion = $this->createVersion(
+            $documento,
+            $usuario,
+            1,
+            'nombre-original-uno.pdf',
+            'documentos/uno.pdf'
+        );
+        $this->createVersion(
+            $documento,
+            $usuario,
+            2,
+            'nombre-original-dos.pdf',
+            'documentos/dos.pdf'
+        );
+
+        $this->actingAs($usuario, 'sanctum')
+            ->get("/api/documentos/{$documento->id_documento}/descargar")
+            ->assertOk()
+            ->assertDownload('nombre-original-dos.pdf')
+            ->assertHeader('Content-Type', 'application/pdf');
+
+        $this->get(
+            "/api/documentos/versiones/{$primeraVersion->id_version}/descargar"
+        )
+            ->assertOk()
+            ->assertDownload('nombre-original-uno.pdf')
+            ->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_it_rejects_missing_downloads_and_unauthenticated_access(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio();
+        $documento = $this->createDocument($convenio);
+        $version = $this->createVersion(
+            $documento,
+            $usuario,
+            1,
+            'ausente.pdf',
+            'documentos/ausente.pdf'
+        );
+
+        $this->withToken('')
+            ->getJson("/api/documentos/{$documento->id_documento}/descargar")
+            ->assertUnauthorized();
+        $this->actingAs($usuario, 'sanctum')
+            ->get("/api/documentos/{$documento->id_documento}/descargar")
+            ->assertNotFound();
+        $this->get("/api/documentos/{$version->id_version}/descargar")
+            ->assertNotFound();
+        $this->get('/api/documentos/versiones/999999/descargar')->assertNotFound();
+        $this->get('/api/documentos/999999/descargar')->assertNotFound();
+    }
+
+    private function createConvenio(string $estado = 'Borrador'): array
+    {
+        $institucionId = DB::table('institucion_firmante')->insertGetId([
+            'razon_social' => 'Institución de prueba',
+        ]);
+        $unidadId = DB::table('unidad_academica')->insertGetId([
+            'sigla' => 'UA',
+            'nombre' => 'Unidad Académica',
+            'id_institucion' => $institucionId,
+        ]);
+        $rolId = DB::table('rol')->insertGetId(['nombre' => 'Prueba']);
+
+        $usuario = Usuario::query()->create([
+            'mail' => uniqid('documento-', true).'@example.com',
+            'nombre' => 'Usuario de prueba',
+            'password' => Hash::make('password-segura'),
+            'activo' => true,
+            'id_rol' => $rolId,
+            'id_unidad' => $unidadId,
+        ]);
+
+        $instrumento = Instrumento::query()->create([
+            'titulo' => 'Convenio de prueba',
+            'estado' => $estado,
+            'version_registro' => 1,
+        ]);
+        $convenio = Convenio::query()->create([
+            'id_instrumento' => $instrumento->id_instrumento,
+            'tipo' => 'Colaboración',
+            'id_unidad_academica' => $unidadId,
+        ]);
+
+        $this->withToken($usuario->createToken('test')->plainTextToken);
+
+        return [$convenio, $usuario, $instrumento];
+    }
+
+    private function createDocument(Convenio $convenio): Documento
+    {
+        return Documento::query()->create([
+            'tipo' => 'Convenio',
+            'titulo' => 'Documento de prueba',
+            'id_instrumento' => $convenio->id_instrumento,
+        ]);
+    }
+
+    private function createVersion(
+        Documento $documento,
+        Usuario $usuario,
+        int $numero,
+        string $nombre,
+        string $ruta
+    ): Version {
+        return $documento->versiones()->create([
+            'numero' => $numero,
+            'nombre_archivo' => $nombre,
+            'tamanio_bytes' => 10,
+            'hash_sha256' => hash('sha256', $nombre),
+            'ruta_interna' => $ruta,
+            'fecha_carga' => now(),
+            'id_usuario' => $usuario->id_usuario,
+        ]);
+    }
+
+    private function validUpload(): array
+    {
+        return [
+            'tipo' => 'Convenio',
+            'titulo' => 'Documento de prueba',
+            'archivo' => UploadedFile::fake()->createWithContent('documento.pdf', '%PDF-1.4'),
+        ];
+    }
+}

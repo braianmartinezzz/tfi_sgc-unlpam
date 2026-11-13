@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Documento extends Model
 {
@@ -28,5 +29,11 @@ class Documento extends Model
     public function versiones(): HasMany
     {
         return $this->hasMany(Version::class, 'id_documento', 'id_documento');
+    }
+
+    public function ultimaVersion(): HasOne
+    {
+        return $this->hasOne(Version::class, 'id_documento', 'id_documento')
+            ->latestOfMany('numero');
     }
 }
