@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConvenioController;
+use App\Http\Controllers\Api\DocenteController;
 use App\Http\Controllers\Api\DocumentoController;
+use App\Http\Controllers\Api\EstudianteController;
 use App\Http\Controllers\Api\InstitucionFirmanteController;
 use App\Http\Controllers\Api\RepresentanteController;
 use Illuminate\Support\Facades\Route;
@@ -37,4 +39,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/representantes', [RepresentanteController::class, 'store']);
     Route::put('/representantes/{id}', [RepresentanteController::class, 'update'])->whereNumber('id');
     Route::delete('/representantes/{id}', [RepresentanteController::class, 'destroy'])->whereNumber('id');
+    Route::get('/estudiantes', [EstudianteController::class, 'index']);
+    Route::get('/estudiantes/{id}', [EstudianteController::class, 'show'])->whereNumber('id');
+    Route::post('/estudiantes', [EstudianteController::class, 'store']);
+    Route::put('/estudiantes/{id}', [EstudianteController::class, 'update'])->whereNumber('id');
+    Route::delete('/estudiantes/{id}', [EstudianteController::class, 'destroy'])->whereNumber('id');
+    Route::get('/docentes', [DocenteController::class, 'index']);
+    Route::get('/docentes/{id}', [DocenteController::class, 'show'])->whereNumber('id');
+    Route::post('/docentes', [DocenteController::class, 'store']);
+    Route::put('/docentes/{id}', [DocenteController::class, 'update'])->whereNumber('id');
+    Route::delete('/docentes/{id}', [DocenteController::class, 'destroy'])->whereNumber('id');
 });
