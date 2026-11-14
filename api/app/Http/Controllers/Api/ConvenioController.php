@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EnviarARevisionRequest;
 use App\Http\Requests\StoreConvenioRequest;
+use App\Http\Requests\StoreRespuestaObservacionRequest;
 use App\Http\Requests\UpdateConvenioRequest;
+use App\Models\Observacion;
 use App\Services\ConvenioService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -40,6 +42,92 @@ class ConvenioController extends Controller
 
         return response()->json([
             'data' => $convenio,
+        ]);
+    }
+
+    public function observaciones(
+        Request $request,
+        string $id,
+        ConvenioService $service
+    ): JsonResponse {
+        try {
+            $observaciones = $service->listarObservaciones($id, $request->user());
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para consultar las observaciones de este convenio.',
+            ], 403);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al consultar las observaciones.',
+            ], 500);
+        }
+
+        return response()->json([
+            'data' => $observaciones->map(
+                static fn (Observacion $observacion): array => [
+                    'id_observacion' => $observacion->id_observacion,
+                    'contenido' => $observacion->contenido,
+                    'fecha' => $observacion->fecha,
+                    'estado_tramite' => $observacion->estado_tramite,
+                    'resolucion' => $observacion->resolucion,
+                    'respuesta' => $observacion->respuesta,
+                    'fecha_resolucion' => $observacion->fecha_resolucion,
+                    'usuario' => [
+                        'id_usuario' => $observacion->usuario->id_usuario,
+                        'nombre' => $observacion->usuario->nombre,
+                    ],
+                ]
+            )->values(),
+        ]);
+    }
+
+    public function responderObservacion(
+        StoreRespuestaObservacionRequest $request,
+        string $id,
+        string $idObservacion,
+        ConvenioService $service
+    ): JsonResponse {
+        try {
+            $observacion = $service->responderObservacion(
+                $id,
+                $idObservacion,
+                $request->validated()['respuesta'],
+                $request->user()
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio u observación no encontrados.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para responder observaciones de este convenio.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al responder la observación.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Observación respondida correctamente.',
+            'data' => [
+                'id_observacion' => $observacion->id_observacion,
+                'respuesta' => $observacion->respuesta,
+                'estado_tramite' => $observacion->estado_tramite,
+                'fecha_resolucion' => $observacion->fecha_resolucion,
+            ],
         ]);
     }
 

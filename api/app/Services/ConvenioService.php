@@ -9,11 +9,13 @@ use App\Models\HistorialEstado;
 use App\Models\Instrumento;
 use App\Models\Marco;
 use App\Models\Notificacion;
+use App\Models\Observacion;
 use App\Models\RegistroAuditoria;
 use App\Models\Renovacion;
 use App\Models\Sustitucion;
 use App\Models\Usuario;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -76,6 +78,84 @@ class ConvenioService
                 'historialEstados',
             ])
             ->find($id);
+    }
+
+    public function listarObservaciones(
+        string $id,
+        Usuario $usuario
+    ): Collection {
+        $instrumento = Instrumento::query()->findOrFail($id);
+        $convenio = $instrumento->convenio()->firstOrFail();
+
+        Gate::forUser($usuario)->authorize(
+            'enviar-convenio-a-revision',
+            $convenio
+        );
+
+        return $convenio->observaciones()
+            ->with('usuario:id_usuario,nombre')
+            ->orderBy('fecha')
+            ->orderBy('id_observacion')
+            ->get();
+    }
+
+    public function responderObservacion(
+        string $id,
+        string $idObservacion,
+        string $respuesta,
+        Usuario $usuario
+    ): Observacion {
+        return DB::transaction(function () use (
+            $id,
+            $idObservacion,
+            $respuesta,
+            $usuario
+        ) {
+            $instrumento = Instrumento::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $convenio = $instrumento->convenio()
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            Gate::forUser($usuario)->authorize(
+                'enviar-convenio-a-revision',
+                $convenio
+            );
+
+            if ($instrumento->estado !== 'EnCorreccion') {
+                throw new \DomainException(
+                    'Solo se pueden responder observaciones cuando el convenio está EnCorreccion.'
+                );
+            }
+
+            $observacion = $convenio->observaciones()
+                ->lockForUpdate()
+                ->findOrFail($idObservacion);
+
+            if ($observacion->estado_tramite !== 'Pendiente') {
+                throw new \DomainException(
+                    'Solo se pueden responder observaciones pendientes.'
+                );
+            }
+
+            $fechaHora = now();
+            $observacion->respuesta = $respuesta;
+            $observacion->fecha_resolucion = $fechaHora;
+            $observacion->estado_tramite = 'Resuelta';
+            $observacion->save();
+
+            RegistroAuditoria::query()->create([
+                'accion' => 'RESPUESTA_OBSERVACION',
+                'fecha_hora' => $fechaHora,
+                'detalle' => 'Respuesta registrada para la observación #'
+                    .$observacion->id_observacion,
+                'id_instrumento' => $convenio->id_instrumento,
+                'id_usuario' => $usuario->id_usuario,
+            ]);
+
+            return $observacion;
+        });
     }
 
     public function update(string $id, array $data): Convenio
@@ -318,6 +398,12 @@ class ConvenioService
             if (! in_array($instrumento->estado, ['Borrador', 'EnCorreccion'], true)) {
                 throw new \DomainException(
                     'El convenio no se encuentra en un estado que admita el envío a revisión.'
+                );
+            }
+
+            if ($convenio->observaciones()->where('estado_tramite', 'Pendiente')->exists()) {
+                throw new \DomainException(
+                    'El convenio todavía tiene observaciones pendientes de respuesta.'
                 );
             }
 
