@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\EnviarARevisionRequest;
 use App\Http\Requests\StoreConvenioRequest;
 use App\Http\Requests\UpdateConvenioRequest;
 use App\Services\ConvenioService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -126,5 +128,43 @@ class ConvenioController extends Controller
                 'instituciones_firmantes' => $convenio->institucionesFirmantes,
             ],
         ], 201);
+    }
+
+    public function enviarRevision(
+        EnviarARevisionRequest $request,
+        string $id,
+        ConvenioService $service
+    ): JsonResponse {
+        try {
+            $resultado = $service->enviarARevision(
+                $id,
+                $request->validated()['motivo'] ?? null,
+                $request->user()
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para enviar este convenio a revisión.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al enviar el convenio a revisión.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Convenio enviado a revisión correctamente.',
+            'estado' => 'Revisión',
+            'historial' => $resultado,
+        ]);
     }
 }

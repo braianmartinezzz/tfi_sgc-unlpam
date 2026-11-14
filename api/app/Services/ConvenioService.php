@@ -2,14 +2,20 @@
 
 namespace App\Services;
 
+use App\Models\Adenda;
 use App\Models\Convenio;
 use App\Models\Especifico;
 use App\Models\HistorialEstado;
 use App\Models\Instrumento;
 use App\Models\Marco;
+use App\Models\Notificacion;
+use App\Models\RegistroAuditoria;
+use App\Models\Renovacion;
+use App\Models\Sustitucion;
 use App\Models\Usuario;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class ConvenioService
 {
@@ -285,5 +291,197 @@ class ConvenioService
                 'convenio.institucionesFirmantes',
             ]);
         });
+    }
+
+    /**
+     * @return array{estado_anterior: string, estado_nuevo: string}
+     */
+    public function enviarARevision(
+        string $id,
+        ?string $motivo,
+        Usuario $usuario
+    ): array {
+        return DB::transaction(function () use ($id, $motivo, $usuario) {
+            $convenio = Convenio::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            Gate::forUser($usuario)->authorize(
+                'enviar-convenio-a-revision',
+                $convenio
+            );
+
+            $instrumento = $convenio->instrumento()
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! in_array($instrumento->estado, ['Borrador', 'EnCorreccion'], true)) {
+                throw new \DomainException(
+                    'El convenio no se encuentra en un estado que admita el envío a revisión.'
+                );
+            }
+
+            if (
+                trim($instrumento->titulo) === ''
+                || trim($convenio->tipo) === ''
+                || $convenio->id_unidad_academica === null
+                || ! $convenio->unidadAcademica()->exists()
+            ) {
+                throw new \DomainException(
+                    'La ficha técnica del convenio está incompleta.'
+                );
+            }
+
+            if ($convenio->institucionesFirmantes()->count() < 2) {
+                throw new \DomainException(
+                    'El convenio debe tener al menos dos partes firmantes vinculadas antes de enviarse a revisión.'
+                );
+            }
+
+            $tieneVersionPdf = $instrumento->documentos()
+                ->whereHas('versiones', function ($versionQuery) {
+                    $versionQuery->whereRaw(
+                        'LOWER(ruta_interna) LIKE ?',
+                        ['%.pdf']
+                    );
+                })
+                ->exists();
+
+            if (! $tieneVersionPdf) {
+                throw new \DomainException(
+                    'El convenio debe tener al menos un documento con una versión PDF.'
+                );
+            }
+
+            $this->validarAntecedentes($convenio, $instrumento);
+
+            $revisores = Usuario::query()
+                ->where('activo', true)
+                ->whereHas('rol', fn ($query) => $query->where('nombre', 'Revisión'))
+                ->get(['id_usuario']);
+
+            if ($revisores->isEmpty()) {
+                throw new \DomainException(
+                    'No hay usuarios activos del rol Revisión para notificar.'
+                );
+            }
+
+            $estadoAnterior = $instrumento->estado;
+            $fechaHora = now();
+            $motivoHistorial = is_string($motivo) && trim($motivo) !== ''
+                ? trim($motivo)
+                : 'Solicitud de revisión legal enviada por el equipo de gestión';
+
+            $instrumento->estado = 'Revisión';
+            $instrumento->save();
+
+            HistorialEstado::query()->create([
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo' => 'Revisión',
+                'fecha_hora' => $fechaHora,
+                'motivo' => $motivoHistorial,
+                'id_instrumento' => $convenio->id_instrumento,
+                'id_usuario' => $usuario->id_usuario,
+            ]);
+
+            RegistroAuditoria::query()->create([
+                'accion' => 'SOLICITUD_REVISION',
+                'fecha_hora' => $fechaHora,
+                'detalle' => 'Convenio enviado a revisión legal.',
+                'id_instrumento' => $convenio->id_instrumento,
+                'id_usuario' => $usuario->id_usuario,
+            ]);
+
+            foreach ($revisores as $revisor) {
+                Notificacion::query()->create([
+                    'tipo' => 'REVISION_ASIGNADA',
+                    'mensaje' => 'El convenio fue enviado a revisión.',
+                    'fecha_generacion' => $fechaHora,
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'id_usuario' => $revisor->id_usuario,
+                ]);
+            }
+
+            return [
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo' => 'Revisión',
+            ];
+        });
+    }
+
+    private function validarAntecedentes(
+        Convenio $convenio,
+        Instrumento $instrumento
+    ): void {
+        $id = (int) $convenio->id_instrumento;
+
+        $especifico = $convenio->especifico()
+            ->with('marco.convenio.instrumento')
+            ->first();
+
+        if ($especifico !== null) {
+            $marco = $especifico->marco;
+
+            if (
+                $marco === null
+                || (int) $marco->id_instrumento === $id
+                || $marco->convenio === null
+                || $marco->instrumento === null
+            ) {
+                throw new \DomainException(
+                    'El convenio específico debe tener asociado un Convenio Marco válido.'
+                );
+            }
+        }
+
+        $adenda = Adenda::query()
+            ->with('instrumentoModificado')
+            ->find($instrumento->id_instrumento);
+
+        if (
+            $adenda !== null
+            && (
+                $adenda->instrumentoModificado === null
+                || (int) $adenda->id_instrumento_modificado === $id
+            )
+        ) {
+            throw new \DomainException(
+                'La adenda debe tener asociado un instrumento válido que modifica.'
+            );
+        }
+
+        $renovacion = Renovacion::query()
+            ->with('convenioRenovado.instrumento')
+            ->find($convenio->id_instrumento);
+
+        if (
+            $renovacion !== null
+            && (
+                $renovacion->convenioRenovado === null
+                || $renovacion->convenioRenovado->instrumento === null
+                || (int) $renovacion->id_instrumento_renovado === $id
+            )
+        ) {
+            throw new \DomainException(
+                'La renovación debe tener asociado un convenio válido que renueva.'
+            );
+        }
+
+        $sustitucion = Sustitucion::query()
+            ->with('convenioSustituido.instrumento')
+            ->find($convenio->id_instrumento);
+
+        if (
+            $sustitucion !== null
+            && (
+                $sustitucion->convenioSustituido === null
+                || $sustitucion->convenioSustituido->instrumento === null
+                || (int) $sustitucion->id_instrumento_sustituido === $id
+            )
+        ) {
+            throw new \DomainException(
+                'La sustitución debe tener asociado un convenio válido que sustituye.'
+            );
+        }
     }
 }
