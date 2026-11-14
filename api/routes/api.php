@@ -27,6 +27,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/convenios', [ConvenioController::class, 'store']);
     Route::post('/convenios/{id}/enviar-revision', [ConvenioController::class, 'enviarRevision'])
         ->whereNumber('id');
+    Route::post('/convenios/{id}/registrar-firma', [ConvenioController::class, 'registrarFirma'])
+        ->whereNumber('id');
     Route::post('/convenios/{id}/documentos', [DocumentoController::class, 'store'])->whereNumber('id');
     Route::get('/convenios/{id}/documentos', [DocumentoController::class, 'index'])->whereNumber('id');
     Route::get('/documentos/{id}', [DocumentoController::class, 'show'])->whereNumber('id');

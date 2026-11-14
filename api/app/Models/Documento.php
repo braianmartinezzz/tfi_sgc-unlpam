@@ -19,6 +19,11 @@ class Documento extends Model
         'tipo',
         'titulo',
         'id_instrumento',
+        'es_documento_firmado',
+    ];
+
+    protected $casts = [
+        'es_documento_firmado' => 'boolean',
     ];
 
     public function instrumento(): BelongsTo

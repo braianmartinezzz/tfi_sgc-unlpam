@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EnviarARevisionRequest;
+use App\Http\Requests\RegistrarFirmaRequest;
 use App\Http\Requests\StoreConvenioRequest;
 use App\Http\Requests\StoreRespuestaObservacionRequest;
 use App\Http\Requests\UpdateConvenioRequest;
 use App\Models\Observacion;
 use App\Services\ConvenioService;
+use App\Services\DocumentoService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
@@ -128,6 +130,46 @@ class ConvenioController extends Controller
                 'estado_tramite' => $observacion->estado_tramite,
                 'fecha_resolucion' => $observacion->fecha_resolucion,
             ],
+        ]);
+    }
+
+    public function registrarFirma(
+        RegistrarFirmaRequest $request,
+        string $id,
+        ConvenioService $service,
+        DocumentoService $documentoService
+    ): JsonResponse {
+        try {
+            $resultado = $service->registrarFirma(
+                $id,
+                $request->validated()['fecha_firma'],
+                $request->file('archivo_pdf'),
+                $request->user(),
+                $documentoService
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para registrar la firma de este convenio.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al registrar la firma.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Firma registrada correctamente.',
+            'data' => $resultado,
         ]);
     }
 

@@ -17,6 +17,61 @@ use Throwable;
 
 class DocumentoService
 {
+    public function registrarVersionFirmada(
+        Instrumento $instrumento,
+        ?Documento $documento,
+        UploadedFile $file,
+        Usuario $usuario
+    ): string {
+        $rutaInterna = null;
+
+        try {
+            if ($documento === null) {
+                $documento = Documento::query()->create([
+                    'tipo' => 'Convenio',
+                    'titulo' => $instrumento->titulo,
+                    'id_instrumento' => $instrumento->id_instrumento,
+                    'es_documento_firmado' => true,
+                ]);
+            }
+
+            $versionAnterior = $documento->versiones()
+                ->orderByDesc('numero')
+                ->lockForUpdate()
+                ->first();
+            $numeroVersion = ($versionAnterior?->numero ?? 0) + 1;
+            $hashSha256 = hash_file('sha256', $file->getRealPath());
+
+            if ($hashSha256 === false) {
+                throw new RuntimeException('No se pudo calcular el hash del archivo.');
+            }
+
+            $rutaAlmacenada = $file->store('documentos', 'private');
+
+            if ($rutaAlmacenada === false) {
+                throw new RuntimeException('No se pudo almacenar el archivo.');
+            }
+
+            $rutaInterna = $rutaAlmacenada;
+
+            $documento->versiones()->create([
+                'numero' => $numeroVersion,
+                'nombre_archivo' => $file->getClientOriginalName(),
+                'tamanio_bytes' => $file->getSize(),
+                'hash_sha256' => $hashSha256,
+                'ruta_interna' => $rutaInterna,
+                'fecha_carga' => now(),
+                'id_usuario' => $usuario->id_usuario,
+            ]);
+
+            return $rutaInterna;
+        } catch (Throwable $exception) {
+            $this->eliminarArchivoNuevo($rutaInterna, $instrumento->id_instrumento);
+
+            throw $exception;
+        }
+    }
+
     public function storeInitial(
         string $convenioId,
         array $data,
@@ -269,5 +324,25 @@ class DocumentoService
     public function findVersion(string $versionId): Version
     {
         return Version::query()->findOrFail($versionId);
+    }
+
+    public function eliminarArchivoNuevo(?string $rutaInterna, int $instrumentoId): void
+    {
+        if ($rutaInterna === null) {
+            return;
+        }
+
+        try {
+            if (! Storage::disk('private')->delete($rutaInterna)) {
+                Log::error('No se pudo limpiar el archivo nuevo de una operación revertida.', [
+                    'id_instrumento' => $instrumentoId,
+                ]);
+            }
+        } catch (Throwable $exception) {
+            Log::error('Falló la limpieza de un archivo nuevo de una operación revertida.', [
+                'id_instrumento' => $instrumentoId,
+                'exception' => $exception,
+            ]);
+        }
     }
 }

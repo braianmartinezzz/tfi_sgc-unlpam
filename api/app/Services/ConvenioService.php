@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Adenda;
 use App\Models\Convenio;
+use App\Models\Documento;
 use App\Models\Especifico;
 use App\Models\HistorialEstado;
 use App\Models\Instrumento;
@@ -16,8 +17,10 @@ use App\Models\Sustitucion;
 use App\Models\Usuario;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 
 class ConvenioService
 {
@@ -156,6 +159,112 @@ class ConvenioService
 
             return $observacion;
         });
+    }
+
+    public function registrarFirma(
+        string $id,
+        string $fechaFirma,
+        ?UploadedFile $archivoPdf,
+        Usuario $usuario,
+        DocumentoService $documentoService
+    ): array {
+        $rutaInterna = null;
+
+        try {
+            return DB::transaction(function () use (
+                $id,
+                $fechaFirma,
+                $archivoPdf,
+                $usuario,
+                $documentoService,
+                &$rutaInterna
+            ) {
+                $convenio = Convenio::query()
+                    ->lockForUpdate()
+                    ->findOrFail($id);
+
+                Gate::forUser($usuario)->authorize(
+                    'enviar-convenio-a-revision',
+                    $convenio
+                );
+
+                $instrumento = $convenio->instrumento()
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($instrumento->estado !== 'Aprobado') {
+                    throw new \DomainException(
+                        'El convenio debe estar en estado Aprobado para poder registrar la firma.'
+                    );
+                }
+
+                $documentosFirmados = Documento::query()
+                    ->where('id_instrumento', $instrumento->id_instrumento)
+                    ->where('es_documento_firmado', true)
+                    ->lockForUpdate()
+                    ->get();
+
+                if ($documentosFirmados->count() > 1) {
+                    throw new \DomainException(
+                        'El convenio tiene más de un documento final firmado identificado.'
+                    );
+                }
+
+                $documentoFirmado = $documentosFirmados->first();
+
+                if ($archivoPdf !== null) {
+                    $rutaInterna = $documentoService->registrarVersionFirmada(
+                        $instrumento,
+                        $documentoFirmado,
+                        $archivoPdf,
+                        $usuario
+                    );
+                } elseif (
+                    $documentoFirmado === null
+                    || ! $this->tieneVersionPdfDisponible($documentoFirmado)
+                ) {
+                    throw new \DomainException(
+                        'Debe adjuntar el PDF firmado o existir previamente un documento final firmado con una versión PDF disponible.'
+                    );
+                }
+
+                $fechaHora = now();
+                $instrumento->fecha_firma = $fechaFirma;
+                $instrumento->estado = 'Firmado';
+                $instrumento->save();
+
+                HistorialEstado::query()->create([
+                    'estado_anterior' => 'Aprobado',
+                    'estado_nuevo' => 'Firmado',
+                    'fecha_hora' => $fechaHora,
+                    'motivo' => 'Firma de convenio registrada y documento final adjuntado.',
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'id_usuario' => $usuario->id_usuario,
+                ]);
+
+                RegistroAuditoria::query()->create([
+                    'accion' => 'REGISTRO_FIRMA',
+                    'fecha_hora' => $fechaHora,
+                    'detalle' => 'Firma registrada para el convenio #'
+                        .$convenio->id_instrumento,
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'id_usuario' => $usuario->id_usuario,
+                ]);
+
+                return [
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'estado' => 'Firmado',
+                    'fecha_firma' => $instrumento->fecha_firma,
+                ];
+            });
+        } catch (\Throwable $exception) {
+            $documentoService->eliminarArchivoNuevo(
+                $rutaInterna,
+                (int) $id
+            );
+
+            throw $exception;
+        }
     }
 
     public function update(string $id, array $data): Convenio
@@ -569,5 +678,21 @@ class ConvenioService
                 'La sustitución debe tener asociado un convenio válido que sustituye.'
             );
         }
+    }
+
+    private function tieneVersionPdfDisponible(Documento $documento): bool
+    {
+        $ultimaVersion = $documento->versiones()
+            ->orderByDesc('numero')
+            ->first();
+
+        if (
+            $ultimaVersion === null
+            || strtolower(pathinfo($ultimaVersion->ruta_interna, PATHINFO_EXTENSION)) !== 'pdf'
+        ) {
+            return false;
+        }
+
+        return Storage::disk('private')->exists($ultimaVersion->ruta_interna);
     }
 }
