@@ -296,6 +296,67 @@ class ConvenioReadTest extends TestCase
         $this->assertEqualsCanonicalizing($globalIds, $this->listedIds([]));
     }
 
+    public function test_revision_filter_returns_only_revision_state_within_configured_scope(): void
+    {
+        $context = $this->authenticate('Revisión', false);
+        $ownRevision = $this->createConvenio(
+            'Revisión propia pendiente',
+            'Revisión',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+        $otherUnitRevision = $this->createConvenio(
+            'Revisión de otra unidad',
+            'Revisión',
+            'Colaboración',
+            $context['otraUnidad'],
+            $context['institucion'],
+            true
+        );
+
+        foreach (['EnCorreccion', 'Aprobado', 'Rechazado', 'Rescindido', 'Archivado'] as $state) {
+            $this->createConvenio(
+                'Otro estado '.$state,
+                $state,
+                'Colaboración',
+                $context['unidadPrincipal'],
+                $context['institucion'],
+                true
+            );
+        }
+
+        $filters = http_build_query(['estado' => 'Revisión']);
+        $localResponse = $this->getJson('/api/convenios?'.$filters);
+
+        $localResponse
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id_instrumento', $ownRevision->id_instrumento)
+            ->assertJsonPath('data.0.instrumento.estado', 'Revisión');
+
+        $context['usuario']->alcance_global = true;
+        $context['usuario']->save();
+        $this->actingAs($context['usuario']->fresh(), 'sanctum');
+
+        $globalResponse = $this->getJson('/api/convenios?'.$filters);
+        $globalResponse->assertOk()->assertJsonCount(2, 'data');
+
+        $globalIds = collect($globalResponse->json('data'))
+            ->pluck('id_instrumento')
+            ->all();
+
+        $this->assertEqualsCanonicalizing(
+            [$ownRevision->id_instrumento, $otherUnitRevision->id_instrumento],
+            $globalIds
+        );
+
+        foreach ($globalResponse->json('data') as $convenio) {
+            $this->assertSame('Revisión', $convenio['instrumento']['estado']);
+        }
+    }
+
     public function test_consulta_scope_allows_only_configured_states_even_when_other_states_are_expired(): void
     {
         $context = $this->authenticate('Consulta', false);
