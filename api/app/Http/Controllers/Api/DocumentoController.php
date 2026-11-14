@@ -7,9 +7,12 @@ use App\Http\Requests\StoreDocumentoRequest;
 use App\Http\Requests\UpdateDocumentoRequest;
 use App\Models\Documento;
 use App\Models\Version;
+use App\Services\ConvenioService;
 use App\Services\DocumentoService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -117,14 +120,26 @@ class DocumentoController extends Controller
         ], 201);
     }
 
-    public function index(string $id, DocumentoService $service): JsonResponse
-    {
+    public function index(
+        Request $request,
+        string $id,
+        DocumentoService $service,
+        ConvenioService $convenioService
+    ): JsonResponse {
         try {
-            $documentos = $service->listForConvenio($id);
+            $documentos = $service->listForConvenio(
+                $id,
+                $request->user(),
+                $convenioService
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Convenio no encontrado.',
             ], 404);
+        } catch (AuthorizationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 403);
         }
 
         return response()->json([
@@ -137,14 +152,26 @@ class DocumentoController extends Controller
         ]);
     }
 
-    public function show(string $id, DocumentoService $service): JsonResponse
-    {
+    public function show(
+        Request $request,
+        string $id,
+        DocumentoService $service,
+        ConvenioService $convenioService
+    ): JsonResponse {
         try {
-            $documento = $service->findWithHistory($id);
+            $documento = $service->findWithHistory(
+                $id,
+                $request->user(),
+                $convenioService
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Documento no encontrado.',
             ], 404);
+        } catch (AuthorizationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 403);
         }
 
         return response()->json([
@@ -158,15 +185,25 @@ class DocumentoController extends Controller
     }
 
     public function downloadLatest(
+        Request $request,
         string $id,
-        DocumentoService $service
+        DocumentoService $service,
+        ConvenioService $convenioService
     ): StreamedResponse|JsonResponse {
         try {
-            $documento = $service->findWithLatestVersion($id);
+            $documento = $service->findWithLatestVersion(
+                $id,
+                $request->user(),
+                $convenioService
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Documento no encontrado.',
             ], 404);
+        } catch (AuthorizationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 403);
         }
 
         if ($documento->ultimaVersion === null) {
@@ -179,15 +216,25 @@ class DocumentoController extends Controller
     }
 
     public function downloadSpecific(
+        Request $request,
         string $idVersion,
-        DocumentoService $service
+        DocumentoService $service,
+        ConvenioService $convenioService
     ): StreamedResponse|JsonResponse {
         try {
-            $version = $service->findVersion($idVersion);
+            $version = $service->findVersion(
+                $idVersion,
+                $request->user(),
+                $convenioService
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Versión no encontrada.',
             ], 404);
+        } catch (AuthorizationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 403);
         }
 
         return $this->downloadVersion($version);

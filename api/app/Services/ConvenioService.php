@@ -15,7 +15,9 @@ use App\Models\RegistroAuditoria;
 use App\Models\Renovacion;
 use App\Models\Sustitucion;
 use App\Models\Usuario;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -55,23 +57,7 @@ class ConvenioService
                 break;
 
             case 'Revisión':
-                if (! $usuario->alcance_global) {
-                    $query->where(
-                        'convenio.id_unidad_academica',
-                        $usuario->id_unidad
-                    );
-                }
-
-                $query->whereHas('instrumento', function ($instrumentoQuery) {
-                    $instrumentoQuery->whereIn('estado', [
-                        'Revisión',
-                        'EnCorreccion',
-                        'Aprobado',
-                        'Rechazado',
-                        'Rescindido',
-                        'Archivado',
-                    ]);
-                });
+                $this->applyRevisionVisibility($query, $usuario);
                 break;
 
             case 'Consulta':
@@ -131,18 +117,75 @@ class ConvenioService
         return $query->paginate(15)->appends($filters);
     }
 
-    public function findById(string $id): ?Convenio
+    private function applyRevisionVisibility(Builder $query, Usuario $usuario): Builder
     {
-        return Convenio::query()
-            ->with([
-                'instrumento',
-                'unidadAcademica',
-                'institucionesFirmantes',
-                'marco',
-                'especifico.marco.instrumento',
-                'historialEstados',
-            ])
-            ->find($id);
+        if (! $usuario->alcance_global) {
+            $query->where(
+                'convenio.id_unidad_academica',
+                $usuario->id_unidad
+            );
+        }
+
+        return $query->whereHas('instrumento', function ($instrumentoQuery) {
+            $instrumentoQuery->whereIn('estado', [
+                'Revisión',
+                'EnCorreccion',
+                'Aprobado',
+                'Rechazado',
+                'Rescindido',
+                'Archivado',
+            ]);
+        });
+    }
+
+    public function findById(string $id, Usuario $usuario): ?Convenio
+    {
+        $convenio = Convenio::query()->find($id);
+
+        if ($convenio === null) {
+            return null;
+        }
+
+        $this->assertCanView($convenio, $usuario);
+
+        return $convenio->load([
+            'instrumento',
+            'unidadAcademica',
+            'institucionesFirmantes',
+            'institucionesFirmantes.representantes' => fn ($query) => $query->select([
+                'id_persona',
+                'cargo',
+                'id_institucion',
+            ]),
+            'institucionesFirmantes.representantes.persona:id_persona,nombre,apellido',
+            'instrumento.documentos.ultimaVersion' => fn ($query) => $query->select([
+                'version.id_version',
+                'version.numero',
+                'version.nombre_archivo',
+                'version.tamanio_bytes',
+                'version.hash_sha256',
+                'version.fecha_carga',
+                'version.id_documento',
+            ]),
+            'marco',
+            'especifico.marco.instrumento',
+            'historialEstados',
+        ]);
+    }
+
+    public function assertCanView(Convenio $convenio, Usuario $usuario): void
+    {
+        if ($usuario->rol?->nombre !== 'Revisión') {
+            return;
+        }
+
+        $query = Convenio::query()->whereKey($convenio->id_instrumento);
+
+        if (! $this->applyRevisionVisibility($query, $usuario)->exists()) {
+            throw new AuthorizationException(
+                'No tiene permisos para consultar este convenio.'
+            );
+        }
     }
 
     public function listarObservaciones(

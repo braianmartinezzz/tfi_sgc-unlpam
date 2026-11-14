@@ -26,6 +26,11 @@ class InstitucionFirmante extends Model
         return $this->hasMany(UnidadAcademica::class, 'id_institucion', 'id_institucion');
     }
 
+    public function representantes(): HasMany
+    {
+        return $this->hasMany(Representante::class, 'id_institucion', 'id_institucion');
+    }
+
     public function convenios(): BelongsToMany
     {
         return $this->belongsToMany(

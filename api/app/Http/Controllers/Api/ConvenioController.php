@@ -33,9 +33,18 @@ class ConvenioController extends Controller
         return response()->json($convenios);
     }
 
-    public function show(string $id, ConvenioService $service): JsonResponse
-    {
-        $convenio = $service->findById($id);
+    public function show(
+        Request $request,
+        string $id,
+        ConvenioService $service
+    ): JsonResponse {
+        try {
+            $convenio = $service->findById($id, $request->user());
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para consultar este convenio.',
+            ], 403);
+        }
 
         if ($convenio === null) {
             return response()->json([

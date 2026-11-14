@@ -238,8 +238,15 @@ class DocumentoTest extends TestCase
         );
 
         $this->withToken('')
-            ->getJson("/api/documentos/{$documento->id_documento}/descargar")
+            ->getJson("/api/convenios/{$convenio->id_instrumento}/documentos")
             ->assertUnauthorized();
+        $this->getJson("/api/documentos/{$documento->id_documento}")
+            ->assertUnauthorized();
+        $this->getJson("/api/documentos/{$documento->id_documento}/descargar")
+            ->assertUnauthorized();
+        $this->getJson("/api/documentos/versiones/{$version->id_version}/descargar")
+            ->assertUnauthorized();
+
         $this->actingAs($usuario, 'sanctum')
             ->get("/api/documentos/{$documento->id_documento}/descargar")
             ->assertNotFound();
@@ -247,6 +254,250 @@ class DocumentoTest extends TestCase
             ->assertNotFound();
         $this->get('/api/documentos/versiones/999999/descargar')->assertNotFound();
         $this->get('/api/documentos/999999/descargar')->assertNotFound();
+    }
+
+    public function test_revision_scope_is_enforced_when_listing_documents(): void
+    {
+        [$localConvenio, $reviewer] = $this->createConvenio('Revisión');
+        $this->createDocument($localConvenio);
+
+        [$foreignConvenio] = $this->createConvenio('Aprobado');
+        $this->createDocument($foreignConvenio);
+
+        [$draftConvenio] = $this->createConvenio('Borrador');
+        $this->createDocument($draftConvenio);
+
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/convenios/{$localConvenio->id_instrumento}/documentos")
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->getJson("/api/convenios/{$foreignConvenio->id_instrumento}/documentos")
+            ->assertForbidden();
+        $this->getJson("/api/convenios/{$draftConvenio->id_instrumento}/documentos")
+            ->assertForbidden();
+
+        $reviewer->alcance_global = true;
+        $reviewer->save();
+        $this->actingAs($reviewer->fresh(), 'sanctum')
+            ->getJson("/api/convenios/{$foreignConvenio->id_instrumento}/documentos")
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->getJson("/api/convenios/{$draftConvenio->id_instrumento}/documentos")
+            ->assertForbidden();
+    }
+
+    public function test_revision_scope_is_enforced_for_document_details(): void
+    {
+        [$localConvenio, $reviewer] = $this->createConvenio('EnCorreccion');
+        $localDocument = $this->createDocument($localConvenio);
+
+        [$foreignConvenio] = $this->createConvenio('Rechazado');
+        $foreignDocument = $this->createDocument($foreignConvenio);
+
+        [$draftConvenio] = $this->createConvenio('Borrador');
+        $draftDocument = $this->createDocument($draftConvenio);
+
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/documentos/{$localDocument->id_documento}")
+            ->assertOk();
+
+        $this->getJson("/api/documentos/{$foreignDocument->id_documento}")
+            ->assertForbidden();
+        $this->getJson("/api/documentos/{$draftDocument->id_documento}")
+            ->assertForbidden();
+        $this->getJson('/api/documentos/999999')->assertNotFound();
+
+        $reviewer->alcance_global = true;
+        $reviewer->save();
+
+        $this->actingAs($reviewer->fresh(), 'sanctum')
+            ->getJson("/api/documentos/{$foreignDocument->id_documento}")
+            ->assertOk();
+        $this->getJson("/api/documentos/{$draftDocument->id_documento}")
+            ->assertForbidden();
+    }
+
+    public function test_revision_scope_is_checked_before_latest_file_availability(): void
+    {
+        [$localConvenio, $reviewer] = $this->createConvenio('Aprobado');
+        $localDocument = $this->createDocument($localConvenio);
+        Storage::disk('private')->put('allowed/local.pdf', '%PDF-1.4 local');
+        $this->createVersion($localDocument, $reviewer, 1, 'local.pdf', 'allowed/local.pdf');
+
+        [$foreignConvenio, $foreignOwner] = $this->createConvenio('Revisión');
+        $foreignDocument = $this->createDocument($foreignConvenio);
+        $this->createVersion(
+            $foreignDocument,
+            $foreignOwner,
+            1,
+            'foreign.pdf',
+            'missing/foreign.pdf'
+        );
+
+        [$draftConvenio, $draftOwner] = $this->createConvenio('Borrador');
+        $draftDocument = $this->createDocument($draftConvenio);
+        $this->createVersion($draftDocument, $draftOwner, 1, 'draft.pdf', 'missing/draft.pdf');
+
+        $localMissingFile = $this->createDocument($localConvenio);
+        $this->createVersion(
+            $localMissingFile,
+            $reviewer,
+            1,
+            'missing.pdf',
+            'missing/local.pdf'
+        );
+
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->get("/api/documentos/{$localDocument->id_documento}/descargar")
+            ->assertOk()
+            ->assertDownload('local.pdf');
+
+        $this->get("/api/documentos/{$foreignDocument->id_documento}/descargar")
+            ->assertForbidden();
+        $this->get("/api/documentos/{$draftDocument->id_documento}/descargar")
+            ->assertForbidden();
+        $this->get("/api/documentos/{$localMissingFile->id_documento}/descargar")
+            ->assertNotFound();
+        $this->get('/api/documentos/999999/descargar')->assertNotFound();
+
+        $reviewer->alcance_global = true;
+        $reviewer->save();
+        Storage::disk('private')->put('missing/foreign.pdf', '%PDF-1.4 foreign');
+        $this->actingAs($reviewer->fresh(), 'sanctum')
+            ->get("/api/documentos/{$foreignDocument->id_documento}/descargar")
+            ->assertOk()
+            ->assertDownload('foreign.pdf');
+    }
+
+    public function test_revision_scope_is_checked_before_specific_version_file_availability(): void
+    {
+        [$localConvenio, $reviewer] = $this->createConvenio('Archivado');
+        $localDocument = $this->createDocument($localConvenio);
+        Storage::disk('private')->put('allowed/local-version.pdf', '%PDF-1.4 local');
+        $localVersion = $this->createVersion(
+            $localDocument,
+            $reviewer,
+            1,
+            'local-version.pdf',
+            'allowed/local-version.pdf'
+        );
+
+        [$foreignConvenio, $foreignOwner] = $this->createConvenio('Revisión');
+        $foreignDocument = $this->createDocument($foreignConvenio);
+        $foreignVersion = $this->createVersion(
+            $foreignDocument,
+            $foreignOwner,
+            1,
+            'foreign-version.pdf',
+            'missing/foreign-version.pdf'
+        );
+
+        [$draftConvenio, $draftOwner] = $this->createConvenio('Borrador');
+        $draftDocument = $this->createDocument($draftConvenio);
+        $draftVersion = $this->createVersion(
+            $draftDocument,
+            $draftOwner,
+            1,
+            'draft-version.pdf',
+            'missing/draft-version.pdf'
+        );
+
+        $localMissingFile = $this->createDocument($localConvenio);
+        $localMissingVersion = $this->createVersion(
+            $localMissingFile,
+            $reviewer,
+            1,
+            'missing-version.pdf',
+            'missing/local-version.pdf'
+        );
+
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->get("/api/documentos/versiones/{$localVersion->id_version}/descargar")
+            ->assertOk()
+            ->assertDownload('local-version.pdf');
+
+        $this->get("/api/documentos/versiones/{$foreignVersion->id_version}/descargar")
+            ->assertForbidden();
+        $this->get("/api/documentos/versiones/{$draftVersion->id_version}/descargar")
+            ->assertForbidden();
+        $this->get("/api/documentos/versiones/{$localMissingVersion->id_version}/descargar")
+            ->assertNotFound();
+        $this->get('/api/documentos/versiones/999999/descargar')->assertNotFound();
+
+        $reviewer->alcance_global = true;
+        $reviewer->save();
+        Storage::disk('private')->put('missing/foreign-version.pdf', '%PDF-1.4 foreign');
+        $this->actingAs($reviewer->fresh(), 'sanctum')
+            ->get("/api/documentos/versiones/{$foreignVersion->id_version}/descargar")
+            ->assertOk()
+            ->assertDownload('foreign-version.pdf');
+    }
+
+    public function test_administracion_and_gestion_keep_existing_document_access(): void
+    {
+        [$targetConvenio, $targetOwner] = $this->createConvenio('Borrador');
+        $documento = $this->createDocument($targetConvenio);
+        $this->createVersion(
+            $documento,
+            $targetOwner,
+            1,
+            'borrador.pdf',
+            'missing/borrador.pdf'
+        );
+
+        [, $administrador] = $this->createConvenio('Borrador');
+        $administrador = $this->assignRole($administrador, 'Administración');
+        $this->actingAs($administrador, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}")
+            ->assertOk();
+
+        [, $gestor] = $this->createConvenio('Borrador');
+        $gestor = $this->assignRole($gestor, 'Gestión');
+        $this->actingAs($gestor, 'sanctum')
+            ->getJson("/api/convenios/{$targetConvenio->id_instrumento}/documentos")
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_document_endpoints_return_not_found_when_the_owner_convenio_is_missing(): void
+    {
+        [, $reviewer] = $this->createConvenio('Revisión');
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $instrumento = Instrumento::query()->create([
+            'titulo' => 'Instrumento sin convenio',
+            'estado' => 'Revisión',
+            'version_registro' => 1,
+        ]);
+        $documento = Documento::query()->create([
+            'tipo' => 'Convenio',
+            'titulo' => 'Documento huérfano',
+            'id_instrumento' => $instrumento->id_instrumento,
+        ]);
+        $version = $this->createVersion(
+            $documento,
+            $reviewer,
+            1,
+            'huerfano.pdf',
+            'missing/huerfano.pdf'
+        );
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}")
+            ->assertNotFound();
+
+        $this->get("/api/documentos/versiones/{$version->id_version}/descargar")
+            ->assertNotFound();
     }
 
     public function test_it_updates_document_metadata_without_creating_a_version(): void
@@ -571,7 +822,11 @@ class DocumentoTest extends TestCase
             'nombre' => 'Unidad Académica',
             'id_institucion' => $institucionId,
         ]);
-        $rolId = DB::table('rol')->insertGetId(['nombre' => 'Prueba']);
+        $rolId = DB::table('rol')->where('nombre', 'Prueba')->value('id_rol');
+
+        if ($rolId === null) {
+            $rolId = DB::table('rol')->insertGetId(['nombre' => 'Prueba']);
+        }
 
         $usuario = Usuario::query()->create([
             'mail' => uniqid('documento-', true).'@example.com',
@@ -639,6 +894,25 @@ class DocumentoTest extends TestCase
             'fecha_carga' => now(),
             'id_usuario' => $usuario->id_usuario,
         ]);
+    }
+
+    private function assignRole(
+        Usuario $usuario,
+        string $nombre,
+        bool $alcanceGlobal = false
+    ): Usuario {
+        $rolId = DB::table('rol')->where('nombre', $nombre)->value('id_rol');
+
+        if ($rolId === null) {
+            $rolId = DB::table('rol')->insertGetId(['nombre' => $nombre]);
+        }
+
+        $usuario->update([
+            'id_rol' => $rolId,
+            'alcance_global' => $alcanceGlobal,
+        ]);
+
+        return $usuario->fresh();
     }
 
     private function validUpload(): array

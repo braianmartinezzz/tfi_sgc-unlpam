@@ -284,9 +284,13 @@ class DocumentoService
         });
     }
 
-    public function listForConvenio(string $convenioId)
-    {
+    public function listForConvenio(
+        string $convenioId,
+        Usuario $usuario,
+        ConvenioService $convenioService
+    ) {
         $convenio = Convenio::query()->findOrFail($convenioId);
+        $convenioService->assertCanView($convenio, $usuario);
 
         return Documento::query()
             ->where('id_instrumento', $convenio->id_instrumento)
@@ -294,23 +298,73 @@ class DocumentoService
             ->get();
     }
 
-    public function findWithHistory(string $documentoId): Documento
-    {
-        return Documento::query()
-            ->with(['versiones' => fn ($query) => $query->orderByDesc('numero')])
+    public function findWithHistory(
+        string $documentoId,
+        Usuario $usuario,
+        ConvenioService $convenioService
+    ): Documento {
+        $documento = Documento::query()
+            ->with('instrumento.convenio')
             ->findOrFail($documentoId);
+
+        $this->assertCanViewDocument($documento, $usuario, $convenioService);
+
+        return $documento->load([
+            'versiones' => fn ($query) => $query->orderByDesc('numero'),
+        ]);
     }
 
-    public function findWithLatestVersion(string $documentoId): Documento
-    {
-        return Documento::query()
-            ->with('ultimaVersion')
+    public function findWithLatestVersion(
+        string $documentoId,
+        Usuario $usuario,
+        ConvenioService $convenioService
+    ): Documento {
+        $documento = Documento::query()
+            ->with('instrumento.convenio')
             ->findOrFail($documentoId);
+
+        $this->assertCanViewDocument($documento, $usuario, $convenioService);
+
+        return $documento->load('ultimaVersion');
     }
 
-    public function findVersion(string $versionId): Version
-    {
-        return Version::query()->findOrFail($versionId);
+    public function findVersion(
+        string $versionId,
+        Usuario $usuario,
+        ConvenioService $convenioService
+    ): Version {
+        $version = Version::query()
+            ->with('documento.instrumento.convenio')
+            ->findOrFail($versionId);
+        $documento = $version->documento;
+
+        if ($documento === null) {
+            throw (new ModelNotFoundException)->setModel(
+                Documento::class,
+                [$version->id_documento]
+            );
+        }
+
+        $this->assertCanViewDocument($documento, $usuario, $convenioService);
+
+        return $version;
+    }
+
+    private function assertCanViewDocument(
+        Documento $documento,
+        Usuario $usuario,
+        ConvenioService $convenioService
+    ): void {
+        $convenio = $documento->instrumento?->convenio;
+
+        if ($convenio === null) {
+            throw (new ModelNotFoundException)->setModel(
+                Convenio::class,
+                [$documento->id_instrumento]
+            );
+        }
+
+        $convenioService->assertCanView($convenio, $usuario);
     }
 
     public function eliminarArchivoNuevo(?string $rutaInterna, int $instrumentoId): void

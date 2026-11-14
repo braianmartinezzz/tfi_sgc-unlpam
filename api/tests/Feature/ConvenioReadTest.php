@@ -3,10 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Convenio;
+use App\Models\Documento;
 use App\Models\Especifico;
 use App\Models\HistorialEstado;
+use App\Models\InstitucionFirmante;
 use App\Models\Instrumento;
 use App\Models\Marco;
+use App\Models\Persona;
+use App\Models\Representante;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -130,6 +134,21 @@ class ConvenioReadTest extends TestCase
     public function test_show_returns_the_convenio_with_its_related_data(): void
     {
         $context = $this->authenticate();
+        $institution = InstitucionFirmante::query()->findOrFail($context['institucion']);
+        $institution->update([
+            'cuit' => '30123456789',
+            'domicilio_legal' => 'Calle Principal 123',
+            'tipo_institucion' => 'Universidad',
+        ]);
+        $secondInstitution = InstitucionFirmante::query()->create([
+            'razon_social' => 'Institución firmante secundaria',
+            'cuit' => '30987654321',
+            'domicilio_legal' => 'Avenida Central 456',
+            'tipo_institucion' => 'Organismo',
+        ]);
+        $institutionWithoutRepresentatives = InstitucionFirmante::query()->create([
+            'razon_social' => 'Institución sin representantes',
+        ]);
         $marco = $this->createConvenio(
             'Convenio marco padre',
             'Borrador',
@@ -147,6 +166,10 @@ class ConvenioReadTest extends TestCase
             false,
             $marco->id_instrumento
         );
+        $especifico->institucionesFirmantes()->attach([
+            $secondInstitution->id_institucion,
+            $institutionWithoutRepresentatives->id_institucion,
+        ]);
 
         HistorialEstado::create([
             'estado_anterior' => null,
@@ -156,16 +179,170 @@ class ConvenioReadTest extends TestCase
             'id_usuario' => $context['usuario']->id_usuario,
         ]);
 
-        $this->getJson('/api/convenios/'.$especifico->id_instrumento)
+        $representantesByInstitution = [
+            $context['institucion'] => [
+                $this->createRepresentative($context['institucion'], 'Ana', 'Pérez', 'Directora'),
+                $this->createRepresentative($context['institucion'], 'Luis', 'Gómez', 'Apoderado'),
+            ],
+            $secondInstitution->id_institucion => [
+                $this->createRepresentative(
+                    $secondInstitution->id_institucion,
+                    'María',
+                    'López',
+                    'Representante legal'
+                ),
+            ],
+            $institutionWithoutRepresentatives->id_institucion => [],
+        ];
+
+        $response = $this->getJson('/api/convenios/'.$especifico->id_instrumento);
+        $response
             ->assertOk()
             ->assertJsonPath('data.instrumento.titulo', 'Convenio específico')
             ->assertJsonPath('data.unidad_academica.id_unidad_academica', $context['unidadPrincipal'])
-            ->assertJsonPath('data.instituciones_firmantes.0.id_institucion', $context['institucion'])
             ->assertJsonPath(
                 'data.especifico.marco.instrumento.titulo',
                 'Convenio marco padre'
             )
             ->assertJsonPath('data.historial_estados.0.estado_nuevo', 'Borrador');
+
+        $institutions = collect($response->json('data.instituciones_firmantes'))
+            ->keyBy('id_institucion');
+        $this->assertCount(3, $institutions);
+        $this->assertSame(
+            'Institución de lectura de prueba',
+            $institutions[$context['institucion']]['razon_social']
+        );
+        $this->assertSame('30123456789', $institutions[$context['institucion']]['cuit']);
+        $this->assertSame(
+            'Calle Principal 123',
+            $institutions[$context['institucion']]['domicilio_legal']
+        );
+        $this->assertSame(
+            'Universidad',
+            $institutions[$context['institucion']]['tipo_institucion']
+        );
+        $this->assertSame(
+            'Avenida Central 456',
+            $institutions[$secondInstitution->id_institucion]['domicilio_legal']
+        );
+        $this->assertSame(
+            [],
+            $institutions[$institutionWithoutRepresentatives->id_institucion]['representantes']
+        );
+
+        foreach ($representantesByInstitution as $institutionId => $representantes) {
+            $actualRepresentatives = collect($institutions[$institutionId]['representantes']);
+            $this->assertEqualsCanonicalizing(
+                collect($representantes)->pluck('id_persona')->all(),
+                $actualRepresentatives->pluck('id_persona')->all()
+            );
+
+            foreach ($actualRepresentatives as $representante) {
+                $this->assertSame($institutionId, $representante['id_institucion']);
+                $expectedRepresentative = collect($representantes)
+                    ->firstWhere('id_persona', $representante['id_persona']);
+                $this->assertSame($expectedRepresentative->cargo, $representante['cargo']);
+                $this->assertSame(
+                    $expectedRepresentative->persona->nombre,
+                    $representante['persona']['nombre']
+                );
+                $this->assertSame(
+                    $expectedRepresentative->persona->apellido,
+                    $representante['persona']['apellido']
+                );
+                $this->assertArrayNotHasKey('dni', $representante['persona']);
+                $this->assertArrayNotHasKey('cuil', $representante['persona']);
+            }
+        }
+    }
+
+    public function test_show_includes_documents_and_only_the_latest_version_metadata(): void
+    {
+        $context = $this->authenticate();
+        $convenio = $this->createConvenio(
+            'Convenio con documentos',
+            'Borrador',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+        $documento = Documento::query()->create([
+            'tipo' => 'Anexo',
+            'titulo' => 'Anexo técnico',
+            'id_instrumento' => $convenio->id_instrumento,
+        ]);
+        $documentoSinVersion = Documento::query()->create([
+            'tipo' => 'Nota',
+            'titulo' => 'Nota sin versión',
+            'id_instrumento' => $convenio->id_instrumento,
+        ]);
+
+        $documento->versiones()->create([
+            'numero' => 1,
+            'nombre_archivo' => 'anexo-v1.pdf',
+            'tamanio_bytes' => 10,
+            'hash_sha256' => hash('sha256', 'contenido versión 1'),
+            'ruta_interna' => 'documentos/anexo-v1.pdf',
+            'fecha_carga' => '2026-11-13 10:00:00',
+            'id_usuario' => $context['usuario']->id_usuario,
+        ]);
+        $ultimaVersion = $documento->versiones()->create([
+            'numero' => 2,
+            'nombre_archivo' => 'anexo-final.pdf',
+            'tamanio_bytes' => 20,
+            'hash_sha256' => hash('sha256', 'contenido versión final'),
+            'ruta_interna' => 'documentos/anexo-final.pdf',
+            'fecha_carga' => '2026-11-14 10:00:00',
+            'id_usuario' => $context['usuario']->id_usuario,
+        ]);
+
+        $response = $this->getJson('/api/convenios/'.$convenio->id_instrumento);
+
+        $response->assertOk();
+        $documentos = collect($response->json('data.instrumento.documentos'))
+            ->keyBy('id_documento');
+        $this->assertCount(2, $documentos);
+
+        $documentoData = $documentos[$documento->id_documento];
+        $this->assertSame($documento->id_documento, $documentoData['id_documento']);
+        $this->assertSame('Anexo', $documentoData['tipo']);
+        $this->assertSame('Anexo técnico', $documentoData['titulo']);
+        $this->assertArrayNotHasKey('versiones', $documentoData);
+
+        $versionData = $documentoData['ultima_version'];
+        $this->assertSame($ultimaVersion->id_version, $versionData['id_version']);
+        $this->assertSame(2, $versionData['numero']);
+        $this->assertSame('anexo-final.pdf', $versionData['nombre_archivo']);
+        $this->assertSame(20, $versionData['tamanio_bytes']);
+        $this->assertSame(
+            hash('sha256', 'contenido versión final'),
+            $versionData['hash_sha256']
+        );
+        $this->assertNotEmpty($versionData['fecha_carga']);
+        $this->assertArrayNotHasKey('ruta_interna', $versionData);
+
+        $documentoSinVersionData = $documentos[$documentoSinVersion->id_documento];
+        $this->assertSame('Nota', $documentoSinVersionData['tipo']);
+        $this->assertNull($documentoSinVersionData['ultima_version']);
+    }
+
+    public function test_show_returns_an_empty_document_collection_when_none_exist(): void
+    {
+        $context = $this->authenticate();
+        $convenio = $this->createConvenio(
+            'Convenio sin documentos',
+            'Borrador',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+
+        $this->getJson('/api/convenios/'.$convenio->id_instrumento)
+            ->assertOk()
+            ->assertJsonPath('data.instrumento.documentos', []);
     }
 
     public function test_show_returns_404_for_a_missing_convenio(): void
@@ -263,6 +440,8 @@ class ConvenioReadTest extends TestCase
         ];
         $ownIds = [];
         $globalIds = [];
+        $ownByState = [];
+        $otherByState = [];
 
         foreach ($states as $state) {
             $own = $this->createConvenio(
@@ -282,18 +461,68 @@ class ConvenioReadTest extends TestCase
                 true
             );
 
+            $ownByState[$state] = $own;
+            $otherByState[$state] = $other;
+
             if (in_array($state, $visibleStates, true)) {
                 $ownIds[] = $own->id_instrumento;
                 $globalIds[] = $own->id_instrumento;
                 $globalIds[] = $other->id_instrumento;
+
+                $this->getJson('/api/convenios/'.$own->id_instrumento)
+                    ->assertOk()
+                    ->assertJsonPath('data.instrumento.estado', $state);
             }
         }
 
         $this->assertEqualsCanonicalizing($ownIds, $this->listedIds([]));
+        $this->getJson('/api/convenios/'.$otherByState['Revisión']->id_instrumento)
+            ->assertForbidden();
+        $this->getJson('/api/convenios/'.$ownByState['Borrador']->id_instrumento)
+            ->assertForbidden();
+        $this->getJson('/api/convenios/999999')->assertNotFound();
+
         $context['usuario']->alcance_global = true;
         $context['usuario']->save();
         $this->actingAs($context['usuario']->fresh(), 'sanctum');
         $this->assertEqualsCanonicalizing($globalIds, $this->listedIds([]));
+        $this->getJson('/api/convenios/'.$otherByState['Revisión']->id_instrumento)
+            ->assertOk()
+            ->assertJsonPath('data.instrumento.estado', 'Revisión');
+    }
+
+    public function test_show_preserves_access_for_administracion(): void
+    {
+        $adminContext = $this->authenticate('Administración', false);
+        $otherUnitDraft = $this->createConvenio(
+            'Borrador de otra unidad para Administración',
+            'Borrador',
+            'Colaboración',
+            $adminContext['otraUnidad'],
+            $adminContext['institucion'],
+            true
+        );
+
+        $this->getJson('/api/convenios/'.$otherUnitDraft->id_instrumento)
+            ->assertOk()
+            ->assertJsonPath('data.instrumento.estado', 'Borrador');
+    }
+
+    public function test_show_preserves_access_for_gestion(): void
+    {
+        $gestionContext = $this->authenticate('Gestión', false);
+        $ownDraft = $this->createConvenio(
+            'Borrador propio para Gestión',
+            'Borrador',
+            'Colaboración',
+            $gestionContext['unidadPrincipal'],
+            $gestionContext['institucion'],
+            true
+        );
+
+        $this->getJson('/api/convenios/'.$ownDraft->id_instrumento)
+            ->assertOk()
+            ->assertJsonPath('data.instrumento.estado', 'Borrador');
     }
 
     public function test_revision_filter_returns_only_revision_state_within_configured_scope(): void
@@ -601,6 +830,25 @@ class ConvenioReadTest extends TestCase
         $convenio->institucionesFirmantes()->attach([$institutionId]);
 
         return $convenio;
+    }
+
+    private function createRepresentative(
+        int $institutionId,
+        string $nombre,
+        string $apellido,
+        string $cargo
+    ): Representante {
+        $persona = Persona::query()->create([
+            'nombre' => $nombre,
+            'apellido' => $apellido,
+            'dni' => uniqid('dni-'),
+        ]);
+
+        return Representante::query()->create([
+            'id_persona' => $persona->id_persona,
+            'cargo' => $cargo,
+            'id_institucion' => $institutionId,
+        ])->load('persona');
     }
 
     private function authenticate(
