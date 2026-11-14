@@ -23,53 +23,40 @@ class DocumentoService
         UploadedFile $file,
         Usuario $usuario
     ): string {
-        $rutaInterna = null;
-
-        try {
-            if ($documento === null) {
-                $documento = Documento::query()->create([
-                    'tipo' => 'Convenio',
-                    'titulo' => $instrumento->titulo,
-                    'id_instrumento' => $instrumento->id_instrumento,
-                    'es_documento_firmado' => true,
-                ]);
-            }
-
-            $versionAnterior = $documento->versiones()
-                ->orderByDesc('numero')
-                ->lockForUpdate()
-                ->first();
-            $numeroVersion = ($versionAnterior?->numero ?? 0) + 1;
-            $hashSha256 = hash_file('sha256', $file->getRealPath());
-
-            if ($hashSha256 === false) {
-                throw new RuntimeException('No se pudo calcular el hash del archivo.');
-            }
-
-            $rutaAlmacenada = $file->store('documentos', 'private');
-
-            if ($rutaAlmacenada === false) {
-                throw new RuntimeException('No se pudo almacenar el archivo.');
-            }
-
-            $rutaInterna = $rutaAlmacenada;
-
-            $documento->versiones()->create([
-                'numero' => $numeroVersion,
-                'nombre_archivo' => $file->getClientOriginalName(),
-                'tamanio_bytes' => $file->getSize(),
-                'hash_sha256' => $hashSha256,
-                'ruta_interna' => $rutaInterna,
-                'fecha_carga' => now(),
-                'id_usuario' => $usuario->id_usuario,
+        if ($documento === null) {
+            $documento = Documento::query()->create([
+                'tipo' => 'Convenio',
+                'titulo' => $instrumento->titulo,
+                'id_instrumento' => $instrumento->id_instrumento,
+                'es_documento_firmado' => true,
             ]);
-
-            return $rutaInterna;
-        } catch (Throwable $exception) {
-            $this->eliminarArchivoNuevo($rutaInterna, $instrumento->id_instrumento);
-
-            throw $exception;
         }
+
+        return $this->registrarNuevaVersion(
+            $instrumento,
+            $documento,
+            $file,
+            $usuario
+        );
+    }
+
+    public function registrarDocumentoResolucion(
+        Instrumento $instrumento,
+        UploadedFile $file,
+        Usuario $usuario
+    ): string {
+        $documento = Documento::query()->create([
+            'tipo' => 'resolucion',
+            'titulo' => 'Resolución de rescisión',
+            'id_instrumento' => $instrumento->id_instrumento,
+        ]);
+
+        return $this->registrarNuevaVersion(
+            $instrumento,
+            $documento,
+            $file,
+            $usuario
+        );
     }
 
     public function storeInitial(
@@ -343,6 +330,54 @@ class DocumentoService
                 'id_instrumento' => $instrumentoId,
                 'exception' => $exception,
             ]);
+        }
+    }
+
+    private function registrarNuevaVersion(
+        Instrumento $instrumento,
+        Documento $documento,
+        UploadedFile $file,
+        Usuario $usuario
+    ): string {
+        $rutaInterna = null;
+
+        try {
+            $versionAnterior = $documento->versiones()
+                ->orderByDesc('numero')
+                ->lockForUpdate()
+                ->first();
+            $numeroVersion = ($versionAnterior?->numero ?? 0) + 1;
+            $hashSha256 = hash_file('sha256', $file->getRealPath());
+
+            if ($hashSha256 === false) {
+                throw new RuntimeException('No se pudo calcular el hash del archivo.');
+            }
+
+            $rutaAlmacenada = $file->store('documentos', 'private');
+
+            if ($rutaAlmacenada === false) {
+                throw new RuntimeException('No se pudo almacenar el archivo.');
+            }
+
+            $rutaInterna = $rutaAlmacenada;
+            $documento->versiones()->create([
+                'numero' => $numeroVersion,
+                'nombre_archivo' => $file->getClientOriginalName(),
+                'tamanio_bytes' => $file->getSize(),
+                'hash_sha256' => $hashSha256,
+                'ruta_interna' => $rutaInterna,
+                'fecha_carga' => now(),
+                'id_usuario' => $usuario->id_usuario,
+            ]);
+
+            return $rutaInterna;
+        } catch (Throwable $exception) {
+            $this->eliminarArchivoNuevo(
+                $rutaInterna,
+                (int) $instrumento->id_instrumento
+            );
+
+            throw $exception;
         }
     }
 }

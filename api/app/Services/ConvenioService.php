@@ -267,6 +267,122 @@ class ConvenioService
         }
     }
 
+    public function rescindir(
+        string $id,
+        string $motivo,
+        ?UploadedFile $documentoResolucion,
+        Usuario $usuario,
+        DocumentoService $documentoService
+    ): array {
+        $rutaInterna = null;
+
+        try {
+            return DB::transaction(function () use (
+                $id,
+                $motivo,
+                $documentoResolucion,
+                $usuario,
+                $documentoService,
+                &$rutaInterna
+            ) {
+                $convenio = Convenio::query()
+                    ->lockForUpdate()
+                    ->findOrFail($id);
+
+                Gate::forUser($usuario)->authorize(
+                    'enviar-convenio-a-revision',
+                    $convenio
+                );
+
+                $instrumento = $convenio->instrumento()
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($instrumento->estado !== 'Firmado') {
+                    throw new \DomainException(
+                        'El convenio no se encuentra en estado vigente para ser rescindido.'
+                    );
+                }
+
+                if (
+                    $instrumento->vencimiento !== null
+                    && $instrumento->vencimiento->lt(today())
+                ) {
+                    throw new \DomainException(
+                        'No se puede rescindir un convenio vencido.'
+                    );
+                }
+
+                $destinatarios = $convenio->unidadAcademica()
+                    ->firstOrFail()
+                    ->usuarios()
+                    ->where('activo', true)
+                    ->get(['id_usuario']);
+
+                if ($destinatarios->isEmpty()) {
+                    throw new \DomainException(
+                        'No hay usuarios activos asociados a la unidad académica para notificar.'
+                    );
+                }
+
+                if ($documentoResolucion !== null) {
+                    $rutaInterna = $documentoService->registrarDocumentoResolucion(
+                        $instrumento,
+                        $documentoResolucion,
+                        $usuario
+                    );
+                }
+
+                $fechaHora = now();
+                $instrumento->estado = 'Rescindido';
+                $instrumento->save();
+
+                HistorialEstado::query()->create([
+                    'estado_anterior' => 'Firmado',
+                    'estado_nuevo' => 'Rescindido',
+                    'fecha_hora' => $fechaHora,
+                    'motivo' => $motivo,
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'id_usuario' => $usuario->id_usuario,
+                ]);
+
+                RegistroAuditoria::query()->create([
+                    'accion' => 'RESCISION_ANTICIPADA',
+                    'fecha_hora' => $fechaHora,
+                    'detalle' => 'Convenio #'.$convenio->id_instrumento
+                        .' rescindido. Motivo: '.$motivo
+                        .'. Fecha y hora: '.$fechaHora->format('Y-m-d H:i:s').'.',
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'id_usuario' => $usuario->id_usuario,
+                ]);
+
+                foreach ($destinatarios as $destinatario) {
+                    Notificacion::query()->create([
+                        'tipo' => 'CONVENIO_CANCELADO',
+                        'mensaje' => 'El convenio #'.$convenio->id_instrumento
+                            .' fue rescindido.',
+                        'fecha_generacion' => $fechaHora,
+                        'id_instrumento' => $convenio->id_instrumento,
+                        'id_usuario' => $destinatario->id_usuario,
+                    ]);
+                }
+
+                return [
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'estado' => 'Rescindido',
+                    'fecha_hora' => $fechaHora,
+                ];
+            });
+        } catch (\Throwable $exception) {
+            $documentoService->eliminarArchivoNuevo(
+                $rutaInterna,
+                (int) $id
+            );
+
+            throw $exception;
+        }
+    }
+
     public function update(string $id, array $data): Convenio
     {
         return DB::transaction(function () use ($id, $data) {

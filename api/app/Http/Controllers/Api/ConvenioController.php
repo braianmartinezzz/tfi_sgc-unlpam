@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EnviarARevisionRequest;
 use App\Http\Requests\RegistrarFirmaRequest;
+use App\Http\Requests\RescindirConvenioRequest;
 use App\Http\Requests\StoreConvenioRequest;
 use App\Http\Requests\StoreRespuestaObservacionRequest;
 use App\Http\Requests\UpdateConvenioRequest;
@@ -169,6 +170,46 @@ class ConvenioController extends Controller
 
         return response()->json([
             'message' => 'Firma registrada correctamente.',
+            'data' => $resultado,
+        ]);
+    }
+
+    public function rescindir(
+        RescindirConvenioRequest $request,
+        string $id,
+        ConvenioService $service,
+        DocumentoService $documentoService
+    ): JsonResponse {
+        try {
+            $resultado = $service->rescindir(
+                $id,
+                $request->validated()['motivo'],
+                $request->file('documento_resolucion'),
+                $request->user(),
+                $documentoService
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para rescindir este convenio.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al rescindir el convenio.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Convenio rescindido correctamente.',
             'data' => $resultado,
         ]);
     }
