@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\EstadisticaController;
 use App\Http\Controllers\Api\ConvenioExportController;
 use App\Http\Controllers\Api\UnidadAcademicaController;
 use App\Http\Controllers\Api\UsuarioController;
+use App\Http\Controllers\Api\AuditoriaController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -32,4 +33,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/usuarios/{id}', [UsuarioController::class, 'show'])->whereNumber('id');
     Route::put('/usuarios/{id}', [UsuarioController::class, 'update'])->whereNumber('id');
     Route::delete('/usuarios/{id}', [UsuarioController::class, 'destroy'])->whereNumber('id');
+    Route::get('/auditoria', [AuditoriaController::class, 'index']);
 });
