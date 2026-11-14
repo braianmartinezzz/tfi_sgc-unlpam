@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ConvenioExportController;
 use App\Http\Controllers\Api\UnidadAcademicaController;
 use App\Http\Controllers\Api\UsuarioController;
 use App\Http\Controllers\Api\AuditoriaController;
+use App\Http\Controllers\Api\ConfiguracionController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -34,4 +35,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/usuarios/{id}', [UsuarioController::class, 'update'])->whereNumber('id');
     Route::delete('/usuarios/{id}', [UsuarioController::class, 'destroy'])->whereNumber('id');
     Route::get('/auditoria', [AuditoriaController::class, 'index']);
+    Route::get('/configuracion/umbrales', [ConfiguracionController::class, 'umbrales']);
+    Route::put('/configuracion/umbrales', [ConfiguracionController::class, 'actualizarUmbrales']);
 });
