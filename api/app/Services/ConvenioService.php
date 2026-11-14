@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Storage;
 
 class ConvenioService
 {
-    public function paginate(array $filters): LengthAwarePaginator
+    public function paginate(array $filters, Usuario $usuario): LengthAwarePaginator
     {
         $query = Convenio::query()->with([
             'instrumento',
@@ -33,6 +33,68 @@ class ConvenioService
             'marco',
             'especifico',
         ]);
+
+        switch ($usuario->rol?->nombre) {
+            case 'Administración':
+                break;
+
+            case 'Gestión':
+                $query->where(
+                    'convenio.id_unidad_academica',
+                    $usuario->id_unidad
+                )->whereHas('instrumento', function ($instrumentoQuery) {
+                    $instrumentoQuery->whereIn('estado', [
+                        'Borrador',
+                        'EnCorreccion',
+                        'Revisión',
+                        'Aprobado',
+                        'Firmado',
+                        'Rescindido',
+                    ]);
+                });
+                break;
+
+            case 'Revisión':
+                if (! $usuario->alcance_global) {
+                    $query->where(
+                        'convenio.id_unidad_academica',
+                        $usuario->id_unidad
+                    );
+                }
+
+                $query->whereHas('instrumento', function ($instrumentoQuery) {
+                    $instrumentoQuery->whereIn('estado', [
+                        'Revisión',
+                        'EnCorreccion',
+                        'Aprobado',
+                        'Rechazado',
+                        'Rescindido',
+                        'Archivado',
+                    ]);
+                });
+                break;
+
+            case 'Consulta':
+                if (! $usuario->alcance_global) {
+                    $query->where(
+                        'convenio.id_unidad_academica',
+                        $usuario->id_unidad
+                    );
+                }
+
+                $query->whereHas('instrumento', function ($instrumentoQuery) {
+                    $instrumentoQuery->whereIn('estado', [
+                        'Firmado',
+                        'Rescindido',
+                        'Archivado',
+                    ]);
+                });
+                break;
+
+            default:
+                $query->whereRaw('1 = 0');
+                break;
+        }
 
         if (isset($filters['estado']) && $filters['estado'] !== '') {
             $query->whereHas('instrumento', function ($instrumentoQuery) use ($filters) {

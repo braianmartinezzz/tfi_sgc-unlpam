@@ -28,7 +28,7 @@ class ConvenioController extends Controller
             'es_marco',
             'id_unidad_academica',
             'buscar',
-        ]));
+        ]), $request->user());
 
         return response()->json($convenios);
     }

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
 class Usuario extends Authenticatable
@@ -24,6 +24,7 @@ class Usuario extends Authenticatable
         'activo',
         'id_rol',
         'id_unidad',
+        'alcance_global',
     ];
 
     protected $hidden = [
@@ -32,6 +33,7 @@ class Usuario extends Authenticatable
 
     protected $casts = [
         'activo' => 'boolean',
+        'alcance_global' => 'boolean',
     ];
 
     public function rol(): BelongsTo

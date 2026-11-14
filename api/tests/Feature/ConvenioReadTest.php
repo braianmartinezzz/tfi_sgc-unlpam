@@ -183,6 +183,315 @@ class ConvenioReadTest extends TestCase
         $this->getJson('/api/convenios/1')->assertUnauthorized();
     }
 
+    public function test_gestion_is_limited_to_its_unit_and_allowed_states_even_if_scope_is_global(): void
+    {
+        $context = $this->authenticate('Gestión', true);
+        $states = [
+            'Borrador',
+            'EnCorreccion',
+            'Revisión',
+            'Aprobado',
+            'Firmado',
+            'Rescindido',
+            'Rechazado',
+            'Archivado',
+        ];
+        $visibleStates = [
+            'Borrador',
+            'EnCorreccion',
+            'Revisión',
+            'Aprobado',
+            'Firmado',
+            'Rescindido',
+        ];
+        $ownIds = [];
+
+        foreach ($states as $state) {
+            $own = $this->createConvenio(
+                'Gestión propia '.$state,
+                $state,
+                'Colaboración',
+                $context['unidadPrincipal'],
+                $context['institucion'],
+                true
+            );
+            $other = $this->createConvenio(
+                'Gestión otra '.$state,
+                $state,
+                'Colaboración',
+                $context['otraUnidad'],
+                $context['institucion'],
+                true
+            );
+
+            if (in_array($state, $visibleStates, true)) {
+                $ownIds[] = $own->id_instrumento;
+            }
+        }
+
+        $this->assertEqualsCanonicalizing($ownIds, $this->listedIds([]));
+        $this->assertSame(
+            [],
+            $this->listedIds(['id_unidad_academica' => $context['otraUnidad']])
+        );
+        $this->assertSame(
+            [],
+            $this->listedIds(['estado' => 'Rechazado'])
+        );
+    }
+
+    public function test_revision_scope_and_visible_states_follow_scope_setting(): void
+    {
+        $context = $this->authenticate('Revisión', false);
+        $states = [
+            'Borrador',
+            'EnCorreccion',
+            'Revisión',
+            'Aprobado',
+            'Firmado',
+            'Rescindido',
+            'Rechazado',
+            'Archivado',
+        ];
+        $visibleStates = [
+            'Revisión',
+            'EnCorreccion',
+            'Aprobado',
+            'Rechazado',
+            'Rescindido',
+            'Archivado',
+        ];
+        $ownIds = [];
+        $globalIds = [];
+
+        foreach ($states as $state) {
+            $own = $this->createConvenio(
+                'Revisión propia '.$state,
+                $state,
+                'Colaboración',
+                $context['unidadPrincipal'],
+                $context['institucion'],
+                true
+            );
+            $other = $this->createConvenio(
+                'Revisión otra '.$state,
+                $state,
+                'Colaboración',
+                $context['otraUnidad'],
+                $context['institucion'],
+                true
+            );
+
+            if (in_array($state, $visibleStates, true)) {
+                $ownIds[] = $own->id_instrumento;
+                $globalIds[] = $own->id_instrumento;
+                $globalIds[] = $other->id_instrumento;
+            }
+        }
+
+        $this->assertEqualsCanonicalizing($ownIds, $this->listedIds([]));
+        $context['usuario']->alcance_global = true;
+        $context['usuario']->save();
+        $this->actingAs($context['usuario']->fresh(), 'sanctum');
+        $this->assertEqualsCanonicalizing($globalIds, $this->listedIds([]));
+    }
+
+    public function test_consulta_scope_allows_only_configured_states_even_when_other_states_are_expired(): void
+    {
+        $context = $this->authenticate('Consulta', false);
+        $expiredBorrador = $this->createConvenio(
+            'Consulta vencido local',
+            'Borrador',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true,
+            null,
+            today()->subDay()->toDateString()
+        );
+        $notExpiredBorrador = $this->createConvenio(
+            'Consulta no vencido local',
+            'Borrador',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true,
+            null,
+            today()->toDateString()
+        );
+        $expiredRevision = $this->createConvenio(
+            'Consulta revisión vencida',
+            'Revisión',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true,
+            null,
+            today()->subDay()->toDateString()
+        );
+        $firmado = $this->createConvenio(
+            'Consulta firmado local',
+            'Firmado',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+        $rescindido = $this->createConvenio(
+            'Consulta rescindido local',
+            'Rescindido',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+        $archivado = $this->createConvenio(
+            'Consulta archivado local',
+            'Archivado',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+        $expiredOtherUnit = $this->createConvenio(
+            'Consulta vencido global',
+            'Aprobado',
+            'Colaboración',
+            $context['otraUnidad'],
+            $context['institucion'],
+            true,
+            null,
+            today()->subDay()->toDateString()
+        );
+        $notExpiredOtherUnit = $this->createConvenio(
+            'Consulta no vencido global',
+            'Aprobado',
+            'Colaboración',
+            $context['otraUnidad'],
+            $context['institucion'],
+            true,
+            null,
+            today()->toDateString()
+        );
+        $localIds = [
+            $firmado->id_instrumento,
+            $rescindido->id_instrumento,
+            $archivado->id_instrumento,
+        ];
+
+        $this->assertEqualsCanonicalizing($localIds, $this->listedIds([]));
+        $this->assertSame([], $this->listedIds(['estado' => 'Borrador']));
+        $this->assertSame([], $this->listedIds(['estado' => 'Revisión']));
+
+        $context['usuario']->alcance_global = true;
+        $context['usuario']->save();
+        $this->actingAs($context['usuario']->fresh(), 'sanctum');
+        $this->assertEqualsCanonicalizing(
+            $localIds,
+            $this->listedIds([])
+        );
+        $this->assertSame([], $this->listedIds(['estado' => 'Aprobado']));
+        $this->assertNotContains($expiredBorrador->id_instrumento, $this->listedIds([]));
+        $this->assertNotContains($expiredRevision->id_instrumento, $this->listedIds([]));
+        $this->assertNotContains($expiredOtherUnit->id_instrumento, $this->listedIds([]));
+        $this->assertNotContains(
+            $notExpiredBorrador->id_instrumento,
+            $this->listedIds([])
+        );
+        $this->assertNotContains(
+            $notExpiredOtherUnit->id_instrumento,
+            $this->listedIds([])
+        );
+    }
+
+    public function test_administracion_sees_all_units_and_states_regardless_of_scope_setting(): void
+    {
+        $context = $this->authenticate('Administración', false);
+        $states = [
+            'Borrador',
+            'EnCorreccion',
+            'Revisión',
+            'Aprobado',
+            'Firmado',
+            'Rescindido',
+            'Rechazado',
+            'Archivado',
+        ];
+        $expectedIds = [];
+
+        foreach ($states as $index => $state) {
+            $unitId = $index === 0
+                ? $context['otraUnidad']
+                : $context['unidadPrincipal'];
+
+            $convenio = $this->createConvenio(
+                'Administración '.$state,
+                $state,
+                'Colaboración',
+                $unitId,
+                $context['institucion'],
+                true
+            );
+            $expectedIds[] = $convenio->id_instrumento;
+        }
+
+        $this->assertEqualsCanonicalizing($expectedIds, $this->listedIds([]));
+    }
+
+    public function test_scope_defaults_to_false_and_client_filters_cannot_expand_visibility(): void
+    {
+        $context = $this->authenticate('Gestión', null);
+        $this->assertFalse($context['usuario']->fresh()->alcance_global);
+
+        $ownBorrador = $this->createConvenio(
+            'Filtro borrador propio',
+            'Borrador',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+        $otherBorrador = $this->createConvenio(
+            'Filtro borrador ajeno',
+            'Borrador',
+            'Colaboración',
+            $context['otraUnidad'],
+            $context['institucion'],
+            true
+        );
+        $ownRejected = $this->createConvenio(
+            'Filtro rechazado propio',
+            'Rechazado',
+            'Colaboración',
+            $context['unidadPrincipal'],
+            $context['institucion'],
+            true
+        );
+
+        $this->assertSame(
+            [$ownBorrador->id_instrumento],
+            $this->listedIds([
+                'estado' => 'Borrador',
+                'id_unidad_academica' => $context['unidadPrincipal'],
+            ])
+        );
+        $this->assertSame(
+            [],
+            $this->listedIds([
+                'estado' => 'Borrador',
+                'id_unidad_academica' => $context['otraUnidad'],
+            ])
+        );
+        $this->assertNotContains(
+            $otherBorrador->id_instrumento,
+            $this->listedIds([])
+        );
+        $this->assertNotContains(
+            $ownRejected->id_instrumento,
+            $this->listedIds([])
+        );
+    }
+
     private function listedIds(array $filters): array
     {
         $query = http_build_query($filters);
@@ -202,11 +511,13 @@ class ConvenioReadTest extends TestCase
         int $unitId,
         int $institutionId,
         bool $esMarco,
-        ?int $idConvenioMarco = null
+        ?int $idConvenioMarco = null,
+        ?string $vencimiento = null
     ): Convenio {
         $instrumento = Instrumento::query()->create([
             'titulo' => $titulo,
             'estado' => $estado,
+            'vencimiento' => $vencimiento,
         ]);
 
         $convenio = Convenio::query()->create([
@@ -231,10 +542,12 @@ class ConvenioReadTest extends TestCase
         return $convenio;
     }
 
-    private function authenticate(): array
-    {
+    private function authenticate(
+        string $role = 'Administración',
+        ?bool $alcanceGlobal = true
+    ): array {
         $rolId = DB::table('rol')->insertGetId([
-            'nombre' => 'Consulta',
+            'nombre' => $role,
         ]);
         $institutionId = DB::table('institucion_firmante')->insertGetId([
             'razon_social' => 'Institución de lectura de prueba',
@@ -249,14 +562,20 @@ class ConvenioReadTest extends TestCase
             'nombre' => 'Unidad de lectura secundaria',
             'id_institucion' => $institutionId,
         ]);
-        $usuario = Usuario::query()->create([
+        $usuarioData = [
             'mail' => 'lectura@example.com',
             'nombre' => 'Usuario de lectura',
             'password' => Hash::make('password-segura'),
             'activo' => true,
             'id_rol' => $rolId,
             'id_unidad' => $unitId,
-        ]);
+        ];
+
+        if ($alcanceGlobal !== null) {
+            $usuarioData['alcance_global'] = $alcanceGlobal;
+        }
+
+        $usuario = Usuario::query()->create($usuarioData);
 
         $this->withToken($usuario->createToken('read-test')->plainTextToken);
 
