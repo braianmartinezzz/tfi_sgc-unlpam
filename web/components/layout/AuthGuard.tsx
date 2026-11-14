@@ -5,22 +5,27 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AuthGuard({ children }: { children: ReactNode }) {
-  const { token, user, isLoading, authError } = useAuth();
+  const { status } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !token && !authError) {
+    if (status === "unauthenticated") {
       router.replace("/login");
     }
-  }, [authError, isLoading, router, token]);
+  }, [router, status]);
 
-  if (isLoading) {
-    return <p role="status">Verificando sesión…</p>;
+  if (status === "loading") {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex min-h-full flex-1 items-center justify-center p-6"
+      >
+        Verificando sesión...
+      </div>
+    );
   }
-  if (authError) {
-    return <p role="alert">{authError}</p>;
-  }
-  if (!token || !user) return null;
+  if (status === "unauthenticated") return null;
 
   return children;
 }

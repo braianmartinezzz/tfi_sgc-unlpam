@@ -5,6 +5,11 @@ export interface Rol {
   nombre: string;
 }
 
+export type UnidadAcademicaAutenticada = Pick<
+  UnidadAcademica,
+  "id_unidad_academica" | "sigla" | "nombre" | "id_institucion"
+>;
+
 export interface UsuarioAutenticado {
   id_usuario: number;
   mail: string;
@@ -12,8 +17,8 @@ export interface UsuarioAutenticado {
   activo: boolean;
   id_rol: number;
   id_unidad: number;
-  rol?: Rol | null;
-  unidad_academica?: UnidadAcademica | null;
+  rol: Rol | null;
+  unidad_academica: UnidadAcademicaAutenticada | null;
 }
 
 export interface LoginCredentials {

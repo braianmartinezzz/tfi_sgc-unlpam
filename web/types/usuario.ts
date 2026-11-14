@@ -1,7 +1,8 @@
 import type { Rol, UsuarioAutenticado } from "@/types/auth";
 import type { UnidadAcademica } from "@/types/unidad";
 
-export interface Usuario extends UsuarioAutenticado {
+export interface Usuario
+  extends Omit<UsuarioAutenticado, "rol" | "unidad_academica"> {
   rol?: Rol | null;
   unidad_academica?: UnidadAcademica | null;
 }

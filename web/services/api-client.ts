@@ -1,45 +1,61 @@
-import type { ApiError } from "@/types/api";
+import type { ApiError as ApiErrorPayload } from "@/types/api";
+import { getAuthToken } from "@/services/token-storage";
 
-const TOKEN_STORAGE_KEY = "sgc-access-token";
-
-export class ApiHttpError extends Error implements ApiError {
+export class ApiError extends Error implements ApiErrorPayload {
   readonly status: number;
   readonly errors?: Record<string, string[]>;
 
-  constructor(status: number, payload: ApiError) {
-    super(payload.message);
-    this.name = "ApiHttpError";
+  constructor(
+    status: number,
+    message: string,
+    errors?: Record<string, string[]>,
+  ) {
+    super(message);
+    this.name = "ApiError";
     this.status = status;
-    this.errors = payload.errors;
+    this.errors = errors;
   }
 }
+
+export { ApiError as ApiHttpError };
 
 interface ApiRequestOptions extends RequestInit {
   authenticated?: boolean;
 }
 
+type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function registerUnauthorizedHandler(
+  handler: UnauthorizedHandler,
+): () => void {
+  unauthorizedHandler = handler;
+  return () => {
+    if (unauthorizedHandler === handler) unauthorizedHandler = null;
+  };
+}
+
 function getApiBaseUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (!baseUrl) {
-    throw new Error("Falta configurar NEXT_PUBLIC_API_URL.");
+    throw new ApiError(0, "Falta configurar NEXT_PUBLIC_API_URL.");
   }
   return baseUrl.replace(/\/+$/, "");
 }
 
-function readAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
+function isLoginRequest(path: string): boolean {
+  return path.split("?")[0].replace(/\/+$/, "") === "/login";
+}
 
-  try {
-    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
-  } catch (error) {
-    throw new Error("No se pudo leer el token de sesión.", { cause: error });
-  }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isStringArrayRecord(
   value: unknown,
 ): value is Record<string, string[]> {
-  if (typeof value !== "object" || value === null) return false;
+  if (!isRecord(value)) return false;
   return Object.values(value).every(
     (entry) =>
       Array.isArray(entry) &&
@@ -47,7 +63,7 @@ function isStringArrayRecord(
   );
 }
 
-async function toApiError(response: Response): Promise<ApiHttpError> {
+async function toApiError(response: Response): Promise<ApiError> {
   let payload: unknown;
   try {
     payload = await response.json();
@@ -55,64 +71,98 @@ async function toApiError(response: Response): Promise<ApiHttpError> {
     payload = null;
   }
 
-  const record =
-    typeof payload === "object" && payload !== null
-      ? (payload as Record<string, unknown>)
-      : null;
+  const record = isRecord(payload) ? payload : null;
   const defaultMessage =
     response.status === 401
       ? "La sesión no está autorizada."
-      : response.status === 409
-        ? "La operación entra en conflicto con el estado actual."
-        : response.status === 422
-          ? "Los datos enviados no son válidos."
-          : `Error de API (${response.status}).`;
+      : response.status === 422
+        ? "Los datos enviados no son válidos."
+        : `Error de API (${response.status}).`;
 
-  return new ApiHttpError(response.status, {
-    message:
-      record && typeof record.message === "string"
-        ? record.message
-        : defaultMessage,
-    ...(record && isStringArrayRecord(record.errors)
-      ? { errors: record.errors }
-      : {}),
-  });
+  return new ApiError(
+    response.status,
+    record && typeof record.message === "string"
+      ? record.message
+      : defaultMessage,
+    record && isStringArrayRecord(record.errors) ? record.errors : undefined,
+  );
+}
+
+function createRequestHeaders(
+  requestHeaders: HeadersInit | undefined,
+  body: BodyInit | null | undefined,
+  authenticated: boolean,
+): Headers {
+  const headers = new Headers(requestHeaders);
+  headers.set("Accept", "application/json");
+
+  if (body !== undefined && body !== null) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (authenticated) {
+    const token = getAuthToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  return headers;
+}
+
+async function fetchApi(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<Response> {
+  const {
+    authenticated = true,
+    headers: requestHeaders,
+    ...requestOptions
+  } = options;
+  const baseUrl = getApiBaseUrl();
+  const requestPath = path.startsWith("/") ? path : `/${path}`;
+  const headers = createRequestHeaders(
+    requestHeaders,
+    requestOptions.body,
+    authenticated,
+  );
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${requestPath}`, {
+      ...requestOptions,
+      headers,
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "No se pudo conectar con el servidor. Intentá nuevamente.",
+    );
+  }
+
+  if (response.status === 401 && !isLoginRequest(path)) {
+    unauthorizedHandler?.();
+  }
+
+  if (!response.ok) throw await toApiError(response);
+  return response;
 }
 
 export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const { authenticated = true, headers: requestHeaders, ...requestOptions } =
-    options;
-  const headers = new Headers(requestHeaders);
-  headers.set("Accept", "application/json");
-
-  if (authenticated) {
-    const token = readAccessToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetchApi(path, options);
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new ApiError(
+      response.status,
+      "La API devolvió una respuesta inválida.",
+    );
   }
-
-  if (requestOptions.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...requestOptions,
-    headers,
-  });
-  if (!response.ok) throw await toApiError(response);
-  return (await response.json()) as T;
 }
 
 export async function apiDownload(path: string): Promise<void> {
-  const headers = new Headers();
-  const token = readAccessToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-
-  const response = await fetch(`${getApiBaseUrl()}${path}`, { headers });
-  if (!response.ok) throw await toApiError(response);
-
+  const response = await fetchApi(path);
   const contentDisposition = response.headers.get("Content-Disposition");
   const filename =
     contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] ??

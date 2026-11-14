@@ -2,14 +2,13 @@ import { apiRequest } from "@/services/api-client";
 import type { ApiMessageResponse } from "@/types/api";
 import type {
   CurrentUserResponse,
-  LoginCredentials,
   LoginResponse,
 } from "@/types/auth";
 
-export function login(credentials: LoginCredentials): Promise<LoginResponse> {
+export function login(mail: string, password: string): Promise<LoginResponse> {
   return apiRequest<LoginResponse>("/login", {
     method: "POST",
-    body: JSON.stringify(credentials),
+    body: JSON.stringify({ mail, password }),
     authenticated: false,
   });
 }

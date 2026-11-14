@@ -9,16 +9,20 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ApiHttpError } from "@/services/api-client";
+import { ApiError, registerUnauthorizedHandler } from "@/services/api-client";
 import * as authService from "@/services/auth";
+import {
+  getAuthToken,
+  removeAuthToken,
+  saveAuthToken,
+} from "@/services/token-storage";
 import type { LoginCredentials, UsuarioAutenticado } from "@/types/auth";
 
-const TOKEN_STORAGE_KEY = "sgc-access-token";
+type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 interface AuthContextValue {
-  token: string | null;
+  status: AuthStatus;
   user: UsuarioAutenticado | null;
-  isLoading: boolean;
   authError: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
@@ -26,69 +30,68 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readStoredToken(): string | null {
-  try {
-    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
-  } catch (error) {
-    throw new Error("No se pudo leer el token de sesión.", { cause: error });
-  }
-}
-
-function writeStoredToken(token: string | null): void {
-  try {
-    if (token) {
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    } else {
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
-  } catch (error) {
-    throw new Error("No se pudo guardar el token de sesión.", { cause: error });
-  }
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return "No se pudo completar la operación de autenticación.";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<UsuarioAutenticado | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  const invalidateSession = useCallback(() => {
+    let storageError: string | null = null;
+    try {
+      removeAuthToken();
+    } catch (error) {
+      storageError = getErrorMessage(error);
+    }
+
+    setUser(null);
+    setStatus("unauthenticated");
+    setAuthError(storageError);
+  }, []);
+
+  useEffect(
+    () => registerUnauthorizedHandler(invalidateSession),
+    [invalidateSession],
+  );
 
   useEffect(() => {
     let active = true;
 
     async function restoreSession() {
       try {
-        const storedToken = readStoredToken();
-        if (!storedToken) {
-          if (active) setIsLoading(false);
+        const token = getAuthToken();
+        if (!token) {
+          if (active) {
+            setUser(null);
+            setAuthError(null);
+            setStatus("unauthenticated");
+          }
           return;
         }
 
-        if (active) setToken(storedToken);
         const response = await authService.me();
-        if (active) setUser(response.user);
-      } catch (error) {
-        if (error instanceof ApiHttpError && error.status === 401) {
-          try {
-            writeStoredToken(null);
-          } catch (storageError) {
-            if (active) {
-              setAuthError(
-                storageError instanceof Error
-                  ? storageError.message
-                  : "No se pudo limpiar el token de sesión.",
-              );
-            }
-          }
-          if (active) setToken(null);
-        } else if (active) {
-          setAuthError(
-            error instanceof Error
-              ? error.message
-              : "No se pudo restaurar la sesión.",
-          );
+        if (active) {
+          setUser(response.user);
+          setAuthError(null);
+          setStatus("authenticated");
         }
-      } finally {
-        if (active) setIsLoading(false);
+      } catch (error) {
+        if (!active) return;
+
+        if (
+          error instanceof ApiError &&
+          (error.status === 401 || error.status === 403)
+        ) {
+          invalidateSession();
+        } else {
+          setUser(null);
+          setAuthError(getErrorMessage(error));
+          setStatus("unauthenticated");
+        }
       }
     }
 
@@ -96,35 +99,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [invalidateSession]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
-    setIsLoading(true);
     setAuthError(null);
     try {
-      const response = await authService.login(credentials);
-      writeStoredToken(response.access_token);
-      setToken(response.access_token);
+      const response = await authService.login(
+        credentials.mail,
+        credentials.password,
+      );
+      saveAuthToken(response.access_token);
       setUser(response.user);
-    } finally {
-      setIsLoading(false);
+      setStatus("authenticated");
+    } catch (error) {
+      setUser(null);
+      setStatus("unauthenticated");
+      throw error;
     }
   }, []);
 
   const logout = useCallback(async () => {
+    let logoutError: string | null = null;
     try {
-      if (token) await authService.logout();
+      if (getAuthToken()) await authService.logout();
+    } catch (error) {
+      logoutError = getErrorMessage(error);
     } finally {
-      writeStoredToken(null);
-      setToken(null);
+      try {
+        removeAuthToken();
+      } catch (error) {
+        logoutError = getErrorMessage(error);
+      }
       setUser(null);
-      setAuthError(null);
+      setStatus("unauthenticated");
+      setAuthError(logoutError);
     }
-  }, [token]);
+  }, []);
 
   const value = useMemo(
-    () => ({ token, user, isLoading, authError, login, logout }),
-    [token, user, isLoading, authError, login, logout],
+    () => ({ status, user, authError, login, logout }),
+    [status, user, authError, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
