@@ -25,13 +25,30 @@ class RegistroAuditoria extends Model
         'fecha_hora' => 'datetime',
     ];
 
+    public function convenio(): BelongsTo
+    {
+        return $this->belongsTo(
+            Convenio::class,
+            'id_instrumento',
+            'id_instrumento'
+        );
+    }
+
     public function usuario(): BelongsTo
     {
-        return $this->belongsTo(Usuario::class, 'id_usuario', 'id_usuario');
+        return $this->belongsTo(
+            Usuario::class,
+            'id_usuario',
+            'id_usuario'
+        );
     }
 
     public function instrumento(): BelongsTo
     {
-        return $this->belongsTo(Instrumento::class, 'id_instrumento', 'id_instrumento');
+        return $this->belongsTo(
+            Instrumento::class,
+            'id_instrumento',
+            'id_instrumento'
+        );
     }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Persona extends Model
 {
@@ -30,5 +31,20 @@ class Persona extends Model
             'id_persona',
             'id_instrumento'
         )->withPivot('fecha_hora_firma', 'latitud', 'longitud');
+    }
+
+    public function representante(): HasOne
+    {
+        return $this->hasOne(Representante::class, 'id_persona', 'id_persona');
+    }
+
+    public function docente(): HasOne
+    {
+        return $this->hasOne(Docente::class, 'id_persona', 'id_persona');
+    }
+
+    public function estudiante(): HasOne
+    {
+        return $this->hasOne(Estudiante::class, 'id_persona', 'id_persona');
     }
 }
