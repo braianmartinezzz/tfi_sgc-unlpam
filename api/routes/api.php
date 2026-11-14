@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConvenioController;
 use App\Http\Controllers\Api\DocumentoController;
 use App\Http\Controllers\Api\InstitucionFirmanteController;
+use App\Http\Controllers\Api\RepresentanteController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -31,4 +32,9 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('id');
     Route::delete('/instituciones-firmantes/{id}', [InstitucionFirmanteController::class, 'destroy'])
         ->whereNumber('id');
+    Route::get('/representantes', [RepresentanteController::class, 'index']);
+    Route::get('/representantes/{id}', [RepresentanteController::class, 'show'])->whereNumber('id');
+    Route::post('/representantes', [RepresentanteController::class, 'store']);
+    Route::put('/representantes/{id}', [RepresentanteController::class, 'update'])->whereNumber('id');
+    Route::delete('/representantes/{id}', [RepresentanteController::class, 'destroy'])->whereNumber('id');
 });
