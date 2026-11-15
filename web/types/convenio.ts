@@ -1,5 +1,12 @@
 import type { InstitucionFirmante, UnidadAcademica } from "@/types/unidad";
 
+export interface ConvenioInstitucionFirmante extends InstitucionFirmante {
+  pivot: {
+    id_instrumento: number;
+    id_institucion: number;
+  };
+}
+
 export interface ConvenioInstrumento {
   id_instrumento: number;
   titulo: string;
@@ -46,10 +53,27 @@ export interface Convenio {
   id_unidad_academica: number;
   instrumento?: ConvenioInstrumento | null;
   unidad_academica?: UnidadAcademica | null;
-  instituciones_firmantes?: InstitucionFirmante[];
+  instituciones_firmantes?: ConvenioInstitucionFirmante[];
   marco?: ConvenioMarco | null;
   especifico?: ConvenioEspecifico | null;
   historial_estados?: HistorialEstado[];
+}
+
+export interface ConvenioListItem {
+  id_instrumento: number;
+  tipo: string;
+  alcance: string | null;
+  obligaciones: string | null;
+  condiciones_recision: string | null;
+  marco_legal: string | null;
+  condicion_renovacion: string | null;
+  confidencialidad: boolean | null;
+  id_unidad_academica: number;
+  instrumento: ConvenioInstrumento | null;
+  unidad_academica: UnidadAcademica | null;
+  instituciones_firmantes: ConvenioInstitucionFirmante[];
+  marco: ConvenioMarco | null;
+  especifico: ConvenioEspecifico | null;
 }
 
 export interface ConvenioListFilters {
@@ -104,6 +128,6 @@ export interface ConvenioMutationResponse {
     instrumento: ConvenioInstrumento;
     convenio: Convenio;
     subtipo: ConvenioMarco | ConvenioEspecifico | null;
-    instituciones_firmantes: InstitucionFirmante[];
+    instituciones_firmantes: ConvenioInstitucionFirmante[];
   };
 }

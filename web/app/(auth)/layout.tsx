@@ -1,17 +1,9 @@
 import type { ReactNode } from "react";
-import { Roboto_Condensed } from "next/font/google";
-
-const robotoCondensed = Roboto_Condensed({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  display: "swap",
-  fallback: ["Arial", "sans-serif"],
-});
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div
-      className={`${robotoCondensed.className} relative flex min-h-screen flex-col overflow-hidden bg-linear-to-br from-white via-slate-50 to-slate-100 text-slate-900`}
+      className="relative flex min-h-screen flex-col overflow-hidden bg-linear-to-br from-white via-slate-50 to-slate-100 text-slate-900"
     >
       <div
         aria-hidden="true"

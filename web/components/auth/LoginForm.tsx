@@ -41,7 +41,7 @@ export default function LoginForm() {
   });
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
+    if (status === "authenticated") router.replace("/convenios");
   }, [router, status]);
 
   async function onSubmit(credentials: LoginFormValues) {

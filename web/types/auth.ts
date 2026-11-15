@@ -19,6 +19,7 @@ export interface UsuarioAutenticado {
   id_unidad: number;
   rol: Rol | null;
   unidad_academica: UnidadAcademicaAutenticada | null;
+  alcance_global?: boolean;
 }
 
 export interface LoginCredentials {

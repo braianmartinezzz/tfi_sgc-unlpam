@@ -3,12 +3,22 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --topbar: #25262c;
+  --sidebar: #354052;
+  --page: #f1f0f5;
+  --row-alternate: #eceef4;
+  --ui-border: #d3d5de;
   color-scheme: light;
 }
 
 [data-theme="dark"] {
-  --background: #0a0a0a;
+  --background: #111217;
   --foreground: #ededed;
+  --topbar: #1c1d22;
+  --sidebar: #252d3b;
+  --page: #17181e;
+  --row-alternate: #24262e;
+  --ui-border: #454751;
   color-scheme: dark;
 }
 
@@ -17,12 +27,19 @@
   --color-foreground: var(--foreground);
   --color-brand: #D13B3B;
   --color-brand-hover: #B52F35;
+  --color-topbar: var(--topbar);
+  --color-sidebar: var(--sidebar);
+  --color-page: var(--page);
+  --color-table-head: var(--color-brand);
+  --color-row-alternate: var(--row-alternate);
+  --color-ui-border: var(--ui-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-condensed: var(--font-roboto-condensed);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-roboto-condensed), Arial, Helvetica, sans-serif;
 }

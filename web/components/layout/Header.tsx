@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import ThemeToggle from "@/components/layout/ThemeToggle";
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -22,25 +21,22 @@ export default function Header() {
   }
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 p-4 dark:border-white/10">
-      <p className="font-semibold">Gestión de Convenios</p>
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <div className="text-right">
-          <p className="text-sm font-medium">{user?.nombre}</p>
-          <p className="text-xs text-slate-600 dark:text-slate-300">
-            {user?.rol?.nombre ?? "Rol no asignado"}
-          </p>
-        </div>
+    <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 bg-topbar px-4 py-3 text-white sm:px-6">
+      <p className="text-2xl font-bold tracking-tight text-brand">UNLPam</p>
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+        <p className="max-w-full break-words text-right text-sm font-medium sm:text-base">
+          Usuario: {user?.nombre ?? "No disponible"} (
+          {user?.rol?.nombre ?? "Rol no asignado"})
+        </p>
         <button
           type="button"
           onClick={() => void handleLogout()}
           disabled={isLoggingOut}
           aria-busy={isLoggingOut}
-          className="rounded-sm px-2 py-1 text-sm text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded-sm border border-white/30 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-topbar disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isLoggingOut ? "Cerrando sesión..." : "Cerrar sesión"}
         </button>
-        <ThemeToggle />
       </div>
     </header>
   );

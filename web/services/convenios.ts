@@ -4,6 +4,7 @@ import type {
   Convenio,
   ConvenioCreateInput,
   ConvenioListFilters,
+  ConvenioListItem,
   ConvenioMutationResponse,
   ConvenioResponse,
   ConvenioUpdateInput,
@@ -20,8 +21,8 @@ function buildQuery(filters: ConvenioListFilters): string {
 
 export function list(
   filters: ConvenioListFilters = {},
-): Promise<Paginated<Convenio>> {
-  return apiRequest<Paginated<Convenio>>(
+): Promise<Paginated<ConvenioListItem>> {
+  return apiRequest<Paginated<ConvenioListItem>>(
     `/convenios${buildQuery(filters)}`,
   );
 }
