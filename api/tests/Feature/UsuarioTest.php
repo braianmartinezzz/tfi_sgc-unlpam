@@ -201,6 +201,74 @@ class UsuarioTest extends TestCase
         $this->deleteJson('/api/usuarios/99999')->assertNotFound();
     }
 
+    public function test_creates_a_usuario_with_alcance_global_disabled_by_default(): void
+    {
+        $ctx = $this->authenticate();
+
+        $this->postJson('/api/usuarios', [
+            'mail' => 'sin-alcance@example.com',
+            'nombre' => 'Usuario sin alcance global',
+            'password' => 'clave-segura-1',
+            'id_rol' => $ctx['rol'],
+            'id_unidad' => $ctx['unidad'],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.alcance_global', false);
+
+        $this->assertDatabaseHas('usuario', [
+            'mail' => 'sin-alcance@example.com',
+            'alcance_global' => false,
+        ]);
+    }
+
+    public function test_creates_a_usuario_with_alcance_global_enabled(): void
+    {
+        $ctx = $this->authenticate();
+
+        $this->postJson('/api/usuarios', [
+            'mail' => 'con-alcance@example.com',
+            'nombre' => 'Usuario con alcance global',
+            'password' => 'clave-segura-1',
+            'id_rol' => $ctx['rol'],
+            'id_unidad' => $ctx['unidad'],
+            'alcance_global' => true,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.alcance_global', true);
+
+        $this->assertDatabaseHas('usuario', [
+            'mail' => 'con-alcance@example.com',
+            'alcance_global' => true,
+        ]);
+    }
+
+    public function test_updates_alcance_global_of_an_existing_usuario(): void
+    {
+        $ctx = $this->authenticate();
+        $usuario = $this->crearUsuario($ctx['rol'], $ctx['unidad'], ['mail' => 'alcance@example.com']);
+
+        $this->putJson('/api/usuarios/'.$usuario->id_usuario, ['alcance_global' => true])
+            ->assertOk()
+            ->assertJsonPath('data.alcance_global', true);
+
+        $this->assertTrue($usuario->fresh()->alcance_global);
+
+        $this->putJson('/api/usuarios/'.$usuario->id_usuario, ['alcance_global' => false])
+            ->assertOk()
+            ->assertJsonPath('data.alcance_global', false);
+
+        $this->assertFalse($usuario->fresh()->alcance_global);
+    }
+
+    public function test_rejects_a_non_boolean_alcance_global(): void
+    {
+        $ctx = $this->authenticate();
+
+        $this->putJson('/api/usuarios/'.$ctx['admin']->id_usuario, ['alcance_global' => 'quizás'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['alcance_global']);
+    }
+
     private function crearUsuario(int $rolId, int $unidadId, array $atributos = []): Usuario
     {
         static $contador = 0;
