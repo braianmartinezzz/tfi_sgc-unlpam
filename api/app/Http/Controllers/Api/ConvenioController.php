@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\DevolverConvenioRequest;
 use App\Http\Requests\EnviarARevisionRequest;
 use App\Http\Requests\ObservacionRequest;
 use App\Http\Requests\RegistrarFirmaRequest;
@@ -469,6 +470,50 @@ class ConvenioController extends Controller
             'message' => 'Convenio enviado a revisión correctamente.',
             'estado' => 'Revisión',
             'historial' => $resultado,
+        ]);
+    }
+
+    public function devolver(
+        DevolverConvenioRequest $request,
+        string $id,
+        ConvenioService $service,
+        AuditoriaService $auditoriaService
+    ): JsonResponse {
+        try {
+            $convenio = $service->devolverAcorreccion(
+                $id,
+                $request->validated()['motivo'],
+                $request->user(),
+                $auditoriaService
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para devolver este convenio a corrección.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al devolver el convenio a corrección.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Convenio devuelto a corrección correctamente.',
+            'data' => [
+                'instrumento' => $convenio->instrumento,
+                'convenio' => $convenio,
+                'subtipo' => $convenio->marco ?? $convenio->especifico,
+                'instituciones_firmantes' => $convenio->institucionesFirmantes,
+            ],
         ]);
     }
 }

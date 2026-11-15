@@ -45,6 +45,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/convenios/{id}/enviar-revision', [ConvenioController::class, 'enviarRevision'])
         ->whereNumber('id');
+    Route::post('/convenios/{id}/devolver', [ConvenioController::class, 'devolver'])
+        ->whereNumber('id');
     Route::post('/convenios/{id}/registrar-firma', [ConvenioController::class, 'registrarFirma'])
         ->whereNumber('id');
     Route::post('/convenios/{id}/rescindir', [ConvenioController::class, 'rescindir'])

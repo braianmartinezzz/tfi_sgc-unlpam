@@ -119,12 +119,7 @@ class ConvenioService
 
     private function applyRevisionVisibility(Builder $query, Usuario $usuario): Builder
     {
-        if (! $usuario->alcance_global) {
-            $query->where(
-                'convenio.id_unidad_academica',
-                $usuario->id_unidad
-            );
-        }
+        $this->applyRevisionUnitScope($query, $usuario);
 
         return $query->whereHas('instrumento', function ($instrumentoQuery) {
             $instrumentoQuery->whereIn('estado', [
@@ -136,6 +131,18 @@ class ConvenioService
                 'Archivado',
             ]);
         });
+    }
+
+    private function applyRevisionUnitScope(Builder $query, Usuario $usuario): Builder
+    {
+        if (! $usuario->alcance_global) {
+            $query->where(
+                'convenio.id_unidad_academica',
+                $usuario->id_unidad
+            );
+        }
+
+        return $query;
     }
 
     public function findById(string $id, Usuario $usuario): ?Convenio
@@ -182,6 +189,25 @@ class ConvenioService
         $query = Convenio::query()->whereKey($convenio->id_instrumento);
 
         if (! $this->applyRevisionVisibility($query, $usuario)->exists()) {
+            throw new AuthorizationException(
+                'No tiene permisos para consultar este convenio.'
+            );
+        }
+    }
+
+    public function assertCanViewWithinRevisionUnitScope(
+        Convenio $convenio,
+        Usuario $usuario
+    ): void {
+        if ($usuario->rol?->nombre !== 'Revisión') {
+            throw new AuthorizationException(
+                'No tiene permisos para consultar este convenio.'
+            );
+        }
+
+        $query = Convenio::query()->whereKey($convenio->id_instrumento);
+
+        if (! $this->applyRevisionUnitScope($query, $usuario)->exists()) {
             throw new AuthorizationException(
                 'No tiene permisos para consultar este convenio.'
             );
@@ -982,6 +1008,105 @@ class ConvenioService
                 'estado_anterior' => $estadoAnterior,
                 'estado_nuevo' => 'Revisión',
             ];
+        });
+    }
+
+    public function devolverAcorreccion(
+        string $id,
+        string $motivo,
+        Usuario $usuario,
+        AuditoriaService $auditoriaService
+    ): Convenio {
+        return DB::transaction(function () use (
+            $id,
+            $motivo,
+            $usuario,
+            $auditoriaService
+        ) {
+            $instrumento = Instrumento::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $convenio = $instrumento->convenio()->firstOrFail();
+            $rol = $usuario->rol?->nombre;
+
+            if (! in_array($rol, ['Revisión', 'Administración'], true)) {
+                throw new AuthorizationException(
+                    'No tiene permisos para devolver este convenio a corrección.'
+                );
+            }
+
+            if ($rol === 'Revisión') {
+                if ($instrumento->estado === 'Revisión') {
+                    $this->assertCanView($convenio, $usuario);
+                } else {
+                    $this->assertCanViewWithinRevisionUnitScope($convenio, $usuario);
+                }
+            }
+
+            if ($instrumento->estado !== 'Revisión') {
+                throw new \DomainException(
+                    'El convenio no se encuentra en estado Revisión.'
+                );
+            }
+
+            if (! $convenio->observaciones()
+                ->where('estado_tramite', 'Pendiente')
+                ->exists()) {
+                throw new \DomainException(
+                    'El convenio no tiene observaciones pendientes.'
+                );
+            }
+
+            $destinatarios = Usuario::query()
+                ->where('activo', true)
+                ->where('id_unidad', $convenio->id_unidad_academica)
+                ->whereHas('rol', fn ($query) => $query->where('nombre', 'Gestión'))
+                ->get(['id_usuario']);
+
+            if ($destinatarios->isEmpty()) {
+                throw new \DomainException(
+                    'No existen usuarios con rol Gestión activos en la unidad académica para recibir la notificación de devolución'
+                );
+            }
+
+            $fechaHora = now();
+            $instrumento->estado = 'EnCorreccion';
+            $instrumento->save();
+
+            HistorialEstado::query()->create([
+                'estado_anterior' => 'Revisión',
+                'estado_nuevo' => 'EnCorreccion',
+                'fecha_hora' => $fechaHora,
+                'motivo' => $motivo,
+                'id_instrumento' => $convenio->id_instrumento,
+                'id_usuario' => $usuario->id_usuario,
+            ]);
+
+            $auditoriaService->registrar(
+                'DEVOLUCION_A_CORRECCION',
+                $usuario->id_usuario,
+                $convenio->id_instrumento,
+                'Convenio #'.$convenio->id_instrumento
+                    .' devuelto a corrección. Motivo: '.$motivo
+            );
+
+            foreach ($destinatarios as $destinatario) {
+                Notificacion::query()->create([
+                    'tipo' => 'DEVOLUCION_OBSERVACION',
+                    'mensaje' => 'El convenio #'.$convenio->id_instrumento
+                        .' fue devuelto a corrección.',
+                    'fecha_generacion' => $fechaHora,
+                    'id_instrumento' => $convenio->id_instrumento,
+                    'id_usuario' => $destinatario->id_usuario,
+                ]);
+            }
+
+            return $convenio->load([
+                'instrumento',
+                'marco',
+                'especifico',
+                'institucionesFirmantes',
+            ]);
         });
     }
 
