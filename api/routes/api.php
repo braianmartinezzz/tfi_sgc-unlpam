@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\UnidadAcademicaController;
 use App\Http\Controllers\Api\UsuarioController;
 use App\Http\Controllers\Api\VencimientoController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\InstitucionUnificacionController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -128,4 +129,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Configuración
     Route::get('/configuracion/umbrales', [ConfiguracionController::class, 'umbrales']);
     Route::put('/configuracion/umbrales', [ConfiguracionController::class, 'actualizarUmbrales']);
+
+    // Unificación de instituciones
+    Route::post('/instituciones-firmantes/unificar', [InstitucionUnificacionController::class, 'unificar']);
 });
