@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\InstitucionUnificacionController;
 use App\Http\Controllers\Api\ObservacionTrazabilidadController;
 use App\Http\Controllers\Api\ArchivarConvenioController;
+use App\Http\Controllers\Api\RechazarConvenioController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -140,4 +141,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/convenios/{id}/archivar', [ArchivarConvenioController::class, 'archivar'])
         ->whereNumber('id');  
+
+    Route::post('/convenios/{id}/rechazar', [RechazarConvenioController::class, 'rechazar'])
+        ->whereNumber('id');
 });
