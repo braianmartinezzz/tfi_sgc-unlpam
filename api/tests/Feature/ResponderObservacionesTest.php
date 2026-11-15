@@ -93,10 +93,18 @@ class ResponderObservacionesTest extends TestCase
         $base = "/api/convenios/{$context['convenio']->id_instrumento}";
 
         $this->getJson("{$base}/observaciones")->assertUnauthorized();
+        $this->postJson("{$base}/observaciones", [
+            'contenido' => 'Actualizar la cláusula de vigencia.',
+        ])->assertUnauthorized();
         $this->postJson(
             "{$base}/observaciones/{$observacion->id_observacion}/responder",
             ['respuesta' => 'Se aplicaron los cambios solicitados.']
         )->assertUnauthorized();
+        $this->putJson("/api/observaciones/{$observacion->id_observacion}", [
+            'contenido' => 'Actualizar el plazo de vigencia.',
+        ])->assertUnauthorized();
+        $this->deleteJson("/api/observaciones/{$observacion->id_observacion}")
+            ->assertUnauthorized();
     }
 
     public function test_gestion_from_another_unit_is_forbidden_for_both_operations(): void
@@ -139,6 +147,317 @@ class ResponderObservacionesTest extends TestCase
             "{$base}/observaciones/{$observacion->id_observacion}/responder",
             ['respuesta' => 'Se aplicaron los cambios solicitados.']
         )->assertOk();
+    }
+
+    public function test_revision_can_create_observations_and_registers_audit(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $this->authenticate($context['reviewer']);
+
+        $response = $this->postJson(
+            "/api/convenios/{$context['convenio']->id_instrumento}/observaciones",
+            ['contenido' => 'Revisar el plazo de vigencia.']
+        );
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.contenido', 'Revisar el plazo de vigencia.')
+            ->assertJsonPath('data.estado_tramite', 'Pendiente')
+            ->assertJsonPath('data.usuario.id_usuario', $context['reviewer']->id_usuario);
+
+        $this->assertDatabaseHas('observacion', [
+            'id_observacion' => $response->json('data.id_observacion'),
+            'contenido' => 'Revisar el plazo de vigencia.',
+            'estado_tramite' => 'Pendiente',
+            'id_instrumento' => $context['convenio']->id_instrumento,
+            'id_usuario' => $context['reviewer']->id_usuario,
+        ]);
+        $this->assertDatabaseHas('registro_auditoria', [
+            'accion' => 'CREAR_OBSERVACION',
+            'id_instrumento' => $context['convenio']->id_instrumento,
+            'id_usuario' => $context['reviewer']->id_usuario,
+        ]);
+    }
+
+    public function test_revision_can_edit_observations_created_by_another_reviewer(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $otherReviewer = $this->createUser(
+            'Revisión',
+            $context['manager']->id_unidad
+        );
+        $observation = $this->createObservation($context);
+        $observation->id_usuario = $otherReviewer->id_usuario;
+        $observation->save();
+        $this->authenticate($context['reviewer']);
+
+        $this->putJson("/api/observaciones/{$observation->id_observacion}", [
+            'contenido' => 'Actualizar el plazo y la fecha efectiva.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.contenido', 'Actualizar el plazo y la fecha efectiva.')
+            ->assertJsonPath('data.usuario.id_usuario', $otherReviewer->id_usuario);
+
+        $this->assertSame(
+            $otherReviewer->id_usuario,
+            $observation->fresh()->id_usuario
+        );
+        $this->assertDatabaseHas('registro_auditoria', [
+            'accion' => 'MODIFICAR_OBSERVACION',
+            'id_instrumento' => $context['convenio']->id_instrumento,
+            'id_usuario' => $context['reviewer']->id_usuario,
+        ]);
+    }
+
+    public function test_revision_can_delete_observations_created_by_another_reviewer(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $otherReviewer = $this->createUser(
+            'Revisión',
+            $context['manager']->id_unidad
+        );
+        $observation = $this->createObservation($context);
+        $observation->id_usuario = $otherReviewer->id_usuario;
+        $observation->save();
+        $this->authenticate($context['reviewer']);
+
+        $this->deleteJson("/api/observaciones/{$observation->id_observacion}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Observación eliminada correctamente.');
+
+        $this->assertDatabaseMissing('observacion', [
+            'id_observacion' => $observation->id_observacion,
+        ]);
+        $this->assertDatabaseHas('registro_auditoria', [
+            'accion' => 'ELIMINAR_OBSERVACION',
+            'id_instrumento' => $context['convenio']->id_instrumento,
+            'id_usuario' => $context['reviewer']->id_usuario,
+        ]);
+    }
+
+    public function test_revision_local_cannot_manage_observations_outside_its_unit(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $foreignObservation = $this->createObservation($context);
+        $otherUnit = $this->createUnit($this->createInstitution());
+        $foreignReviewer = $this->createUser(
+            'Revisión',
+            $otherUnit->id_unidad_academica
+        );
+        $base = "/api/convenios/{$context['convenio']->id_instrumento}";
+
+        $this->authenticate($foreignReviewer);
+        $this->getJson("{$base}/observaciones")->assertForbidden();
+
+        $this->authenticate($foreignReviewer);
+        $this->postJson("{$base}/observaciones", [
+            'contenido' => 'Observación fuera de alcance.',
+        ])->assertForbidden();
+
+        $this->authenticate($foreignReviewer);
+        $this->putJson("/api/observaciones/{$foreignObservation->id_observacion}", [
+            'contenido' => 'Edición fuera de alcance.',
+        ])->assertForbidden();
+
+        $this->authenticate($foreignReviewer);
+        $this->deleteJson("/api/observaciones/{$foreignObservation->id_observacion}")
+            ->assertForbidden();
+
+        $this->assertSame(
+            'Actualizar la cláusula de vigencia.',
+            $foreignObservation->fresh()->contenido
+        );
+        $this->assertSame(0, RegistroAuditoria::query()->count());
+    }
+
+    public function test_revision_global_can_manage_observations_across_units(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $otherUnit = $this->createUnit($this->createInstitution());
+        $globalReviewer = $this->createUser(
+            'Revisión',
+            $otherUnit->id_unidad_academica,
+            true
+        );
+        $base = "/api/convenios/{$context['convenio']->id_instrumento}";
+
+        $this->authenticate($globalReviewer);
+        $this->getJson("{$base}/observaciones")->assertOk();
+
+        $this->authenticate($globalReviewer);
+        $created = $this->postJson("{$base}/observaciones", [
+            'contenido' => 'Observación de alcance global.',
+        ])->assertCreated();
+        $observationId = $created->json('data.id_observacion');
+
+        $this->authenticate($globalReviewer);
+        $this->putJson("/api/observaciones/{$observationId}", [
+            'contenido' => 'Observación global modificada.',
+        ])->assertOk();
+
+        $this->authenticate($globalReviewer);
+        $this->deleteJson("/api/observaciones/{$observationId}")->assertOk();
+    }
+
+    public function test_revision_mutations_require_the_convenio_to_be_in_revision(): void
+    {
+        foreach (['EnCorreccion', 'Aprobado'] as $state) {
+            $context = $this->createReadyConvention($state);
+            $observation = $this->createObservation($context);
+            $base = "/api/convenios/{$context['convenio']->id_instrumento}";
+
+            $this->authenticate($context['reviewer']);
+            $this->postJson("{$base}/observaciones", [
+                'contenido' => 'Observación fuera del estado permitido.',
+            ])->assertStatus(409);
+
+            $this->authenticate($context['reviewer']);
+            $this->putJson("/api/observaciones/{$observation->id_observacion}", [
+                'contenido' => 'Edición fuera del estado permitido.',
+            ])->assertStatus(409);
+
+            $this->authenticate($context['reviewer']);
+            $this->deleteJson("/api/observaciones/{$observation->id_observacion}")
+                ->assertStatus(409);
+        }
+
+        $this->assertSame(0, RegistroAuditoria::query()->count());
+    }
+
+    public function test_revision_cannot_edit_or_delete_resolved_observations(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $observation = $this->createObservation($context, 'Resuelta');
+
+        $this->authenticate($context['reviewer']);
+        $this->putJson("/api/observaciones/{$observation->id_observacion}", [
+            'contenido' => 'No se debe modificar.',
+        ])->assertStatus(409);
+
+        $this->authenticate($context['reviewer']);
+        $this->deleteJson("/api/observaciones/{$observation->id_observacion}")
+            ->assertStatus(409);
+
+        $this->assertSame(
+            'Actualizar la cláusula de vigencia.',
+            $observation->fresh()->contenido
+        );
+        $this->assertSame('Resuelta', $observation->fresh()->estado_tramite);
+        $this->assertSame(0, RegistroAuditoria::query()->count());
+    }
+
+    public function test_gestion_and_consulta_cannot_create_edit_or_delete_observations(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $observation = $this->createObservation($context);
+        $base = "/api/convenios/{$context['convenio']->id_instrumento}";
+
+        foreach (['Gestión', 'Consulta'] as $roleName) {
+            $user = $this->createUser(
+                $roleName,
+                $context['manager']->id_unidad
+            );
+
+            $this->authenticate($user);
+            $this->postJson("{$base}/observaciones", [
+                'contenido' => 'Sin permisos para crear.',
+            ])->assertForbidden();
+
+            $this->authenticate($user);
+            $this->putJson("/api/observaciones/{$observation->id_observacion}", [
+                'contenido' => 'Sin permisos para modificar.',
+            ])->assertForbidden();
+
+            $this->authenticate($user);
+            $this->deleteJson("/api/observaciones/{$observation->id_observacion}")
+                ->assertForbidden();
+        }
+
+        $this->assertSame(0, RegistroAuditoria::query()->count());
+    }
+
+    public function test_administracion_can_manage_observations_across_units(): void
+    {
+        $context = $this->createReadyConvention('EnCorreccion');
+        $otherUnit = $this->createUnit($this->createInstitution());
+        $administracion = $this->createUser(
+            'Administración',
+            $otherUnit->id_unidad_academica
+        );
+        $observation = $this->createObservation($context);
+        $base = "/api/convenios/{$context['convenio']->id_instrumento}";
+
+        $this->authenticate($administracion);
+        $created = $this->postJson("{$base}/observaciones", [
+            'contenido' => 'Observación de Administración.',
+        ])->assertCreated();
+        $createdId = $created->json('data.id_observacion');
+
+        $this->authenticate($administracion);
+        $this->putJson("/api/observaciones/{$observation->id_observacion}", [
+            'contenido' => 'Observación modificada por Administración.',
+        ])->assertOk();
+
+        $this->authenticate($administracion);
+        $this->deleteJson("/api/observaciones/{$createdId}")->assertOk();
+    }
+
+    public function test_invalid_observation_content_returns_validation_errors(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $observation = $this->createObservation($context);
+        $this->authenticate($context['reviewer']);
+        $base = "/api/convenios/{$context['convenio']->id_instrumento}";
+
+        $this->postJson("{$base}/observaciones", [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['contenido']);
+        $this->putJson("/api/observaciones/{$observation->id_observacion}", [
+            'contenido' => '',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['contenido']);
+
+        $this->assertSame(
+            'Actualizar la cláusula de vigencia.',
+            $observation->fresh()->contenido
+        );
+        $this->assertSame(0, RegistroAuditoria::query()->count());
+    }
+
+    public function test_audit_failure_rolls_back_observation_creation_update_and_deletion(): void
+    {
+        $context = $this->createReadyConvention('Revisión');
+        $this->authenticate($context['reviewer']);
+        DB::unprepared(
+            'CREATE TRIGGER fail_observation_crud_audit BEFORE INSERT ON registro_auditoria '
+            ."WHEN NEW.accion IN ('CREAR_OBSERVACION', 'MODIFICAR_OBSERVACION', "
+            ."'ELIMINAR_OBSERVACION') "
+            ."BEGIN SELECT RAISE(FAIL, 'audit write failed'); END"
+        );
+        $base = "/api/convenios/{$context['convenio']->id_instrumento}";
+
+        $this->postJson("{$base}/observaciones", [
+            'contenido' => 'La creación debe revertirse.',
+        ])->assertStatus(500);
+        $this->assertSame(0, $context['convenio']->observaciones()->count());
+
+        $observation = $this->createObservation($context);
+        $this->putJson("/api/observaciones/{$observation->id_observacion}", [
+            'contenido' => 'La edición debe revertirse.',
+        ])->assertStatus(500);
+        $this->assertSame(
+            'Actualizar la cláusula de vigencia.',
+            $observation->fresh()->contenido
+        );
+
+        $this->deleteJson("/api/observaciones/{$observation->id_observacion}")
+            ->assertStatus(500);
+        $this->assertDatabaseHas('observacion', [
+            'id_observacion' => $observation->id_observacion,
+            'contenido' => 'Actualizar la cláusula de vigencia.',
+        ]);
+        $this->assertSame(0, RegistroAuditoria::query()->count());
     }
 
     public function test_responder_updates_only_the_pending_observation_and_registers_audit(): void
@@ -413,8 +732,11 @@ class ResponderObservacionesTest extends TestCase
         ]);
     }
 
-    private function createUser(string $roleName, int $unitId): Usuario
-    {
+    private function createUser(
+        string $roleName,
+        int $unitId,
+        bool $alcanceGlobal = false
+    ): Usuario {
         $role = Rol::query()->firstOrCreate(['nombre' => $roleName]);
 
         return Usuario::query()->create([
@@ -424,6 +746,7 @@ class ResponderObservacionesTest extends TestCase
             'activo' => true,
             'id_rol' => $role->id_rol,
             'id_unidad' => $unitId,
+            'alcance_global' => $alcanceGlobal,
         ]);
     }
 

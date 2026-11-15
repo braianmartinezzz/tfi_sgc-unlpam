@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuditoriaController;
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConfiguracionController;
 use App\Http\Controllers\Api\ConvenioController;
 use App\Http\Controllers\Api\ConvenioExportController;
@@ -32,6 +32,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Revisión, observaciones, firma y rescisión
     Route::get('/convenios/{id}/observaciones', [ConvenioController::class, 'observaciones'])
         ->whereNumber('id');
+    Route::post('/convenios/{id}/observaciones', [ConvenioController::class, 'crearObservacion'])
+        ->whereNumber('id');
+    Route::put('/observaciones/{idObservacion}', [ConvenioController::class, 'actualizarObservacion'])
+        ->whereNumber('idObservacion');
+    Route::delete('/observaciones/{idObservacion}', [ConvenioController::class, 'eliminarObservacion'])
+        ->whereNumber('idObservacion');
     Route::post(
         '/convenios/{id}/observaciones/{idObservacion}/responder',
         [ConvenioController::class, 'responderObservacion']

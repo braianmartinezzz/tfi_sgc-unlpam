@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EnviarARevisionRequest;
+use App\Http\Requests\ObservacionRequest;
 use App\Http\Requests\RegistrarFirmaRequest;
 use App\Http\Requests\RescindirConvenioRequest;
 use App\Http\Requests\StoreConvenioRequest;
 use App\Http\Requests\StoreRespuestaObservacionRequest;
 use App\Http\Requests\UpdateConvenioRequest;
 use App\Models\Observacion;
+use App\Services\AuditoriaService;
 use App\Services\ConvenioService;
 use App\Services\DocumentoService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -82,20 +84,123 @@ class ConvenioController extends Controller
 
         return response()->json([
             'data' => $observaciones->map(
-                static fn (Observacion $observacion): array => [
-                    'id_observacion' => $observacion->id_observacion,
-                    'contenido' => $observacion->contenido,
-                    'fecha' => $observacion->fecha,
-                    'estado_tramite' => $observacion->estado_tramite,
-                    'resolucion' => $observacion->resolucion,
-                    'respuesta' => $observacion->respuesta,
-                    'fecha_resolucion' => $observacion->fecha_resolucion,
-                    'usuario' => [
-                        'id_usuario' => $observacion->usuario->id_usuario,
-                        'nombre' => $observacion->usuario->nombre,
-                    ],
-                ]
+                fn (Observacion $observacion): array => $this->observacionData($observacion)
             )->values(),
+        ]);
+    }
+
+    public function crearObservacion(
+        ObservacionRequest $request,
+        string $id,
+        ConvenioService $service,
+        AuditoriaService $auditoriaService
+    ): JsonResponse {
+        try {
+            $observacion = $service->crearObservacion(
+                $id,
+                $request->validated()['contenido'],
+                $request->user(),
+                $auditoriaService
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Convenio no encontrado.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para crear observaciones en este convenio.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al crear la observación.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Observación creada correctamente.',
+            'data' => $this->observacionData($observacion),
+        ], 201);
+    }
+
+    public function actualizarObservacion(
+        ObservacionRequest $request,
+        string $idObservacion,
+        ConvenioService $service,
+        AuditoriaService $auditoriaService
+    ): JsonResponse {
+        try {
+            $observacion = $service->actualizarObservacion(
+                $idObservacion,
+                $request->validated()['contenido'],
+                $request->user(),
+                $auditoriaService
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Observación o convenio asociado no encontrados.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para modificar esta observación.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al modificar la observación.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Observación modificada correctamente.',
+            'data' => $this->observacionData($observacion),
+        ]);
+    }
+
+    public function eliminarObservacion(
+        Request $request,
+        string $idObservacion,
+        ConvenioService $service,
+        AuditoriaService $auditoriaService
+    ): JsonResponse {
+        try {
+            $service->eliminarObservacion(
+                $idObservacion,
+                $request->user(),
+                $auditoriaService
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Observación o convenio asociado no encontrados.',
+            ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para eliminar esta observación.',
+            ], 403);
+        } catch (\DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Ocurrió un error inesperado al eliminar la observación.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Observación eliminada correctamente.',
         ]);
     }
 
@@ -141,6 +246,25 @@ class ConvenioController extends Controller
                 'fecha_resolucion' => $observacion->fecha_resolucion,
             ],
         ]);
+    }
+
+    private function observacionData(Observacion $observacion): array
+    {
+        $observacion->loadMissing('usuario:id_usuario,nombre');
+
+        return [
+            'id_observacion' => $observacion->id_observacion,
+            'contenido' => $observacion->contenido,
+            'fecha' => $observacion->fecha,
+            'estado_tramite' => $observacion->estado_tramite,
+            'resolucion' => $observacion->resolucion,
+            'respuesta' => $observacion->respuesta,
+            'fecha_resolucion' => $observacion->fecha_resolucion,
+            'usuario' => [
+                'id_usuario' => $observacion->usuario->id_usuario,
+                'nombre' => $observacion->usuario->nombre,
+            ],
+        ];
     }
 
     public function registrarFirma(

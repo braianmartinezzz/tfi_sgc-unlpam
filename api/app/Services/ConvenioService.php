@@ -195,16 +195,152 @@ class ConvenioService
         $instrumento = Instrumento::query()->findOrFail($id);
         $convenio = $instrumento->convenio()->firstOrFail();
 
-        Gate::forUser($usuario)->authorize(
-            'enviar-convenio-a-revision',
-            $convenio
-        );
+        if ($usuario->rol?->nombre === 'Revisión') {
+            $this->assertCanView($convenio, $usuario);
+        } else {
+            Gate::forUser($usuario)->authorize(
+                'enviar-convenio-a-revision',
+                $convenio
+            );
+        }
 
         return $convenio->observaciones()
             ->with('usuario:id_usuario,nombre')
             ->orderBy('fecha')
             ->orderBy('id_observacion')
             ->get();
+    }
+
+    public function crearObservacion(
+        string $id,
+        string $contenido,
+        Usuario $usuario,
+        AuditoriaService $auditoriaService
+    ): Observacion {
+        return DB::transaction(function () use (
+            $id,
+            $contenido,
+            $usuario,
+            $auditoriaService
+        ) {
+            $instrumento = Instrumento::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $convenio = $instrumento->convenio()
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->assertCanManageObservations($convenio, $instrumento, $usuario);
+
+            $observacion = $convenio->observaciones()->create([
+                'contenido' => $contenido,
+                'fecha' => now(),
+                'estado_tramite' => 'Pendiente',
+                'resolucion' => null,
+                'respuesta' => null,
+                'fecha_resolucion' => null,
+                'id_usuario' => $usuario->id_usuario,
+            ]);
+
+            $auditoriaService->registrar(
+                'CREAR_OBSERVACION',
+                $usuario->id_usuario,
+                $convenio->id_instrumento,
+                'Observación #'.$observacion->id_observacion.' creada.'
+            );
+
+            return $observacion->load('usuario:id_usuario,nombre');
+        });
+    }
+
+    public function actualizarObservacion(
+        string $idObservacion,
+        string $contenido,
+        Usuario $usuario,
+        AuditoriaService $auditoriaService
+    ): Observacion {
+        return DB::transaction(function () use (
+            $idObservacion,
+            $contenido,
+            $usuario,
+            $auditoriaService
+        ) {
+            $idInstrumento = Observacion::query()
+                ->findOrFail($idObservacion)
+                ->id_instrumento;
+            $instrumento = Instrumento::query()
+                ->lockForUpdate()
+                ->findOrFail($idInstrumento);
+            $convenio = $instrumento->convenio()
+                ->lockForUpdate()
+                ->firstOrFail();
+            $observacion = $convenio->observaciones()
+                ->lockForUpdate()
+                ->findOrFail($idObservacion);
+
+            $this->assertCanManageObservations($convenio, $instrumento, $usuario);
+
+            if ($observacion->estado_tramite !== 'Pendiente') {
+                throw new \DomainException(
+                    'Solo se pueden modificar observaciones pendientes.'
+                );
+            }
+
+            $observacion->contenido = $contenido;
+            $observacion->save();
+
+            $auditoriaService->registrar(
+                'MODIFICAR_OBSERVACION',
+                $usuario->id_usuario,
+                $convenio->id_instrumento,
+                'Observación #'.$observacion->id_observacion.' modificada.'
+            );
+
+            return $observacion->load('usuario:id_usuario,nombre');
+        });
+    }
+
+    public function eliminarObservacion(
+        string $idObservacion,
+        Usuario $usuario,
+        AuditoriaService $auditoriaService
+    ): void {
+        DB::transaction(function () use (
+            $idObservacion,
+            $usuario,
+            $auditoriaService
+        ) {
+            $idInstrumento = Observacion::query()
+                ->findOrFail($idObservacion)
+                ->id_instrumento;
+            $instrumento = Instrumento::query()
+                ->lockForUpdate()
+                ->findOrFail($idInstrumento);
+            $convenio = $instrumento->convenio()
+                ->lockForUpdate()
+                ->firstOrFail();
+            $observacion = $convenio->observaciones()
+                ->lockForUpdate()
+                ->findOrFail($idObservacion);
+
+            $this->assertCanManageObservations($convenio, $instrumento, $usuario);
+
+            if ($observacion->estado_tramite !== 'Pendiente') {
+                throw new \DomainException(
+                    'Solo se pueden eliminar observaciones pendientes.'
+                );
+            }
+
+            $observacionId = $observacion->id_observacion;
+            $observacion->delete();
+
+            $auditoriaService->registrar(
+                'ELIMINAR_OBSERVACION',
+                $usuario->id_usuario,
+                $convenio->id_instrumento,
+                'Observación #'.$observacionId.' eliminada.'
+            );
+        });
     }
 
     public function responderObservacion(
@@ -264,6 +400,30 @@ class ConvenioService
 
             return $observacion;
         });
+    }
+
+    private function assertCanManageObservations(
+        Convenio $convenio,
+        Instrumento $instrumento,
+        Usuario $usuario
+    ): void {
+        $rol = $usuario->rol?->nombre;
+
+        if (! in_array($rol, ['Revisión', 'Administración'], true)) {
+            throw new AuthorizationException(
+                'No tiene permisos para gestionar observaciones.'
+            );
+        }
+
+        if ($rol === 'Revisión') {
+            $this->assertCanView($convenio, $usuario);
+
+            if ($instrumento->estado !== 'Revisión') {
+                throw new \DomainException(
+                    'Solo se pueden gestionar observaciones cuando el convenio está en Revisión.'
+                );
+            }
+        }
     }
 
     public function registrarFirma(
