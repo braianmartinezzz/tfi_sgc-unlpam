@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\VencimientoController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\InstitucionUnificacionController;
 use App\Http\Controllers\Api\ObservacionTrazabilidadController;
+use App\Http\Controllers\Api\ArchivarConvenioController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -136,4 +137,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/convenios/{id}/trazabilidad', [ObservacionTrazabilidadController::class, 'show'])
         ->whereNumber('id');
+
+    Route::post('/convenios/{id}/archivar', [ArchivarConvenioController::class, 'archivar'])
+        ->whereNumber('id');  
 });
