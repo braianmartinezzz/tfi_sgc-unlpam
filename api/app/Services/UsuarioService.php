@@ -54,6 +54,7 @@ class UsuarioService
     {
         $data['password'] = Hash::make($data['password']);
         $data['activo'] ??= true;
+        $data['alcance_global'] ??= false;
 
         $usuario = Usuario::query()->create($data);
 

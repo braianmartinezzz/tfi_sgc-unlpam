@@ -59,6 +59,11 @@ class Convenio extends Model
         return $this->hasMany(HistorialEstado::class, 'id_instrumento', 'id_instrumento');
     }
 
+    public function observaciones(): HasMany
+    {
+        return $this->hasMany(Observacion::class, 'id_instrumento', 'id_instrumento');
+    }
+
     public function institucionesFirmantes(): BelongsToMany
     {
         return $this->belongsToMany(

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 class Marco extends Model
 {
@@ -29,10 +30,13 @@ class Marco extends Model
         );
     }
 
-    public function instrumento(): BelongsTo
+    public function instrumento(): HasOneThrough
     {
-        return $this->belongsTo(
+        return $this->hasOneThrough(
             Instrumento::class,
+            Convenio::class,
+            'id_instrumento',
+            'id_instrumento',
             'id_instrumento',
             'id_instrumento'
         );

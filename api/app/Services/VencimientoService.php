@@ -7,11 +7,9 @@ use Carbon\Carbon;
 
 class VencimientoService
 {
-    public const DIAS_POR_DEFECTO = 90;
-
     public function proximos(array $filters): array
     {
-        $dias = (int) ($filters['dias'] ?? self::DIAS_POR_DEFECTO);
+        $dias = (int) ($filters['dias'] ?? app(ConfiguracionService::class)->diasVentanaVencimientos());
         $hoy = Carbon::today();
         $limite = $hoy->copy()->addDays($dias);
 

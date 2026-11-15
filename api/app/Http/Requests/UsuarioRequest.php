@@ -31,6 +31,7 @@ class UsuarioRequest extends FormRequest
             'nombre' => [$presencia, 'string', 'max:100'],
             'password' => [$presencia, 'string', 'min:8', 'max:255'],
             'activo' => ['sometimes', 'boolean'],
+            'alcance_global' => ['sometimes', 'boolean'],
             'id_rol' => [
                 $presencia,
                 'integer',
