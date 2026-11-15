@@ -7,6 +7,7 @@ use App\Http\Requests\StoreDocumentoRequest;
 use App\Http\Requests\UpdateDocumentoRequest;
 use App\Models\Documento;
 use App\Models\Version;
+use App\Services\AuditoriaService;
 use App\Services\ConvenioService;
 use App\Services\DocumentoService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -213,6 +214,39 @@ class DocumentoController extends Controller
         }
 
         return $this->downloadVersion($documento->ultimaVersion);
+    }
+
+    public function verifyHash(
+        Request $request,
+        string $id,
+        DocumentoService $service,
+        ConvenioService $convenioService,
+        AuditoriaService $auditoriaService
+    ): JsonResponse {
+        try {
+            $resultado = $service->verifyIntegrityHash(
+                $id,
+                $request->user(),
+                $convenioService,
+                $auditoriaService
+            );
+        } catch (ModelNotFoundException) {
+            return response()->json([
+                'message' => 'No se encontró el documento, su última versión o el archivo asociado.',
+            ], 404);
+        } catch (AuthorizationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 403);
+        } catch (\RuntimeException $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'No se pudo completar la verificación de integridad.',
+            ], 500);
+        }
+
+        return response()->json($resultado);
     }
 
     public function downloadSpecific(

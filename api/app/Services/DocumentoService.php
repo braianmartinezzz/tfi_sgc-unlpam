@@ -7,6 +7,7 @@ use App\Models\Documento;
 use App\Models\Instrumento;
 use App\Models\Usuario;
 use App\Models\Version;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -326,6 +327,112 @@ class DocumentoService
         $this->assertCanViewDocument($documento, $usuario, $convenioService);
 
         return $documento->load('ultimaVersion');
+    }
+
+    public function verifyIntegrityHash(
+        string $documentoId,
+        Usuario $usuario,
+        ConvenioService $convenioService,
+        AuditoriaService $auditoriaService
+    ): array {
+        if (! in_array($usuario->rol?->nombre, ['Revisión', 'Administración'], true)) {
+            throw new AuthorizationException(
+                'No tiene permisos para verificar la integridad de documentos.'
+            );
+        }
+
+        $documento = $this->findWithLatestVersion(
+            $documentoId,
+            $usuario,
+            $convenioService
+        );
+        $version = $documento->ultimaVersion;
+
+        if ($version === null) {
+            throw (new ModelNotFoundException)->setModel(
+                Version::class,
+                [$documento->id_documento]
+            );
+        }
+
+        $stream = null;
+
+        try {
+            $disk = Storage::disk('private');
+
+            if (! $disk->exists($version->ruta_interna)) {
+                throw (new ModelNotFoundException)->setModel(
+                    Version::class,
+                    [$version->id_version]
+                );
+            }
+
+            $stream = $disk->readStream($version->ruta_interna);
+
+            if (! is_resource($stream)) {
+                throw new RuntimeException(
+                    'No se pudo abrir el archivo para verificar su integridad.'
+                );
+            }
+
+            $context = hash_init('sha256');
+
+            if (hash_update_stream($context, $stream) === false) {
+                throw new RuntimeException(
+                    'No se pudo calcular el hash del archivo almacenado.'
+                );
+            }
+
+            $hashCalculado = hash_final($context);
+        } catch (ModelNotFoundException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw new RuntimeException(
+                'No se pudo leer el archivo para verificar su integridad.',
+                0,
+                $exception
+            );
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+
+        $hashRegistrado = (string) $version->hash_sha256;
+        $integro = hash_equals($hashRegistrado, $hashCalculado);
+        $resultado = $integro ? 'íntegro' : 'alterado';
+        $detalle = sprintf(
+            'Documento #%d; versión #%d; resultado: %s; hash registrado: %s; hash calculado: %s',
+            $documento->id_documento,
+            $version->id_version,
+            $resultado,
+            $hashRegistrado,
+            $hashCalculado
+        );
+
+        try {
+            $auditoriaService->registrar(
+                'VERIFICACION_INTEGRIDAD_HASH',
+                (int) $usuario->id_usuario,
+                (int) $documento->id_instrumento,
+                $detalle
+            );
+        } catch (Throwable $exception) {
+            throw new RuntimeException(
+                'No se pudo registrar la auditoría de la verificación.',
+                0,
+                $exception
+            );
+        }
+
+        return [
+            'integro' => $integro,
+            'hash_registrado' => $hashRegistrado,
+            'hash_calculado' => $hashCalculado,
+            'mensaje' => $integro
+                ? 'El hash coincide; el documento está íntegro.'
+                : 'Se detectó una alteración: el hash calculado no coincide con el registrado.',
+        ];
     }
 
     public function findVersion(

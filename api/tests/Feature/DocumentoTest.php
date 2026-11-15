@@ -7,6 +7,7 @@ use App\Models\Documento;
 use App\Models\Instrumento;
 use App\Models\Usuario;
 use App\Models\Version;
+use App\Services\AuditoriaService;
 use App\Services\DocumentoService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -500,6 +501,300 @@ class DocumentoTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_revision_with_local_scope_verifies_the_latest_version_and_audits_it(): void
+    {
+        [$convenio, $reviewer] = $this->createConvenio('Revisión');
+        $documento = $this->createDocument($convenio);
+        $contenidoAnterior = '%PDF-1.4 versión anterior';
+        $this->createVerifiableVersion(
+            $documento,
+            $reviewer,
+            'anterior.pdf',
+            'verificaciones/anterior.pdf',
+            $contenidoAnterior
+        );
+
+        $contenido = '%PDF-1.4 documento íntegro';
+        $rutaInterna = 'verificaciones/local.pdf';
+        $version = $this->createVerifiableVersion(
+            $documento,
+            $reviewer,
+            'local.pdf',
+            $rutaInterna,
+            $contenido,
+            null,
+            2
+        );
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $response = $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash");
+
+        $hash = hash('sha256', $contenido);
+        $response
+            ->assertOk()
+            ->assertJsonPath('integro', true)
+            ->assertJsonPath('hash_registrado', $hash)
+            ->assertJsonPath('hash_calculado', $hash)
+            ->assertJsonPath('mensaje', 'El hash coincide; el documento está íntegro.')
+            ->assertJsonMissingPath('ruta_interna')
+            ->assertDontSee($rutaInterna);
+
+        $this->assertHashAudit(
+            $documento,
+            $version,
+            $reviewer,
+            'íntegro',
+            $hash,
+            $hash
+        );
+    }
+
+    public function test_revision_with_global_scope_can_verify_a_document_from_another_unit(): void
+    {
+        [, $reviewer] = $this->createConvenio('Revisión');
+        [$otherConvenio, $owner] = $this->createConvenio('Aprobado');
+        $documento = $this->createDocument($otherConvenio);
+        $contenido = '%PDF-1.4 otro ámbito';
+        $version = $this->createVerifiableVersion(
+            $documento,
+            $owner,
+            'global.pdf',
+            'verificaciones/global.pdf',
+            $contenido
+        );
+        $reviewer = $this->assignRole($reviewer, 'Revisión', true);
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash")
+            ->assertOk()
+            ->assertJsonPath('integro', true)
+            ->assertJsonPath('hash_calculado', hash('sha256', $contenido));
+
+        $this->assertHashAudit(
+            $documento,
+            $version,
+            $reviewer,
+            'íntegro',
+            hash('sha256', $contenido),
+            hash('sha256', $contenido)
+        );
+    }
+
+    public function test_revision_cannot_verify_documents_outside_its_scope_or_in_disallowed_states(): void
+    {
+        [, $reviewer] = $this->createConvenio('Revisión');
+        [$foreignConvenio] = $this->createConvenio('Aprobado');
+        $foreignDocument = $this->createDocument($foreignConvenio);
+        [$draftConvenio] = $this->createConvenio('Borrador');
+        $draftDocument = $this->createDocument($draftConvenio);
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/documentos/{$foreignDocument->id_documento}/verificar-hash")
+            ->assertForbidden();
+
+        $this->getJson("/api/documentos/{$draftDocument->id_documento}/verificar-hash")
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('registro_auditoria', 0);
+    }
+
+    public function test_administracion_can_verify_a_document_from_any_unit(): void
+    {
+        [$convenio, $owner] = $this->createConvenio('Borrador');
+        $documento = $this->createDocument($convenio);
+        $contenido = '%PDF-1.4 administración';
+        $version = $this->createVerifiableVersion(
+            $documento,
+            $owner,
+            'administracion.pdf',
+            'verificaciones/administracion.pdf',
+            $contenido
+        );
+        [, $administrador] = $this->createConvenio('Borrador');
+        $administrador = $this->assignRole($administrador, 'Administración');
+
+        $this->actingAs($administrador, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash")
+            ->assertOk()
+            ->assertJsonPath('integro', true);
+
+        $this->assertHashAudit(
+            $documento,
+            $version,
+            $administrador,
+            'íntegro',
+            hash('sha256', $contenido),
+            hash('sha256', $contenido)
+        );
+    }
+
+    public function test_gestion_and_consulta_cannot_verify_document_integrity(): void
+    {
+        [$convenio] = $this->createConvenio('Revisión');
+        $documento = $this->createDocument($convenio);
+
+        foreach (['Gestión', 'Consulta'] as $rol) {
+            [, $usuario] = $this->createConvenio('Revisión');
+            $usuario = $this->assignRole($usuario, $rol);
+
+            $this->actingAs($usuario, 'sanctum')
+                ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash")
+                ->assertForbidden();
+        }
+
+        $this->assertDatabaseCount('registro_auditoria', 0);
+    }
+
+    public function test_a_hash_mismatch_reports_alteration_and_records_both_hashes(): void
+    {
+        [$convenio, $reviewer] = $this->createConvenio('EnCorreccion');
+        $documento = $this->createDocument($convenio);
+        $contenido = '%PDF-1.4 contenido modificado';
+        $hashRegistrado = hash('sha256', '%PDF-1.4 contenido original');
+        $hashCalculado = hash('sha256', $contenido);
+        $version = $this->createVerifiableVersion(
+            $documento,
+            $reviewer,
+            'alterado.pdf',
+            'verificaciones/alterado.pdf',
+            $contenido,
+            $hashRegistrado
+        );
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash")
+            ->assertOk()
+            ->assertJsonPath('integro', false)
+            ->assertJsonPath('hash_registrado', $hashRegistrado)
+            ->assertJsonPath('hash_calculado', $hashCalculado)
+            ->assertJsonPath(
+                'mensaje',
+                'Se detectó una alteración: el hash calculado no coincide con el registrado.'
+            );
+
+        $this->assertHashAudit(
+            $documento,
+            $version,
+            $reviewer,
+            'alterado',
+            $hashRegistrado,
+            $hashCalculado
+        );
+    }
+
+    public function test_hash_verification_returns_not_found_for_missing_document_version_or_file(): void
+    {
+        [$convenio, $reviewer] = $this->createConvenio('Revisión');
+        $documentoSinVersion = $this->createDocument($convenio);
+        $documentoSinArchivo = $this->createDocument($convenio);
+        $this->createVersion(
+            $documentoSinArchivo,
+            $reviewer,
+            1,
+            'ausente.pdf',
+            'verificaciones/ausente.pdf'
+        );
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson('/api/documentos/999999/verificar-hash')
+            ->assertNotFound();
+
+        $this->getJson(
+            "/api/documentos/{$documentoSinVersion->id_documento}/verificar-hash"
+        )->assertNotFound();
+
+        $this->getJson(
+            "/api/documentos/{$documentoSinArchivo->id_documento}/verificar-hash"
+        )->assertNotFound();
+
+        $this->assertDatabaseCount('registro_auditoria', 0);
+    }
+
+    public function test_hash_verification_requires_authentication(): void
+    {
+        [$convenio] = $this->createConvenio('Revisión');
+        $documento = $this->createDocument($convenio);
+
+        $this->withToken('')
+            ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash")
+            ->assertUnauthorized();
+    }
+
+    public function test_hash_verification_does_not_report_success_when_audit_fails(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio('Revisión');
+        $documento = $this->createDocument($convenio);
+        $this->createVerifiableVersion(
+            $documento,
+            $usuario,
+            'auditoria-falla.pdf',
+            'verificaciones/auditoria-falla.pdf',
+            '%PDF-1.4 auditoría'
+        );
+        $usuario = $this->assignRole($usuario, 'Administración');
+
+        $auditoria = Mockery::mock(AuditoriaService::class);
+        $auditoria->shouldReceive('registrar')
+            ->once()
+            ->andThrow(new \RuntimeException('Falla simulada de auditoría.'));
+        $this->app->instance(AuditoriaService::class, $auditoria);
+
+        $this->actingAs($usuario, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash")
+            ->assertInternalServerError()
+            ->assertJsonMissingPath('integro')
+            ->assertJsonPath(
+                'message',
+                'No se pudo completar la verificación de integridad.'
+            )
+            ->assertDontSee('verificaciones/auditoria-falla.pdf');
+    }
+
+    public function test_hash_verification_returns_a_controlled_error_when_the_file_cannot_be_read(): void
+    {
+        [$convenio, $reviewer] = $this->createConvenio('Revisión');
+        $documento = $this->createDocument($convenio);
+        $rutaInterna = 'verificaciones/lectura-falla.pdf';
+        $this->createVersion(
+            $documento,
+            $reviewer,
+            1,
+            'lectura-falla.pdf',
+            $rutaInterna
+        );
+        $reviewer = $this->assignRole($reviewer, 'Revisión');
+
+        $disk = Mockery::mock();
+        $disk->shouldReceive('exists')
+            ->once()
+            ->with($rutaInterna)
+            ->andReturn(true);
+        $disk->shouldReceive('readStream')
+            ->once()
+            ->with($rutaInterna)
+            ->andThrow(new \RuntimeException('Falla de lectura simulada.'));
+        Storage::shouldReceive('disk')
+            ->once()
+            ->with('private')
+            ->andReturn($disk);
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->getJson("/api/documentos/{$documento->id_documento}/verificar-hash")
+            ->assertInternalServerError()
+            ->assertJsonMissingPath('hash_calculado')
+            ->assertJsonPath(
+                'message',
+                'No se pudo completar la verificación de integridad.'
+            )
+            ->assertDontSee($rutaInterna);
+
+        $this->assertDatabaseCount('registro_auditoria', 0);
+    }
+
     public function test_it_updates_document_metadata_without_creating_a_version(): void
     {
         [$documento, $usuario, , $version] = $this->createDocumentWithVersion();
@@ -878,6 +1173,31 @@ class DocumentoTest extends TestCase
         ]);
     }
 
+    private function createVerifiableVersion(
+        Documento $documento,
+        Usuario $usuario,
+        string $nombre,
+        string $ruta,
+        string $contenido,
+        ?string $hashRegistrado = null,
+        int $numero = 1
+    ): Version {
+        Storage::disk('private')->put($ruta, $contenido);
+
+        $version = $this->createVersion(
+            $documento,
+            $usuario,
+            $numero,
+            $nombre,
+            $ruta
+        );
+        $version->update([
+            'hash_sha256' => $hashRegistrado ?? hash('sha256', $contenido),
+        ]);
+
+        return $version->fresh();
+    }
+
     private function createVersion(
         Documento $documento,
         Usuario $usuario,
@@ -894,6 +1214,34 @@ class DocumentoTest extends TestCase
             'fecha_carga' => now(),
             'id_usuario' => $usuario->id_usuario,
         ]);
+    }
+
+    private function assertHashAudit(
+        Documento $documento,
+        Version $version,
+        Usuario $usuario,
+        string $resultado,
+        string $hashRegistrado,
+        string $hashCalculado
+    ): void {
+        $registro = DB::table('registro_auditoria')
+            ->where('accion', 'VERIFICACION_INTEGRIDAD_HASH')
+            ->where('id_instrumento', $documento->id_instrumento)
+            ->where('id_usuario', $usuario->id_usuario)
+            ->first();
+
+        $this->assertNotNull($registro);
+        $this->assertSame(
+            sprintf(
+                'Documento #%d; versión #%d; resultado: %s; hash registrado: %s; hash calculado: %s',
+                $documento->id_documento,
+                $version->id_version,
+                $resultado,
+                $hashRegistrado,
+                $hashCalculado
+            ),
+            $registro->detalle
+        );
     }
 
     private function assignRole(
