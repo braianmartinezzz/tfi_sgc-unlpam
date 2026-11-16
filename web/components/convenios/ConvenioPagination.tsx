@@ -33,7 +33,7 @@ export default function ConvenioPagination({
           type="button"
           disabled={currentPage <= 1}
           onClick={() => onPageChange(currentPage - 1)}
-          className="min-h-10 rounded-md border border-ui-border px-3 py-2 font-semibold hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-neutral-800"
+          className="min-h-10 rounded-md border border-ui-border px-3 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
         >
           Anterior
         </button>
@@ -69,7 +69,7 @@ export default function ConvenioPagination({
           type="button"
           disabled={currentPage >= lastPage}
           onClick={() => onPageChange(currentPage + 1)}
-          className="min-h-10 rounded-md border border-ui-border px-3 py-2 font-semibold hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-neutral-800"
+          className="min-h-10 rounded-md border border-ui-border px-3 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
         >
           Siguiente
         </button>
@@ -77,7 +77,7 @@ export default function ConvenioPagination({
           type="button"
           disabled={currentPage >= lastPage}
           onClick={() => onPageChange(lastPage)}
-          className="min-h-10 rounded-md border border-ui-border px-3 py-2 font-semibold hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-neutral-800"
+          className="min-h-10 rounded-md border border-ui-border px-3 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
         >
           Última
         </button>
@@ -106,7 +106,7 @@ function PageButton({
       className={`min-h-10 min-w-10 rounded-md border px-3 py-2 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
         isCurrent
           ? "border-brand bg-brand text-white"
-          : "border-ui-border hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          : "border-ui-border hover:bg-row-alternate"
       }`}
     >
       {page}

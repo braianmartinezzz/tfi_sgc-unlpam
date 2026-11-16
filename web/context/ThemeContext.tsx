@@ -4,7 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -19,16 +19,31 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeMode>("light");
+function getInitialTheme(): ThemeMode {
+  if (typeof document === "undefined") return "light";
 
-  useEffect(() => {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((current) => (current === "light" ? "dark" : "light"));
-  }, []);
+    const nextTheme = theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = nextTheme;
+    setTheme(nextTheme);
+
+    try {
+      window.localStorage.setItem("sgc_theme", nextTheme);
+    } catch (error) {
+      console.warn("No se pudo guardar la preferencia del tema.", error);
+    }
+  }, [theme]);
+
   const value = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
 
   return (

@@ -23,7 +23,7 @@ interface ConvenioFiltersProps {
 }
 
 const controlClassName =
-  "mt-1 min-h-11 w-full rounded-md border border-ui-border bg-white px-3 py-2 text-base text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:bg-neutral-900 dark:text-white";
+  "mt-1 min-h-11 w-full rounded-md border border-ui-border bg-surface px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
 export default function ConvenioFilters({
   buscar,
@@ -47,7 +47,7 @@ export default function ConvenioFilters({
   return (
     <section
       aria-label="Filtros de convenios"
-      className="rounded-lg border border-ui-border bg-white p-4 shadow-sm dark:bg-neutral-900 sm:p-5"
+      className="rounded-lg border border-ui-border bg-surface p-4 text-foreground shadow-sm sm:p-5"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div>
@@ -148,7 +148,7 @@ export default function ConvenioFilters({
                 <button
                   type="button"
                   onClick={onReintentarUnidades}
-                  className="text-sm font-semibold text-brand underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  className="text-sm font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   Reintentar carga de facultades
                 </button>
@@ -161,7 +161,7 @@ export default function ConvenioFilters({
         <button
           type="button"
           onClick={onLimpiar}
-          className="min-h-11 rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:hover:bg-neutral-800"
+          className="min-h-11 rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           Limpiar filtros
         </button>

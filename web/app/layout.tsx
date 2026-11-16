@@ -31,8 +31,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="es"
+      data-theme="light"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${robotoCondensed.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var theme=localStorage.getItem("sgc_theme");document.documentElement.dataset.theme=theme==="dark"?"dark":"light"}catch(error){document.documentElement.dataset.theme="light";console.warn("No se pudo leer la preferencia del tema.",error)}})()`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>

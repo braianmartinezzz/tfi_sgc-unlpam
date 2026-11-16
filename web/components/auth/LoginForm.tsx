@@ -103,7 +103,7 @@ export default function LoginForm() {
       className="mt-6 space-y-5"
     >
       {formError || authError ? (
-        <p role="alert" className="text-sm text-brand">
+        <p role="alert" className="text-sm text-brand-text">
           {formError ?? authError}
         </p>
       ) : null}
@@ -127,7 +127,7 @@ export default function LoginForm() {
         aria-describedby={errors.mail ? mailErrorId : undefined}
       />
       {errors.mail ? (
-        <p id={mailErrorId} role="alert" className="-mt-4 text-sm text-brand">
+        <p id={mailErrorId} role="alert" className="-mt-4 text-sm text-brand-text">
           {errors.mail.message}
         </p>
       ) : null}
@@ -157,7 +157,7 @@ export default function LoginForm() {
               passwordVisible ? "Ocultar contraseña" : "Mostrar contraseña"
             }
             onClick={() => setPasswordVisible((visible) => !visible)}
-            className="inline-flex items-center gap-1 rounded-sm px-1 py-1 text-xs text-slate-600 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="inline-flex items-center gap-1 rounded-sm px-1 py-1 text-xs text-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <span aria-hidden="true">ver contraseña</span>
             <svg
@@ -175,7 +175,7 @@ export default function LoginForm() {
         <p
           id={passwordErrorId}
           role="alert"
-          className="-mt-4 text-sm text-brand"
+          className="-mt-4 text-sm text-brand-text"
         >
           {errors.password.message}
         </p>

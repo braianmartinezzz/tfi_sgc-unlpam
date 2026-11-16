@@ -278,7 +278,7 @@ export default function ConveniosPageContent() {
           onClick={() => void exportCsv()}
           disabled={exportando || conveniosQuery.isPending}
           aria-busy={exportando}
-          className="min-h-11 rounded-md border border-brand px-4 py-2 font-semibold text-brand hover:bg-brand hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 rounded-md border border-brand px-4 py-2 font-semibold text-brand-text hover:bg-brand hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
         >
           {exportando ? "Exportando CSV..." : "Exportar CSV"}
         </button>
@@ -296,12 +296,12 @@ export default function ConveniosPageContent() {
 
       <div aria-busy={conveniosQuery.isFetching}>
         {conveniosQuery.isPending && !data ? (
-          <p role="status" aria-live="polite" className="rounded-lg border border-ui-border bg-white p-6 dark:bg-neutral-900">
+          <p role="status" aria-live="polite" className="rounded-lg border border-ui-border bg-surface p-6 text-foreground">
             Cargando convenios...
           </p>
         ) : null}
         {conveniosQuery.isError ? (
-          <div className="space-y-3 rounded-lg border border-ui-border bg-white p-6 dark:bg-neutral-900">
+          <div className="space-y-3 rounded-lg border border-ui-border bg-surface p-6 text-foreground">
             <p role="alert" className="text-red-700 dark:text-red-300">
               No se pudieron cargar los convenios:{" "}
               {getErrorMessage(conveniosQuery.error)}
@@ -316,7 +316,7 @@ export default function ConveniosPageContent() {
           </div>
         ) : null}
         {data && data.data.length === 0 ? (
-          <div className="space-y-3 rounded-lg border border-ui-border bg-white p-6 dark:bg-neutral-900">
+          <div className="space-y-3 rounded-lg border border-ui-border bg-surface p-6 text-foreground">
             <p>No hay convenios que coincidan con los filtros.</p>
             <button
               type="button"

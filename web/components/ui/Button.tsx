@@ -19,7 +19,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
 ) {
   const variantClassName =
     variant === "link"
-      ? "h-auto w-auto rounded-none bg-transparent p-0 text-brand underline decoration-1 underline-offset-2 hover:text-brand-hover"
+      ? "h-auto w-auto rounded-none bg-transparent p-0 text-brand-text underline decoration-1 underline-offset-2"
       : "w-full rounded-sm bg-brand px-4 py-2.5 text-base font-medium text-white shadow-sm hover:bg-brand-hover disabled:bg-brand/60";
 
   return (

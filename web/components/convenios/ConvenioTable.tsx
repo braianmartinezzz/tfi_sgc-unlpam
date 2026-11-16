@@ -15,7 +15,7 @@ interface ConvenioTableProps {
 }
 
 const rowActionClassName =
-  "rounded-md px-2 py-1 font-semibold text-brand underline underline-offset-2 hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+  "rounded-md px-2 py-1 font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
 export default function ConvenioTable({
   convenios,
@@ -24,11 +24,11 @@ export default function ConvenioTable({
 }: ConvenioTableProps) {
   return (
     <div
-      className="max-w-full overflow-x-auto rounded-lg border border-ui-border bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:bg-neutral-900"
+      className="max-w-full overflow-x-auto rounded-lg border border-ui-border bg-surface shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       tabIndex={0}
       aria-label="Tabla de convenios; desplácese horizontalmente para ver todas las columnas"
     >
-      <table className="w-full min-w-[880px] border-collapse text-left">
+      <table className="w-full min-w-[880px] border-collapse bg-surface text-left text-foreground">
         <caption className="sr-only">Convenios registrados</caption>
         <thead className="bg-table-head text-white">
           <tr>
@@ -71,12 +71,12 @@ export default function ConvenioTable({
             return (
               <tr
                 key={convenio.id_instrumento}
-                className="even:bg-row-alternate"
+                className="bg-surface text-foreground even:bg-row-alternate"
               >
                 <td className="whitespace-nowrap px-4 py-3">
                   <Link
                     href={detalleHref}
-                    className="font-semibold text-brand underline decoration-1 underline-offset-2 hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    className="font-semibold text-brand-text underline decoration-1 underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   >
                     {convenio.id_instrumento}
                   </Link>

@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --surface: #ffffff;
+  --brand-text: #C52D34;
   --topbar: #25262c;
   --sidebar: #354052;
   --page: #f1f0f5;
@@ -14,6 +18,8 @@
 [data-theme="dark"] {
   --background: #111217;
   --foreground: #ededed;
+  --surface: #1c1d22;
+  --brand-text: #FF8A8A;
   --topbar: #1c1d22;
   --sidebar: #252d3b;
   --page: #17181e;
@@ -27,6 +33,8 @@
   --color-foreground: var(--foreground);
   --color-brand: #D13B3B;
   --color-brand-hover: #B52F35;
+  --color-brand-text: var(--brand-text);
+  --color-surface: var(--surface);
   --color-topbar: var(--topbar);
   --color-sidebar: var(--sidebar);
   --color-page: var(--page);
@@ -42,4 +50,26 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-roboto-condensed), Arial, Helvetica, sans-serif;
+}
+
+.theme-toggle-sun {
+  display: block;
+}
+
+.theme-toggle-moon,
+.theme-toggle-label-light {
+  display: none;
+}
+
+[data-theme="dark"] .theme-toggle-sun,
+[data-theme="dark"] .theme-toggle-label-dark {
+  display: none;
+}
+
+[data-theme="dark"] .theme-toggle-moon {
+  display: block;
+}
+
+[data-theme="dark"] .theme-toggle-label-light {
+  display: inline;
 }

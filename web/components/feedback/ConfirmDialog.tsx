@@ -48,7 +48,7 @@ export default function ConfirmDialog({
         event.preventDefault();
         if (!loading) onCancel();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-lg border border-ui-border bg-white p-0 text-foreground shadow-xl backdrop:bg-black/60 dark:bg-neutral-900"
+      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-lg border border-ui-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/60"
     >
       <div className="space-y-4 p-5 sm:p-6">
         <h2 id="confirm-dialog-title" className="text-xl font-bold">
@@ -68,7 +68,7 @@ export default function ConfirmDialog({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-800"
+            className="rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
           >
             Cancelar
           </button>
