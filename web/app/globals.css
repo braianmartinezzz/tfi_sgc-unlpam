@@ -7,6 +7,7 @@
   --foreground: #171717;
   --surface: #ffffff;
   --brand-text: #C52D34;
+  --brand-on-brand: #ffffff;
   --topbar: #25262c;
   --sidebar: #354052;
   --page: #f1f0f5;
@@ -20,6 +21,7 @@
   --foreground: #ededed;
   --surface: #1c1d22;
   --brand-text: #FF8A8A;
+  --brand-on-brand: #ffffff;
   --topbar: #1c1d22;
   --sidebar: #252d3b;
   --page: #17181e;
@@ -34,6 +36,7 @@
   --color-brand: #D13B3B;
   --color-brand-hover: #B52F35;
   --color-brand-text: var(--brand-text);
+  --color-brand-on-brand: var(--brand-on-brand);
   --color-surface: var(--surface);
   --color-topbar: var(--topbar);
   --color-sidebar: var(--sidebar);

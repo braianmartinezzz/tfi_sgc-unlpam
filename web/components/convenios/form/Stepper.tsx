@@ -34,7 +34,7 @@ export default function Stepper({
                 onClick={() => onStepChange(step)}
                 className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-2 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:justify-start sm:px-3 ${
                   isCurrent
-                    ? "border-brand bg-brand text-brand-text"
+                    ? "border-brand bg-brand text-white"
                     : isComplete
                       ? "border-brand/50 bg-surface text-brand-text"
                       : "border-ui-border bg-surface text-foreground/70"
@@ -44,7 +44,7 @@ export default function Stepper({
                   aria-hidden="true"
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs ${
                     isCurrent
-                      ? "border-brand-text/60"
+                      ? "border-white/60"
                       : isComplete
                         ? "border-brand/50"
                         : "border-ui-border"
