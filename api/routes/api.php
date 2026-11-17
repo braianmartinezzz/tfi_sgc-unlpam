@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\InstitucionUnificacionController;
 use App\Http\Controllers\Api\ObservacionTrazabilidadController;
 use App\Http\Controllers\Api\RechazarConvenioController;
 use App\Http\Controllers\Api\RepresentanteController;
+use App\Http\Controllers\Api\RolController;
 use App\Http\Controllers\Api\UnidadAcademicaController;
 use App\Http\Controllers\Api\UsuarioController;
 use App\Http\Controllers\Api\VencimientoController;
@@ -122,6 +123,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Usuarios
     Route::middleware('can:gestionar-usuarios')->group(function () {
+        Route::get('/roles', [RolController::class, 'index']);
         Route::get('/usuarios', [UsuarioController::class, 'index']);
         Route::post('/usuarios', [UsuarioController::class, 'store']);
         Route::get('/usuarios/{id}', [UsuarioController::class, 'show'])->whereNumber('id');
