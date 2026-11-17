@@ -23,6 +23,24 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define(
+            'gestionar-convenio',
+            function ($user, $idUnidadAcademica): bool {
+                if (! $user instanceof Usuario || ! is_numeric($idUnidadAcademica)) {
+                    return false;
+                }
+
+                $rol = $user->rol;
+
+                if ($rol?->nombre === 'Administración') {
+                    return true;
+                }
+
+                return $rol?->nombre === 'Gestión'
+                    && (int) $user->id_unidad === (int) $idUnidadAcademica;
+            }
+        );
+
+        Gate::define(
             'enviar-convenio-a-revision',
             function ($user, Convenio $convenio): bool {
                 if (! $user instanceof Usuario) {

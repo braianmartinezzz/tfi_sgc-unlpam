@@ -64,3 +64,7 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Carga de documentos PDF
+
+La API acepta archivos PDF de hasta 20 MB. Configure PHP y el servidor web con límites superiores a ese tamaño para permitir la carga; por ejemplo, `upload_max_filesize=20M` y `post_max_size=25M`. Estos valores deben ajustarse en el entorno de despliegue (por ejemplo, `php.ini`, `.user.ini` o la configuración del servidor web).

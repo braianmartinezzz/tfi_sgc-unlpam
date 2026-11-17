@@ -354,11 +354,19 @@ class ConvenioController extends Controller
         ConvenioService $service
     ): JsonResponse {
         try {
-            $convenio = $service->update($id, $request->validated());
+            $convenio = $service->update(
+                $id,
+                $request->validated(),
+                $request->user()
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Convenio no encontrado.',
             ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para modificar este convenio.',
+            ], 403);
         } catch (\DomainException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -385,11 +393,15 @@ class ConvenioController extends Controller
     public function destroy(string $id, ConvenioService $service): JsonResponse
     {
         try {
-            $service->destroy($id);
+            $service->destroy($id, request()->user());
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Convenio no encontrado.',
             ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para eliminar este convenio.',
+            ], 403);
         } catch (\DomainException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -414,6 +426,10 @@ class ConvenioController extends Controller
                 $request->validated(),
                 $request->user()
             );
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para crear convenios en esta unidad académica.',
+            ], 403);
         } catch (Throwable $exception) {
             report($exception);
 

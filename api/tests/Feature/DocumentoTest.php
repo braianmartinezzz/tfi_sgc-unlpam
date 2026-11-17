@@ -100,7 +100,7 @@ class DocumentoTest extends TestCase
             'titulo' => 'Demasiado grande',
             'archivo' => UploadedFile::fake()->create(
                 'grande.pdf',
-                10241,
+                20481,
                 'application/pdf'
             ),
         ])
@@ -108,6 +108,23 @@ class DocumentoTest extends TestCase
             ->assertJsonValidationErrors(['archivo']);
 
         $this->assertDatabaseCount('documento', 0);
+    }
+
+    public function test_it_accepts_a_pdf_at_the_20_mb_limit(): void
+    {
+        [$convenio, $usuario] = $this->createConvenio();
+
+        $this->actingAs($usuario, 'sanctum')
+            ->post("/api/convenios/{$convenio->id_instrumento}/documentos", [
+                'tipo' => 'Convenio',
+                'titulo' => 'PDF de 20 MB',
+                'archivo' => UploadedFile::fake()->create(
+                    '20mb.pdf',
+                    20480,
+                    'application/pdf'
+                ),
+            ])
+            ->assertCreated();
     }
 
     public function test_it_returns_not_found_or_conflict_when_upload_is_not_allowed(): void
@@ -896,7 +913,7 @@ class DocumentoTest extends TestCase
         $this->put($url, [
             'archivo' => UploadedFile::fake()->create(
                 'grande.pdf',
-                10241,
+                20481,
                 'application/pdf'
             ),
         ])

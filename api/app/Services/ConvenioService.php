@@ -674,12 +674,25 @@ class ConvenioService
         }
     }
 
-    public function update(string $id, array $data): Convenio
+    public function update(string $id, array $data, Usuario $usuario): Convenio
     {
-        return DB::transaction(function () use ($id, $data) {
+        return DB::transaction(function () use ($id, $data, $usuario) {
             $convenio = Convenio::query()
                 ->lockForUpdate()
                 ->findOrFail($id);
+
+            Gate::forUser($usuario)->authorize(
+                'gestionar-convenio',
+                (int) $convenio->id_unidad_academica
+            );
+
+            if (array_key_exists('id_unidad_academica', $data)) {
+                Gate::forUser($usuario)->authorize(
+                    'gestionar-convenio',
+                    (int) $data['id_unidad_academica']
+                );
+            }
+
             $instrumento = $convenio->instrumento()
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -746,12 +759,18 @@ class ConvenioService
         });
     }
 
-    public function destroy(string $id): void
+    public function destroy(string $id, Usuario $usuario): void
     {
-        DB::transaction(function () use ($id) {
+        DB::transaction(function () use ($id, $usuario) {
             $convenio = Convenio::query()
                 ->lockForUpdate()
                 ->findOrFail($id);
+
+            Gate::forUser($usuario)->authorize(
+                'gestionar-convenio',
+                (int) $convenio->id_unidad_academica
+            );
+
             $instrumento = $convenio->instrumento()
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -845,6 +864,11 @@ class ConvenioService
     public function store(array $data, Usuario $usuario): Instrumento
     {
         return DB::transaction(function () use ($data, $usuario) {
+            Gate::forUser($usuario)->authorize(
+                'gestionar-convenio',
+                (int) $data['id_unidad_academica']
+            );
+
             $instrumento = Instrumento::create([
                 'titulo' => $data['titulo'],
                 'objeto' => $data['objeto'] ?? null,

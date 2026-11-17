@@ -216,6 +216,50 @@ class ConvenioDeleteTest extends TestCase
             ->assertJsonPath('message', 'Convenio no encontrado.');
     }
 
+    public function test_management_cannot_delete_another_units_convenio_but_administration_can(): void
+    {
+        $context = $this->authenticate();
+        $otherUnitId = DB::table('unidad_academica')->insertGetId([
+            'sigla' => 'UA-DEL-OTRA',
+            'nombre' => 'Otra unidad',
+            'id_institucion' => $context['institucion'],
+        ]);
+        $convenio = $this->createConvenio(
+            $context,
+            true,
+            null,
+            'Borrador',
+            $otherUnitId
+        );
+
+        $this->deleteJson('/api/convenios/'.$convenio->id_instrumento)
+            ->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'No tiene permisos para eliminar este convenio.'
+            );
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+        ]);
+
+        $this->setRole($context['usuario'], 'Administración');
+        $this->deleteJson('/api/convenios/'.$convenio->id_instrumento)
+            ->assertOk();
+    }
+
+    public function test_revision_and_consulta_cannot_delete_convenios(): void
+    {
+        $context = $this->authenticate('Revisión');
+        $convenio = $this->createConvenio($context, true);
+
+        $this->deleteJson('/api/convenios/'.$convenio->id_instrumento)
+            ->assertForbidden();
+
+        $this->setRole($context['usuario'], 'Consulta');
+        $this->deleteJson('/api/convenios/'.$convenio->id_instrumento)
+            ->assertForbidden();
+    }
+
     public function test_it_rejects_deleting_a_convenio_that_is_not_a_draft(): void
     {
         $context = $this->authenticate();
@@ -340,7 +384,8 @@ class ConvenioDeleteTest extends TestCase
         array $context,
         bool $esMarco,
         ?int $idConvenioMarco = null,
-        string $estado = 'Borrador'
+        string $estado = 'Borrador',
+        ?int $unitId = null
     ): Convenio {
         $instrumento = Instrumento::query()->create([
             'titulo' => 'Convenio para eliminación',
@@ -349,7 +394,7 @@ class ConvenioDeleteTest extends TestCase
         $convenio = Convenio::query()->create([
             'id_instrumento' => $instrumento->id_instrumento,
             'tipo' => 'Colaboración',
-            'id_unidad_academica' => $context['unidad'],
+            'id_unidad_academica' => $unitId ?? $context['unidad'],
         ]);
 
         if ($esMarco) {
@@ -377,10 +422,10 @@ class ConvenioDeleteTest extends TestCase
         ]);
     }
 
-    private function authenticate(): array
+    private function authenticate(string $role = 'Gestión'): array
     {
         $rolId = DB::table('rol')->insertGetId([
-            'nombre' => 'Eliminación',
+            'nombre' => $role,
         ]);
         $institutionId = DB::table('institucion_firmante')->insertGetId([
             'razon_social' => 'Institución de eliminación',
@@ -406,5 +451,13 @@ class ConvenioDeleteTest extends TestCase
             'unidad' => $unitId,
             'usuario' => $usuario,
         ];
+    }
+
+    private function setRole(Usuario $usuario, string $nombre): void
+    {
+        $rolId = DB::table('rol')->insertGetId(['nombre' => $nombre]);
+        $usuario->update(['id_rol' => $rolId]);
+        $usuario->unsetRelation('rol');
+        $this->app['auth']->forgetGuards();
     }
 }

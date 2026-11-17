@@ -118,6 +118,49 @@ class ConvenioStoreTest extends TestCase
         $this->assertDatabaseCount('historial_estado', 0);
     }
 
+    public function test_only_management_and_administration_can_create_in_authorized_units(): void
+    {
+        $institutionId = DB::table('institucion_firmante')->insertGetId([
+            'razon_social' => 'Institución de autorización',
+        ]);
+        $unitId = DB::table('unidad_academica')->insertGetId([
+            'sigla' => 'UA-AUTH',
+            'nombre' => 'Unidad autorizada',
+            'id_institucion' => $institutionId,
+        ]);
+        $otherUnitId = DB::table('unidad_academica')->insertGetId([
+            'sigla' => 'UA-OTHER',
+            'nombre' => 'Otra unidad',
+            'id_institucion' => $institutionId,
+        ]);
+        $usuario = $this->authenticate($unitId);
+        $payload = [
+            'titulo' => 'Convenio no autorizado',
+            'id_unidad_academica' => $otherUnitId,
+            'tipo' => 'Colaboración',
+            'es_marco' => true,
+            'instituciones_ids' => [$institutionId],
+        ];
+
+        $this->postJson('/api/convenios', $payload)
+            ->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'No tiene permisos para crear convenios en esta unidad académica.'
+            );
+        $this->assertDatabaseCount('instrumento', 0);
+
+        foreach (['Revisión', 'Consulta'] as $rol) {
+            $this->setRole($usuario, $rol);
+            $this->postJson('/api/convenios', array_replace($payload, [
+                'id_unidad_academica' => $unitId,
+            ]))->assertForbidden();
+        }
+
+        $this->setRole($usuario, 'Administración');
+        $this->postJson('/api/convenios', $payload)->assertCreated();
+    }
+
     public function test_history_failure_rolls_back_convenio_creation(): void
     {
         $institutionId = DB::table('institucion_firmante')->insertGetId([
@@ -130,6 +173,9 @@ class ConvenioStoreTest extends TestCase
         ]);
         $usuario = new Usuario;
         $usuario->setAttribute('id_usuario', 999999);
+        $usuario->setAttribute('id_rol', DB::table('rol')->insertGetId([
+            'nombre' => 'Administración',
+        ]));
 
         try {
             app(ConvenioService::class)->store([
@@ -154,7 +200,7 @@ class ConvenioStoreTest extends TestCase
     private function authenticate(int $unitId): Usuario
     {
         $rolId = DB::table('rol')->insertGetId([
-            'nombre' => 'Prueba',
+            'nombre' => 'Gestión',
         ]);
         $usuario = Usuario::query()->create([
             'mail' => 'convenio@example.com',
@@ -168,5 +214,13 @@ class ConvenioStoreTest extends TestCase
         $this->withToken($usuario->createToken('test')->plainTextToken);
 
         return $usuario;
+    }
+
+    private function setRole(Usuario $usuario, string $nombre): void
+    {
+        $rolId = DB::table('rol')->insertGetId(['nombre' => $nombre]);
+        $usuario->update(['id_rol' => $rolId]);
+        $usuario->unsetRelation('rol');
+        $this->app['auth']->forgetGuards();
     }
 }

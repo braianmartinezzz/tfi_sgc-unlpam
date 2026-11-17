@@ -216,6 +216,58 @@ class ConvenioUpdateTest extends TestCase
             ->assertJsonPath('message', 'Convenio no encontrado.');
     }
 
+    public function test_management_can_only_update_its_own_unit_and_cannot_reassign_outside_it(): void
+    {
+        $context = $this->authenticate('Gestión');
+        $convenio = $this->createConvenio($context, true);
+        $otherUnitConvenio = $this->createConvenio(
+            $context,
+            true,
+            [],
+            ['id_unidad_academica' => $context['otraUnidad']]
+        );
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Cambio de la unidad propia',
+        ])->assertOk();
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'id_unidad_academica' => $context['otraUnidad'],
+        ])->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'No tiene permisos para modificar este convenio.'
+            );
+
+        $this->putJson('/api/convenios/'.$otherUnitConvenio->id_instrumento, [
+            'titulo' => 'Cambio no autorizado',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'titulo' => 'Cambio de la unidad propia',
+        ]);
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $otherUnitConvenio->id_instrumento,
+            'titulo' => 'Convenio de prueba',
+        ]);
+    }
+
+    public function test_revision_and_consulta_cannot_update_convenios(): void
+    {
+        $context = $this->authenticate('Revisión');
+        $convenio = $this->createConvenio($context, true);
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Cambio no autorizado',
+        ])->assertForbidden();
+
+        $this->setRole($context['usuario'], 'Consulta');
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Cambio no autorizado',
+        ])->assertForbidden();
+    }
+
     public function test_update_requires_authentication(): void
     {
         $this->putJson('/api/convenios/1', [
@@ -241,7 +293,7 @@ class ConvenioUpdateTest extends TestCase
                 'tipo' => 'Tipo que debe revertirse',
                 'id_convenio_marco' => 999999,
                 'instituciones_ids' => [$context['otraInstitucion']],
-            ]);
+            ], $context['usuario']);
 
             $this->fail('Se esperaba una violación de clave foránea.');
         } catch (QueryException) {
@@ -316,10 +368,10 @@ class ConvenioUpdateTest extends TestCase
         return $convenio;
     }
 
-    private function authenticate(): array
+    private function authenticate(string $role = 'Administración'): array
     {
         $rolId = DB::table('rol')->insertGetId([
-            'nombre' => 'Actualización',
+            'nombre' => $role,
         ]);
         $institutionId = DB::table('institucion_firmante')->insertGetId([
             'razon_social' => 'Institución de actualización',
@@ -355,5 +407,13 @@ class ConvenioUpdateTest extends TestCase
             'otraUnidad' => $otherUnitId,
             'usuario' => $usuario,
         ];
+    }
+
+    private function setRole(Usuario $usuario, string $nombre): void
+    {
+        $rolId = DB::table('rol')->insertGetId(['nombre' => $nombre]);
+        $usuario->update(['id_rol' => $rolId]);
+        $usuario->unsetRelation('rol');
+        $this->app['auth']->forgetGuards();
     }
 }

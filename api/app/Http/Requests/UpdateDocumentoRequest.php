@@ -18,7 +18,7 @@ class UpdateDocumentoRequest extends FormRequest
         return [
             'tipo' => ['sometimes', 'required', 'string', 'max:50'],
             'titulo' => ['sometimes', 'required', 'string', 'max:255'],
-            'archivo' => ['sometimes', 'required', 'file', 'mimes:pdf', 'max:10240'],
+            'archivo' => ['sometimes', 'required', 'file', 'mimes:pdf', 'max:20480'],
         ];
     }
 
