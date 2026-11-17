@@ -182,13 +182,27 @@ class ConvenioService
 
     public function assertCanView(Convenio $convenio, Usuario $usuario): void
     {
-        if ($usuario->rol?->nombre !== 'Revisión') {
+        $rol = $usuario->rol?->nombre;
+
+        if ($rol === 'Revisión') {
+            $query = Convenio::query()->whereKey($convenio->id_instrumento);
+
+            if (! $this->applyRevisionVisibility($query, $usuario)->exists()) {
+                throw new AuthorizationException(
+                    'No tiene permisos para consultar este convenio.'
+                );
+            }
+
             return;
         }
 
-        $query = Convenio::query()->whereKey($convenio->id_instrumento);
-
-        if (! $this->applyRevisionVisibility($query, $usuario)->exists()) {
+        if (
+            (
+                $rol === 'Gestión'
+                || ($rol === 'Consulta' && ! $usuario->alcance_global)
+            )
+            && (int) $usuario->id_unidad !== (int) $convenio->id_unidad_academica
+        ) {
             throw new AuthorizationException(
                 'No tiene permisos para consultar este convenio.'
             );

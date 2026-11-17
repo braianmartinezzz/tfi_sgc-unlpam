@@ -23,11 +23,15 @@ class DocumentoController extends Controller
     public function destroy(string $id, DocumentoService $service): JsonResponse
     {
         try {
-            $service->destroy($id);
+            $service->destroy($id, request()->user());
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Documento o convenio asociado no encontrado.',
             ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para eliminar este documento.',
+            ], 403);
         } catch (\DomainException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -61,6 +65,10 @@ class DocumentoController extends Controller
             return response()->json([
                 'message' => 'Documento o convenio asociado no encontrado.',
             ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para modificar este documento.',
+            ], 403);
         } catch (\DomainException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -100,6 +108,10 @@ class DocumentoController extends Controller
             return response()->json([
                 'message' => 'Convenio no encontrado.',
             ], 404);
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'No tiene permisos para cargar documentos en este convenio.',
+            ], 403);
         } catch (\DomainException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),

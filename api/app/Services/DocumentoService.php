@@ -11,6 +11,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -79,6 +80,11 @@ class DocumentoService
                 $convenio = Convenio::query()
                     ->lockForUpdate()
                     ->findOrFail($convenioId);
+                Gate::forUser($usuario)->authorize(
+                    'gestionar-convenio',
+                    (int) $convenio->id_unidad_academica
+                );
+
                 $instrumento = $convenio->instrumento()
                     ->lockForUpdate()
                     ->first();
@@ -154,11 +160,15 @@ class DocumentoService
                 $documento = Documento::query()
                     ->lockForUpdate()
                     ->findOrFail($documentoId);
+                $convenio = Convenio::query()
+                    ->lockForUpdate()
+                    ->findOrFail($documento->id_instrumento);
+                Gate::forUser($usuario)->authorize(
+                    'gestionar-convenio',
+                    (int) $convenio->id_unidad_academica
+                );
 
                 if ($file !== null) {
-                    $convenio = Convenio::query()
-                        ->lockForUpdate()
-                        ->findOrFail($documento->id_instrumento);
                     $instrumento = $convenio->instrumento()
                         ->lockForUpdate()
                         ->first();
@@ -226,15 +236,20 @@ class DocumentoService
         }
     }
 
-    public function destroy(string $documentoId): void
+    public function destroy(string $documentoId, Usuario $usuario): void
     {
-        DB::transaction(function () use ($documentoId) {
+        DB::transaction(function () use ($documentoId, $usuario) {
             $documento = Documento::query()
                 ->lockForUpdate()
                 ->findOrFail($documentoId);
             $convenio = Convenio::query()
                 ->lockForUpdate()
                 ->findOrFail($documento->id_instrumento);
+            Gate::forUser($usuario)->authorize(
+                'gestionar-convenio',
+                (int) $convenio->id_unidad_academica
+            );
+
             $instrumento = $convenio->instrumento()
                 ->lockForUpdate()
                 ->first();

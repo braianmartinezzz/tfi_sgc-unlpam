@@ -519,10 +519,20 @@ class ConvenioReadTest extends TestCase
             $gestionContext['institucion'],
             true
         );
+        $otherUnitDraft = $this->createConvenio(
+            'Borrador ajeno para Gestión',
+            'Borrador',
+            'Colaboración',
+            $gestionContext['otraUnidad'],
+            $gestionContext['institucion'],
+            true
+        );
 
         $this->getJson('/api/convenios/'.$ownDraft->id_instrumento)
             ->assertOk()
             ->assertJsonPath('data.instrumento.estado', 'Borrador');
+        $this->getJson('/api/convenios/'.$otherUnitDraft->id_instrumento)
+            ->assertForbidden();
     }
 
     public function test_revision_filter_returns_only_revision_state_within_configured_scope(): void
@@ -643,6 +653,14 @@ class ConvenioReadTest extends TestCase
             $context['institucion'],
             true
         );
+        $firmadoOtherUnit = $this->createConvenio(
+            'Consulta firmado global',
+            'Firmado',
+            'Colaboración',
+            $context['otraUnidad'],
+            $context['institucion'],
+            true
+        );
         $expiredOtherUnit = $this->createConvenio(
             'Consulta vencido global',
             'Aprobado',
@@ -672,14 +690,19 @@ class ConvenioReadTest extends TestCase
         $this->assertEqualsCanonicalizing($localIds, $this->listedIds([]));
         $this->assertSame([], $this->listedIds(['estado' => 'Borrador']));
         $this->assertSame([], $this->listedIds(['estado' => 'Revisión']));
+        $this->getJson('/api/convenios/'.$firmado->id_instrumento)->assertOk();
+        $this->getJson('/api/convenios/'.$firmadoOtherUnit->id_instrumento)
+            ->assertForbidden();
 
         $context['usuario']->alcance_global = true;
         $context['usuario']->save();
         $this->actingAs($context['usuario']->fresh(), 'sanctum');
         $this->assertEqualsCanonicalizing(
-            $localIds,
+            [...$localIds, $firmadoOtherUnit->id_instrumento],
             $this->listedIds([])
         );
+        $this->getJson('/api/convenios/'.$firmadoOtherUnit->id_instrumento)
+            ->assertOk();
         $this->assertSame([], $this->listedIds(['estado' => 'Aprobado']));
         $this->assertNotContains($expiredBorrador->id_instrumento, $this->listedIds([]));
         $this->assertNotContains($expiredRevision->id_instrumento, $this->listedIds([]));

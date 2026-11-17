@@ -150,6 +150,8 @@ class DocumentoTest extends TestCase
         [$convenio] = $this->createConvenio();
         $usuarioInexistente = new Usuario;
         $usuarioInexistente->id_usuario = 999999;
+        $usuarioInexistente->id_rol = $this->roleId('Administración');
+        $usuarioInexistente->id_unidad = $convenio->id_unidad_academica;
 
         try {
             app(DocumentoService::class)->storeInitial(
@@ -481,10 +483,115 @@ class DocumentoTest extends TestCase
 
         [, $gestor] = $this->createConvenio('Borrador');
         $gestor = $this->assignRole($gestor, 'Gestión');
+        $gestor->update(['id_unidad' => $targetConvenio->id_unidad_academica]);
         $this->actingAs($gestor, 'sanctum')
             ->getJson("/api/convenios/{$targetConvenio->id_instrumento}/documentos")
             ->assertOk()
             ->assertJsonCount(1, 'data');
+    }
+
+    public function test_document_mutations_enforce_role_and_unit_authorization(): void
+    {
+        [$convenio, $owner] = $this->createConvenio();
+        $documento = $this->createDocument($convenio);
+
+        [, $gestorOtraUnidad] = $this->createConvenio();
+        $this->actingAs($gestorOtraUnidad, 'sanctum')
+            ->post(
+                "/api/convenios/{$convenio->id_instrumento}/documentos",
+                $this->validUpload()
+            )
+            ->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'No tiene permisos para cargar documentos en este convenio.'
+            );
+
+        $this->putJson("/api/documentos/{$documento->id_documento}", [
+            'titulo' => 'Cambio no autorizado',
+        ])->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'No tiene permisos para modificar este documento.'
+            );
+        $this->put(
+            "/api/documentos/{$documento->id_documento}",
+            ['archivo' => UploadedFile::fake()->createWithContent('nuevo.pdf', '%PDF-1.4')]
+        )->assertForbidden();
+        $this->deleteJson("/api/documentos/{$documento->id_documento}")
+            ->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'No tiene permisos para eliminar este documento.'
+            );
+        $this->assertDatabaseHas('documento', [
+            'id_documento' => $documento->id_documento,
+        ]);
+
+        foreach (['Revisión', 'Consulta'] as $role) {
+            [$ownConvenio, $usuario] = $this->createConvenio();
+            $usuario = $this->assignRole($usuario, $role);
+            $ownDocument = $this->createDocument($ownConvenio);
+
+            $this->actingAs($usuario, 'sanctum')
+                ->post(
+                    "/api/convenios/{$ownConvenio->id_instrumento}/documentos",
+                    $this->validUpload()
+                )->assertForbidden();
+            $this->putJson("/api/documentos/{$ownDocument->id_documento}", [
+                'titulo' => 'Cambio no autorizado',
+            ])->assertForbidden();
+            $this->put(
+                "/api/documentos/{$ownDocument->id_documento}",
+                ['archivo' => UploadedFile::fake()->createWithContent('nuevo.pdf', '%PDF-1.4')]
+            )->assertForbidden();
+            $this->deleteJson("/api/documentos/{$ownDocument->id_documento}")
+                ->assertForbidden();
+        }
+
+        [, $administrador] = $this->createConvenio();
+        $administrador = $this->assignRole($administrador, 'Administración');
+        $this->actingAs($administrador, 'sanctum')
+            ->post(
+                "/api/convenios/{$convenio->id_instrumento}/documentos",
+                $this->validUpload()
+            )->assertCreated();
+        $this->putJson("/api/documentos/{$documento->id_documento}", [
+            'titulo' => 'Actualización de Administración',
+        ])->assertOk();
+        $this->deleteJson("/api/documentos/{$documento->id_documento}")
+            ->assertOk();
+
+        $this->assertDatabaseHas('usuario', [
+            'id_usuario' => $owner->id_usuario,
+        ]);
+        $this->assertDatabaseMissing('documento', [
+            'id_documento' => $documento->id_documento,
+        ]);
+    }
+
+    public function test_gestion_from_another_unit_cannot_view_or_download_documents(): void
+    {
+        [$convenio, $owner] = $this->createConvenio();
+        $documento = $this->createDocument($convenio);
+        $version = $this->createVerifiableVersion(
+            $documento,
+            $owner,
+            'convenio.pdf',
+            'documentos/convenio.pdf',
+            '%PDF-1.4 documento'
+        );
+        [, $gestorOtraUnidad] = $this->createConvenio();
+
+        $this->actingAs($gestorOtraUnidad, 'sanctum')
+            ->getJson("/api/convenios/{$convenio->id_instrumento}")
+            ->assertForbidden();
+        $this->getJson("/api/convenios/{$convenio->id_instrumento}/documentos")
+            ->assertForbidden();
+        $this->get("/api/documentos/{$documento->id_documento}/descargar")
+            ->assertForbidden();
+        $this->get("/api/documentos/versiones/{$version->id_version}/descargar")
+            ->assertForbidden();
     }
 
     public function test_document_endpoints_return_not_found_when_the_owner_convenio_is_missing(): void
@@ -974,6 +1081,8 @@ class DocumentoTest extends TestCase
         [$documento, , , $versionAnterior] = $this->createDocumentWithVersion();
         $usuarioInexistente = new Usuario;
         $usuarioInexistente->id_usuario = 999999;
+        $usuarioInexistente->id_rol = $this->roleId('Administración');
+        $usuarioInexistente->id_unidad = $documento->instrumento->convenio->id_unidad_academica;
 
         try {
             app(DocumentoService::class)->update(
@@ -1078,11 +1187,14 @@ class DocumentoTest extends TestCase
 
     public function test_a_rollback_does_not_remove_document_files_prematurely(): void
     {
-        [$documento, , , $version] = $this->createDocumentWithVersion();
+        [$documento, $usuario, , $version] = $this->createDocumentWithVersion();
         $connection = DB::connection();
         $connection->beginTransaction();
 
-        app(DocumentoService::class)->destroy((string) $documento->id_documento);
+        app(DocumentoService::class)->destroy(
+            (string) $documento->id_documento,
+            $usuario
+        );
 
         Storage::disk('private')->assertExists($version->ruta_interna);
         $connection->rollBack();
@@ -1134,11 +1246,7 @@ class DocumentoTest extends TestCase
             'nombre' => 'Unidad Académica',
             'id_institucion' => $institucionId,
         ]);
-        $rolId = DB::table('rol')->where('nombre', 'Prueba')->value('id_rol');
-
-        if ($rolId === null) {
-            $rolId = DB::table('rol')->insertGetId(['nombre' => 'Prueba']);
-        }
+        $rolId = $this->roleId('Gestión');
 
         $usuario = Usuario::query()->create([
             'mail' => uniqid('documento-', true).'@example.com',
@@ -1278,6 +1386,13 @@ class DocumentoTest extends TestCase
         ]);
 
         return $usuario->fresh();
+    }
+
+    private function roleId(string $nombre): int
+    {
+        $rolId = DB::table('rol')->where('nombre', $nombre)->value('id_rol');
+
+        return $rolId ?? DB::table('rol')->insertGetId(['nombre' => $nombre]);
     }
 
     private function validUpload(): array
