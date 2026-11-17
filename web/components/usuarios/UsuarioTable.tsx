@@ -1,4 +1,5 @@
 import type { Usuario } from "@/types/usuario";
+import Link from "next/link";
 
 const rowActionClassName =
   "rounded-md px-2 py-1 font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50";
@@ -61,14 +62,12 @@ export default function UsuarioTable({ usuarios }: { usuarios: Usuario[] }) {
                     aria-label={`Acciones para ${usuario.nombre}`}
                     className="flex items-center gap-2"
                   >
-                    <button
-                      type="button"
-                      disabled
-                      title="No hay una pantalla de detalle implementada."
+                    <Link
+                      href={`/usuarios/${usuario.id_usuario}`}
                       className={rowActionClassName}
                     >
                       Ver
-                    </button>
+                    </Link>
                     <button
                       type="button"
                       disabled

@@ -18,6 +18,13 @@ export function useUsuarios(filters: UsuarioFilters = {}) {
   });
 }
 
+export function useUsuario(id: number | string) {
+  return useQuery({
+    queryKey: ["usuarios", "detail", id],
+    queryFn: () => usuarios.get(id),
+  });
+}
+
 export function useCreateUsuario() {
   const queryClient = useQueryClient();
 
