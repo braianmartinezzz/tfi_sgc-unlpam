@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import UsuarioEditLink from "@/components/usuarios/UsuarioEditLink";
 import { ApiError } from "@/services/api-client";
 import { usePermissions } from "@/context/PermissionContext";
 import { useUsuario } from "@/hooks/useUsuarios";
@@ -169,7 +170,17 @@ export default function UsuarioDetail({ id }: { id: string }) {
           </h1>
           <div aria-hidden="true" className="mt-2 h-1 w-16 rounded-full bg-brand" />
         </div>
-        <BackToUsersLink />
+        <div className="flex flex-wrap gap-3">
+          {can("usuarios:write") ? (
+            <UsuarioEditLink
+              id={id}
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              Editar usuario
+            </UsuarioEditLink>
+          ) : null}
+          <BackToUsersLink />
+        </div>
       </div>
       {can("usuarios:write") ? (
         <UsuarioDetailQuery id={id} />

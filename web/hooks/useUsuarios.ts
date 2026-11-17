@@ -33,3 +33,26 @@ export function useCreateUsuario() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["usuarios"] }),
   });
 }
+
+export function useUpdateUsuario() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: number | string;
+      input: Partial<UsuarioWrite>;
+    }) => usuarios.update(id, input),
+    onSuccess: async (_response, { id }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["usuarios"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["usuarios", "detail", id],
+          exact: true,
+        }),
+      ]);
+    },
+  });
+}

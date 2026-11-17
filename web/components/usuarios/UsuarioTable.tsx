@@ -1,5 +1,6 @@
 import type { Usuario } from "@/types/usuario";
 import Link from "next/link";
+import UsuarioEditLink from "@/components/usuarios/UsuarioEditLink";
 
 const rowActionClassName =
   "rounded-md px-2 py-1 font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50";
@@ -68,14 +69,12 @@ export default function UsuarioTable({ usuarios }: { usuarios: Usuario[] }) {
                     >
                       Ver
                     </Link>
-                    <button
-                      type="button"
-                      disabled
-                      title="La edición no está disponible en esta etapa."
+                    <UsuarioEditLink
+                      id={usuario.id_usuario}
                       className={rowActionClassName}
                     >
                       Editar
-                    </button>
+                    </UsuarioEditLink>
                   </div>
                 </td>
               </tr>
