@@ -97,7 +97,11 @@ function createRequestHeaders(
   headers.set("Accept", "application/json");
 
   if (body !== undefined && body !== null) {
-    headers.set("Content-Type", "application/json");
+    if (typeof FormData !== "undefined" && body instanceof FormData) {
+      headers.delete("Content-Type");
+    } else {
+      headers.set("Content-Type", "application/json");
+    }
   }
 
   if (authenticated) {

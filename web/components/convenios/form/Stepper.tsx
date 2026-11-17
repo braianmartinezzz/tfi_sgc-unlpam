@@ -2,6 +2,7 @@ type StepperProps = {
   currentStep: number;
   highestStep: number;
   onStepChange: (step: number) => void;
+  disabled?: boolean;
 };
 
 const steps = [
@@ -14,6 +15,7 @@ export default function Stepper({
   currentStep,
   highestStep,
   onStepChange,
+  disabled = false,
 }: StepperProps) {
   return (
     <nav aria-label="Progreso de carga del convenio" className="mb-5">
@@ -30,7 +32,7 @@ export default function Stepper({
                 type="button"
                 aria-label={`Paso ${step}: ${title}`}
                 aria-current={isCurrent ? "step" : undefined}
-                disabled={!isAvailable}
+                disabled={!isAvailable || disabled}
                 onClick={() => onStepChange(step)}
                 className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-2 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:justify-start sm:px-3 ${
                   isCurrent

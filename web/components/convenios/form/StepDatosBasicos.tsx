@@ -5,14 +5,11 @@ import {
   useWatch,
   type UseFormReturn,
 } from "react-hook-form";
+import type { ConvenioListItem } from "@/types/convenio";
+import type { UsuarioAutenticado } from "@/types/auth";
+import type { InstitucionFirmante, UnidadAcademica } from "@/types/unidad";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import {
-  currentUser,
-  mockConveniosMarco,
-  mockInstitucionesFirmantes,
-  mockUnidadesAcademicas,
-} from "@/components/convenios/form/mock-data";
 import {
   isValidPdfFile,
   type ConvenioFormValues,
@@ -20,6 +17,10 @@ import {
 
 type StepDatosBasicosProps = {
   form: UseFormReturn<ConvenioFormValues>;
+  user: UsuarioAutenticado;
+  unidades: UnidadAcademica[];
+  instituciones: InstitucionFirmante[];
+  conveniosMarco: ConvenioListItem[];
 };
 
 const textIcon = (
@@ -40,7 +41,13 @@ function formatFileSize(bytes: number): string {
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-export default function StepDatosBasicos({ form }: StepDatosBasicosProps) {
+export default function StepDatosBasicos({
+  form,
+  user,
+  unidades,
+  instituciones,
+  conveniosMarco,
+}: StepDatosBasicosProps) {
   const [busqueda, setBusqueda] = useState("");
   const {
     clearErrors,
@@ -58,21 +65,21 @@ export default function StepDatosBasicos({ form }: StepDatosBasicosProps) {
     name: "institucionesFirmantes",
   });
   const archivoPrincipal = useWatch({ control, name: "archivoPrincipal" });
-  const unidadAsignada = mockUnidadesAcademicas.find(
-    (unidad) => unidad.id_unidad_academica === currentUser.id_unidad,
+  const unidadAsignada = unidades.find(
+    (unidad) => unidad.id_unidad_academica === user.id_unidad,
   );
   const unidadesVisibles =
-    currentUser.rol === "Gestión" && unidadAsignada
+    user.rol?.nombre === "Gestión" && unidadAsignada
       ? [unidadAsignada]
-      : mockUnidadesAcademicas;
-  const institucionesFiltradas = mockInstitucionesFirmantes.filter(
+      : unidades;
+  const institucionesFiltradas = instituciones.filter(
     (institucion) =>
       !institucionesSeleccionadas.includes(String(institucion.id_institucion)) &&
       `${institucion.razon_social} ${institucion.cuit}`
         .toLowerCase()
         .includes(busqueda.trim().toLowerCase()),
   );
-  const selectedInstitutions = mockInstitucionesFirmantes.filter((institucion) =>
+  const selectedInstitutions = instituciones.filter((institucion) =>
     institucionesSeleccionadas.includes(String(institucion.id_institucion)),
   );
 
@@ -93,10 +100,12 @@ export default function StepDatosBasicos({ form }: StepDatosBasicosProps) {
       shouldValidate: true,
     });
 
-    const unidad = mockUnidadesAcademicas.find(
+    const unidad = unidades.find(
       (item) => String(item.id_unidad_academica) === id,
     );
-    if (unidad) agregarInstitucion(String(unidad.id_institucion));
+    if (unidad) {
+      agregarInstitucion(String(unidad.id_institucion));
+    }
   }
 
   function seleccionarPdf(file: File | undefined) {
@@ -280,7 +289,7 @@ export default function StepDatosBasicos({ form }: StepDatosBasicosProps) {
             requiredMark
             required
             value={unidadSeleccionada}
-            disabled={currentUser.rol === "Gestión"}
+            disabled={user.rol?.nombre === "Gestión"}
             onChange={(event) => seleccionarUnidad(event.currentTarget.value)}
             aria-invalid={Boolean(errors.idUnidadAcademica)}
             aria-describedby={
@@ -297,9 +306,9 @@ export default function StepDatosBasicos({ form }: StepDatosBasicosProps) {
               </option>
             ))}
           </Select>
-          {currentUser.rol === "Gestión" ? (
+          {user.rol?.nombre === "Gestión" ? (
             <p id="unidad-ayuda" className="mt-1 text-sm text-foreground/70">
-              Unidad asignada al usuario de muestra.
+              Unidad asignada al usuario autenticado.
             </p>
           ) : null}
           {errors.idUnidadAcademica ? (
@@ -322,12 +331,12 @@ export default function StepDatosBasicos({ form }: StepDatosBasicosProps) {
               }
             >
               <option value="">Seleccioná un convenio marco</option>
-              {mockConveniosMarco.map((convenio) => (
+              {conveniosMarco.map((convenio) => (
                 <option
                   key={convenio.id_instrumento}
                   value={convenio.id_instrumento}
                 >
-                  {convenio.titulo}
+                  {convenio.instrumento?.titulo ?? "Convenio marco"}
                 </option>
               ))}
             </Select>
@@ -388,7 +397,9 @@ export default function StepDatosBasicos({ form }: StepDatosBasicosProps) {
                   className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
                 >
                   <span>{institucion.razon_social}</span>
-                  <span className="text-foreground/70">{institucion.cuit}</span>
+                  {institucion.cuit ? (
+                    <span className="text-foreground/70">{institucion.cuit}</span>
+                  ) : null}
                 </button>
               </li>
             ))}

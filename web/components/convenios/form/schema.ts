@@ -20,12 +20,17 @@ const optionalPdfSchema = z.custom<File | null>(
 );
 
 const anexoSchema = z.object({
+  clientId: z.string().uuid(),
   tipo: z.enum([
     "Acta de aprobación",
     "Documentación de la parte externa",
     "Otro",
   ]),
-  titulo: z.string().trim().min(1, "El título del anexo es obligatorio."),
+  titulo: z
+    .string()
+    .trim()
+    .min(1, "El título del anexo es obligatorio.")
+    .max(255, "El título del anexo no puede superar los 255 caracteres."),
   archivo: optionalPdfSchema,
 });
 
@@ -67,7 +72,11 @@ export const convenioFormSchema = z
     tituloDocumentoPrincipal: z
       .string()
       .trim()
-      .min(1, "El título del documento principal es obligatorio."),
+      .min(1, "El título del documento principal es obligatorio.")
+      .max(
+        255,
+        "El título del documento principal no puede superar los 255 caracteres.",
+      ),
     anexos: z.array(anexoSchema),
   })
   .superRefine((values, context) => {
@@ -97,16 +106,6 @@ export const convenioFormSchema = z
         message: "Seleccioná el convenio marco relacionado.",
       });
     }
-
-    values.anexos.forEach((anexo, index) => {
-      if (anexo.archivo === null) {
-        context.addIssue({
-          code: "custom",
-          path: ["anexos", index, "archivo"],
-          message: "Adjuntá un archivo PDF de hasta 20 MB.",
-        });
-      }
-    });
 
     if (
       values.fechaInicio !== "" &&
