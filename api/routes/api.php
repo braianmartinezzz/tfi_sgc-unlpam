@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\AprobarConvenioController;
+use App\Http\Controllers\Api\ArchivarConvenioController;
 use App\Http\Controllers\Api\AuditoriaController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConfiguracionController;
@@ -10,16 +12,14 @@ use App\Http\Controllers\Api\DocumentoController;
 use App\Http\Controllers\Api\EstadisticaController;
 use App\Http\Controllers\Api\EstudianteController;
 use App\Http\Controllers\Api\InstitucionFirmanteController;
+use App\Http\Controllers\Api\InstitucionUnificacionController;
+use App\Http\Controllers\Api\ObservacionTrazabilidadController;
+use App\Http\Controllers\Api\RechazarConvenioController;
 use App\Http\Controllers\Api\RepresentanteController;
 use App\Http\Controllers\Api\UnidadAcademicaController;
 use App\Http\Controllers\Api\UsuarioController;
 use App\Http\Controllers\Api\VencimientoController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\InstitucionUnificacionController;
-use App\Http\Controllers\Api\ObservacionTrazabilidadController;
-use App\Http\Controllers\Api\ArchivarConvenioController;
-use App\Http\Controllers\Api\RechazarConvenioController;
-use App\Http\Controllers\Api\AprobarConvenioController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -121,11 +121,13 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('id');
 
     // Usuarios
-    Route::get('/usuarios', [UsuarioController::class, 'index']);
-    Route::post('/usuarios', [UsuarioController::class, 'store']);
-    Route::get('/usuarios/{id}', [UsuarioController::class, 'show'])->whereNumber('id');
-    Route::put('/usuarios/{id}', [UsuarioController::class, 'update'])->whereNumber('id');
-    Route::delete('/usuarios/{id}', [UsuarioController::class, 'destroy'])->whereNumber('id');
+    Route::middleware('can:gestionar-usuarios')->group(function () {
+        Route::get('/usuarios', [UsuarioController::class, 'index']);
+        Route::post('/usuarios', [UsuarioController::class, 'store']);
+        Route::get('/usuarios/{id}', [UsuarioController::class, 'show'])->whereNumber('id');
+        Route::put('/usuarios/{id}', [UsuarioController::class, 'update'])->whereNumber('id');
+        Route::delete('/usuarios/{id}', [UsuarioController::class, 'destroy'])->whereNumber('id');
+    });
 
     // Auditoría
     Route::get('/auditoria', [AuditoriaController::class, 'index']);
@@ -141,7 +143,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('id');
 
     Route::post('/convenios/{id}/archivar', [ArchivarConvenioController::class, 'archivar'])
-        ->whereNumber('id');  
+        ->whereNumber('id');
 
     Route::post('/convenios/{id}/rechazar', [RechazarConvenioController::class, 'rechazar'])
         ->whereNumber('id');

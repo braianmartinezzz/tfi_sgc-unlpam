@@ -23,6 +23,14 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define(
+            'gestionar-usuarios',
+            function ($user): bool {
+                return $user instanceof Usuario
+                    && $user->rol?->nombre === 'Administración';
+            }
+        );
+
+        Gate::define(
             'gestionar-convenio',
             function ($user, $idUnidadAcademica): bool {
                 if (! $user instanceof Usuario || ! is_numeric($idUnidadAcademica)) {

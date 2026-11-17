@@ -15,6 +15,56 @@ class UsuarioTest extends TestCase
     public function test_requires_authentication(): void
     {
         $this->getJson('/api/usuarios')->assertUnauthorized();
+        $this->getJson('/api/usuarios/1')->assertUnauthorized();
+        $this->postJson('/api/usuarios', [])->assertUnauthorized();
+        $this->putJson('/api/usuarios/1', [])->assertUnauthorized();
+        $this->deleteJson('/api/usuarios/1')->assertUnauthorized();
+    }
+
+    public function test_only_administration_can_manage_users(): void
+    {
+        $ctx = $this->authenticate();
+        $objetivo = $this->crearUsuario($ctx['rol'], $ctx['unidad'], [
+            'mail' => 'objetivo@example.com',
+        ]);
+        $payload = [
+            'mail' => 'nuevo@example.com',
+            'nombre' => 'Usuario nuevo',
+            'password' => 'clave-segura-1',
+            'id_rol' => $ctx['rol'],
+            'id_unidad' => $ctx['unidad'],
+        ];
+
+        foreach (['Gestión', 'Revisión', 'Consulta'] as $nombreRol) {
+            $rolId = DB::table('rol')->insertGetId(['nombre' => $nombreRol]);
+            $usuario = $this->crearUsuario($rolId, $ctx['unidad'], [
+                'mail' => strtolower(str_replace('ó', 'o', $nombreRol)).'@example.com',
+            ]);
+
+            $this->withToken($usuario->createToken('usuarios-denegados')->plainTextToken)
+                ->getJson('/api/usuarios')
+                ->assertForbidden();
+
+            $this->getJson('/api/usuarios/'.$objetivo->id_usuario)
+                ->assertForbidden();
+
+            $this->postJson('/api/usuarios', $payload)
+                ->assertForbidden();
+
+            $this->putJson('/api/usuarios/'.$objetivo->id_usuario, [
+                'nombre' => 'Nombre modificado',
+            ])->assertForbidden();
+
+            $this->deleteJson('/api/usuarios/'.$objetivo->id_usuario)
+                ->assertForbidden();
+        }
+
+        $this->assertDatabaseHas('usuario', [
+            'id_usuario' => $objetivo->id_usuario,
+            'nombre' => $objetivo->nombre,
+            'activo' => true,
+        ]);
+        $this->assertDatabaseMissing('usuario', ['mail' => 'nuevo@example.com']);
     }
 
     public function test_lists_paginated_and_applies_filters(): void
