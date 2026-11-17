@@ -70,8 +70,7 @@ export default function Sidebar() {
           {visibleNavigation.map((item) => {
             const isActive =
               pathname === item.href ||
-              (item.href === "/convenios" &&
-                pathname.startsWith("/convenios/"));
+              pathname.startsWith(`${item.href}/`);
 
             return (
               <li key={item.href}>

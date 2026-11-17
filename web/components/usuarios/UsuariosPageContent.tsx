@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ApiError } from "@/services/api-client";
-import Button from "@/components/ui/Button";
 import UsuarioFilters from "@/components/usuarios/UsuarioFilters";
 import UsuarioTable from "@/components/usuarios/UsuarioTable";
 import ConvenioPagination from "@/components/convenios/ConvenioPagination";
@@ -175,13 +175,27 @@ function UsuariosList() {
           </h1>
           <div aria-hidden="true" className="mt-2 h-1 w-16 rounded-full bg-brand" />
         </div>
-        <Button
-          disabled
-          title="El alta de usuarios no está disponible en esta etapa."
-          className="h-11 w-auto rounded-md px-5 font-condensed font-bold"
+        <Link
+          href="/usuarios/new"
+          onClick={(event) => {
+            if (
+              event.defaultPrevented ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+            router.push(`/usuarios/new?visit=${window.crypto.randomUUID()}`);
+          }}
+          className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand px-5 py-2.5 font-condensed font-bold text-white shadow-sm hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           Nuevo usuario
-        </Button>
+        </Link>
       </div>
 
       <UsuarioFilters
