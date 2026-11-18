@@ -64,7 +64,7 @@ export default function EstadisticaFilters({
           </label>
           <input
             id="estadisticas-fecha-desde"
-            className={controlClassName}
+            className={`${controlClassName} [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
             type="date"
             value={draft.fecha_desde}
             onChange={(event) => onChange("fecha_desde", event.currentTarget.value)}
@@ -76,7 +76,7 @@ export default function EstadisticaFilters({
           </label>
           <input
             id="estadisticas-fecha-hasta"
-            className={controlClassName}
+            className={`${controlClassName} [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
             type="date"
             value={draft.fecha_hasta}
             onChange={(event) => onChange("fecha_hasta", event.currentTarget.value)}
@@ -88,7 +88,7 @@ export default function EstadisticaFilters({
           </label>
           <select
             id="estadisticas-tipo"
-            className={controlClassName}
+            className={`${controlClassName} enabled:cursor-pointer`}
             value={draft.tipo}
             onChange={(event) => onChange("tipo", event.currentTarget.value)}
           >
@@ -108,7 +108,7 @@ export default function EstadisticaFilters({
             </label>
             <select
               id="estadisticas-unidad-academica"
-              className={controlClassName}
+              className={`${controlClassName} enabled:cursor-pointer`}
               value={draft.id_unidad_academica}
               onChange={(event) =>
                 onChange("id_unidad_academica", event.currentTarget.value)
@@ -173,13 +173,13 @@ export default function EstadisticaFilters({
             !draft.tipo &&
             !draft.id_unidad_academica
           }
-          className="min-h-11 rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 enabled:cursor-pointer rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
         >
           Limpiar filtros
         </button>
         <button
           type="submit"
-          className="min-h-11 rounded-md bg-brand px-4 py-2 font-semibold text-brand-on-brand hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+          className="min-h-11 enabled:cursor-pointer rounded-md bg-brand px-4 py-2 font-semibold text-brand-on-brand hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           Aplicar filtros
         </button>

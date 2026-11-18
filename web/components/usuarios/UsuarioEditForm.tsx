@@ -445,9 +445,11 @@ function UsuarioEditFields({
           <div>
             <Select
               id="usuario-edit-rol"
-              label="Rol *"
+              label="Rol"
               requiredMark
+              floatingLabel
               required
+              className="enabled:cursor-pointer"
               {...register("id_rol")}
               aria-invalid={Boolean(errors.id_rol)}
               aria-describedby={
@@ -469,9 +471,11 @@ function UsuarioEditFields({
           <div>
             <Select
               id="usuario-edit-unidad"
-              label="Unidad académica *"
+              label="Unidad académica"
               requiredMark
+              floatingLabel
               required
+              className="enabled:cursor-pointer"
               {...register("id_unidad")}
               aria-invalid={Boolean(errors.id_unidad)}
               aria-describedby={
@@ -498,6 +502,8 @@ function UsuarioEditFields({
           <legend className="mb-2 text-sm font-semibold">Estado y alcance</legend>
           <Checkbox
             label="Usuario activo"
+            className="cursor-pointer"
+            labelClassName="cursor-pointer"
             {...register("activo")}
             aria-invalid={Boolean(errors.activo)}
             aria-describedby={
@@ -510,6 +516,8 @@ function UsuarioEditFields({
           />
           <Checkbox
             label="Alcance global"
+            className="cursor-pointer"
+            labelClassName="cursor-pointer"
             {...register("alcance_global")}
             aria-invalid={Boolean(errors.alcance_global)}
             aria-describedby={
@@ -530,14 +538,14 @@ function UsuarioEditFields({
           type="button"
           disabled={updateMutation.isPending}
           onClick={() => router.push(`/usuarios/${id}`)}
-          className="min-h-11 rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          className="min-h-11 enabled:cursor-pointer rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           Cancelar
         </button>
         <Button
           type="submit"
           loading={updateMutation.isPending}
-          className="!w-full sm:!w-auto"
+          className="!w-full enabled:cursor-pointer sm:!w-auto"
         >
           {updateMutation.isPending ? "Guardando cambios..." : "Guardar cambios"}
         </Button>

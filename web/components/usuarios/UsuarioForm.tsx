@@ -358,6 +358,7 @@ function UsuarioCreateForm() {
                 requiredMark
                 floatingLabel
                 required
+                className="enabled:cursor-pointer"
                 disabled={
                   rolesQuery.isPending ||
                   rolesQuery.isError ||
@@ -409,6 +410,7 @@ function UsuarioCreateForm() {
                 requiredMark
                 floatingLabel
                 required
+                className="enabled:cursor-pointer"
                 disabled={
                   unidadesQuery.isPending ||
                   unidadesQuery.isError ||
@@ -461,6 +463,8 @@ function UsuarioCreateForm() {
             <legend className="mb-2 text-sm font-semibold">Estado y alcance</legend>
             <Checkbox
               label="Usuario activo"
+              className="cursor-pointer"
+              labelClassName="cursor-pointer"
               {...register("activo")}
               aria-invalid={Boolean(errors.activo)}
               aria-describedby={
@@ -473,6 +477,8 @@ function UsuarioCreateForm() {
             />
             <Checkbox
               label="Alcance global"
+              className="cursor-pointer"
+              labelClassName="cursor-pointer"
               {...register("alcance_global")}
               aria-invalid={Boolean(errors.alcance_global)}
               aria-describedby={

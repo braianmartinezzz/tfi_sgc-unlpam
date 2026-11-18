@@ -956,6 +956,7 @@ export default function DetalleConvenio({
               type="button"
               variant="link"
               onClick={() => router.push("/convenios")}
+              className="!h-11 !w-auto !rounded-md !border !border-ui-border !bg-surface !px-4 !py-2 !text-sm !font-semibold !text-foreground !no-underline enabled:cursor-pointer hover:!bg-row-alternate"
             >
               Volver
             </Button>
@@ -971,7 +972,7 @@ export default function DetalleConvenio({
             {canEditConvenio(rol, estado ?? "") ? (
               <Button
                 type="button"
-                className="!w-auto"
+                className="!w-auto enabled:cursor-pointer"
                 onClick={() => router.push(`/convenios/${parsedId}/edit`)}
               >
                 Editar
@@ -1006,7 +1007,7 @@ export default function DetalleConvenio({
                 tabIndex={selected ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
-                className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
+                className={`min-h-11 shrink-0 cursor-pointer border-b-2 px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
                   selected
                     ? "border-brand text-brand-text"
                     : "border-transparent text-foreground/70 hover:bg-row-alternate hover:text-foreground"
