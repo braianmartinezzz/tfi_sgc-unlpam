@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import {
   useForm,
-  useWatch,
   type FieldPath,
   type UseFormReturn,
 } from "react-hook-form";
@@ -381,23 +380,6 @@ function getDocumentCandidates(values: ConvenioFormValues): UploadCandidate[] {
   return candidates;
 }
 
-function getSelectedDocumentFields(
-  values: ConvenioFormValues,
-): FieldPath<ConvenioFormValues>[] {
-  const fields: FieldPath<ConvenioFormValues>[] = [];
-  if (values.archivoPrincipal || values.documentoPrincipalId !== null) {
-    fields.push("tituloDocumentoPrincipal");
-    if (values.archivoPrincipal) fields.push("archivoPrincipal");
-  }
-
-  values.anexos.forEach((anexo, index) => {
-    if (!anexo.archivo && anexo.documentoId === null) return;
-    fields.push(`anexos.${index}.tipo`, `anexos.${index}.titulo`);
-    if (anexo.archivo) fields.push(`anexos.${index}.archivo`);
-  });
-  return fields;
-}
-
 async function waitForSuccessNotice(): Promise<void> {
   await new Promise<void>((resolve) => window.setTimeout(resolve, 900));
 }
@@ -419,7 +401,7 @@ export default function ConvenioForm({
     convenioId ?? null,
   );
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
-  const [highestStep, setHighestStep] = useState<StepNumber>(1);
+  const [formResetKey, setFormResetKey] = useState(0);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
@@ -440,30 +422,16 @@ export default function ConvenioForm({
     resolver: zodResolver(convenioFormSchema),
     mode: "onTouched",
     defaultValues,
+    shouldUnregister: false,
   });
   const {
     clearErrors,
-    control,
     formState: { errors },
     getValues,
     reset,
     setError,
     trigger,
   } = form;
-  const titulo = useWatch({ control, name: "titulo" });
-  const tipo = useWatch({ control, name: "tipo" });
-  const idUnidadAcademica = useWatch({ control, name: "idUnidadAcademica" });
-  const claseInstrumento = useWatch({ control, name: "claseInstrumento" });
-  const idConvenioMarco = useWatch({ control, name: "idConvenioMarco" });
-  const institucionesSeleccionadas = useWatch({
-    control,
-    name: "institucionesFirmantes",
-  });
-  const archivoPrincipal = useWatch({ control, name: "archivoPrincipal" });
-  const documentoPrincipalId = useWatch({
-    control,
-    name: "documentoPrincipalId",
-  });
   const role = user?.rol?.nombre;
   const canManage = isManagementRole(role);
   const isEditMode = convenioId !== undefined;
@@ -634,25 +602,26 @@ export default function ConvenioForm({
     }
   }, [currentStep]);
 
-  const readyToReview =
-    titulo.trim() !== "" &&
-    tipo !== "" &&
-    idUnidadAcademica !== "" &&
-    claseInstrumento !== "" &&
-    institucionesSeleccionadas.length >= 2 &&
-    (claseInstrumento !== "Específico" || idConvenioMarco !== "") &&
-    (archivoPrincipal !== null || documentoPrincipalId !== null);
-
   function setStep(step: number) {
     if (
       !processingRef.current &&
       step >= 1 &&
-      step <= highestStep &&
+      step <= 3 &&
       (step === 1 || step === 2 || step === 3)
     ) {
       setNotice(null);
       setCurrentStep(step);
     }
+  }
+
+  function resetNewConvenio() {
+    reset(defaultValues);
+    instrumentIdRef.current = null;
+    creationUncertainRef.current = false;
+    uploadedDocumentsRef.current.clear();
+    setInstrumentId(null);
+    setCurrentStep(1);
+    setFormResetKey((key) => key + 1);
   }
 
   async function goToNextStep() {
@@ -665,7 +634,6 @@ export default function ConvenioForm({
 
       const nextStep = (currentStep + 1) as StepNumber;
       setCurrentStep(nextStep);
-      setHighestStep((highest) => Math.max(highest, nextStep) as StepNumber);
     } catch (error) {
       setNotice({ kind: "error", message: getApiMessage(error) });
     } finally {
@@ -731,20 +699,15 @@ export default function ConvenioForm({
     setNotice(null);
     clearErrors();
     try {
-      if (!(await trigger(stepFields[1]))) {
-        setCurrentStep(1);
+      if (!(await trigger())) {
+        setCurrentStep(getFirstStepWithErrors(form) ?? 1);
         return;
       }
 
       const values = getValues();
-      const documentFields = getSelectedDocumentFields(values);
-      if (documentFields.length > 0 && !(await trigger(documentFields))) {
-        setCurrentStep(3);
-        return;
-      }
-
       const id = await saveDraft(values);
       await synchronizeDocuments(id, values);
+      if (!isEditMode) resetNewConvenio();
       setNotice({
         kind: "success",
         message: isEditMode
@@ -1026,6 +989,7 @@ export default function ConvenioForm({
       setNotice({ kind: "info", message: "Enviando el convenio a revisión..." });
       const response = await convenios.sendForReview(id);
       setConfirmationOpen(false);
+      if (!isEditMode) resetNewConvenio();
       setNotice({ kind: "success", message: response.message });
       await waitForSuccessNotice();
       router.push(`/convenios/${id}`);
@@ -1140,7 +1104,6 @@ export default function ConvenioForm({
     <div className="mx-auto w-full max-w-5xl">
       <Stepper
         currentStep={currentStep}
-        highestStep={highestStep}
         onStepChange={setStep}
         disabled={busy}
       />
@@ -1171,17 +1134,23 @@ export default function ConvenioForm({
               </p>
             ) : null}
 
-            {currentStep === 1 ? (
-              <StepDatosBasicos
-                form={form}
-                user={user}
-                unidades={options.unidades}
-                instituciones={options.instituciones}
-                conveniosMarco={options.conveniosMarco}
-              />
-            ) : null}
-            {currentStep === 2 ? <StepFichaPlazos form={form} /> : null}
-            {currentStep === 3 ? <StepDocumentos form={form} /> : null}
+            <div key={formResetKey}>
+              <div hidden={currentStep !== 1}>
+                <StepDatosBasicos
+                  form={form}
+                  user={user}
+                  unidades={options.unidades}
+                  instituciones={options.instituciones}
+                  conveniosMarco={options.conveniosMarco}
+                />
+              </div>
+              <div hidden={currentStep !== 2}>
+                <StepFichaPlazos form={form} />
+              </div>
+              <div hidden={currentStep !== 3}>
+                <StepDocumentos form={form} />
+              </div>
+            </div>
           </div>
         </fieldset>
 
@@ -1233,7 +1202,7 @@ export default function ConvenioForm({
                 <Button
                   ref={sendButtonRef}
                   type="button"
-                  disabled={!readyToReview || busy}
+                  disabled={busy}
                   onClick={() => void requestReview()}
                   className="!w-full sm:!w-auto"
                 >
