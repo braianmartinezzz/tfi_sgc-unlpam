@@ -2,10 +2,11 @@ import { forwardRef, useId, type InputHTMLAttributes } from "react";
 
 type CheckboxProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
   label: string;
+  labelClassName?: string;
 };
 
 const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
-  { className, id: providedId, label, ...props },
+  { className, id: providedId, label, labelClassName, ...props },
   ref,
 ) {
   const generatedId = useId();
@@ -13,7 +14,10 @@ const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
 
   return (
     <div>
-      <label htmlFor={id} className="inline-flex min-h-11 items-center gap-3">
+      <label
+        htmlFor={id}
+        className={`inline-flex min-h-11 items-center gap-3 ${labelClassName ?? ""}`}
+      >
         <input
           {...props}
           ref={ref}

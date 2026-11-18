@@ -30,6 +30,51 @@ function getPdfError(file: File): string {
     : "El archivo debe ser un PDF.";
 }
 
+type PdfFilePickerProps = {
+  id: string;
+  labelId: string;
+  required?: boolean;
+  ariaInvalid: boolean;
+  ariaDescribedBy: string;
+  selectedFileName?: string;
+  onChange: (file: File | undefined) => void;
+};
+
+function PdfFilePicker({
+  id,
+  labelId,
+  required,
+  ariaInvalid,
+  ariaDescribedBy,
+  selectedFileName,
+  onChange,
+}: PdfFilePickerProps) {
+  return (
+    <div className="flex min-h-11 w-full items-center rounded-sm border border-ui-border bg-surface px-3 py-2 text-sm text-foreground has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand">
+      <input
+        id={id}
+        type="file"
+        accept="application/pdf,.pdf"
+        required={required}
+        aria-labelledby={labelId}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+        onChange={(event) => onChange(event.currentTarget.files?.[0])}
+        className="sr-only"
+      />
+      <label
+        htmlFor={id}
+        className="mr-3 inline-flex cursor-pointer rounded-sm border-0 bg-page px-3 py-1.5 font-medium text-foreground"
+      >
+        Elegir archivo
+      </label>
+      <span className="min-w-0 truncate">
+        {selectedFileName ?? "Ningún archivo seleccionado"}
+      </span>
+    </div>
+  );
+}
+
 export default function StepDocumentos({ form }: StepDocumentosProps) {
   const {
     clearErrors,
@@ -145,6 +190,8 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
           <Input
             label="Título del documento principal *"
             icon={textIcon}
+            floatingLabel={false}
+            placeholder="Ej.: Convenio de colaboración institucional"
             {...register("tituloDocumentoPrincipal")}
             aria-invalid={Boolean(errors.tituloDocumentoPrincipal)}
             aria-describedby={
@@ -165,30 +212,27 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="documento-principal-file" className="block text-sm font-medium">
+          <span id="documento-principal-file-label" className="block text-sm font-medium">
             {documentoPrincipalId === null
               ? "Archivo PDF principal"
               : "Reemplazar archivo PDF principal"}{" "}
             {documentoPrincipalId === null ? (
               <span aria-hidden="true">*</span>
             ) : null}
-          </label>
-          <input
+          </span>
+          <PdfFilePicker
             id="documento-principal-file"
-            type="file"
-            accept="application/pdf,.pdf"
+            labelId="documento-principal-file-label"
             required={documentoPrincipalId === null}
-            aria-invalid={Boolean(errors.archivoPrincipal)}
-            aria-describedby="documento-principal-ayuda documento-principal-error"
-            onChange={(event) =>
-              seleccionarPdfPrincipal(event.currentTarget.files?.[0])
-            }
-            className="block min-h-11 w-full rounded-sm border border-ui-border bg-surface px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-page file:px-3 file:py-1.5 file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            ariaInvalid={Boolean(errors.archivoPrincipal)}
+            ariaDescribedBy="documento-principal-ayuda documento-principal-error"
+            selectedFileName={archivoPrincipal?.name}
+            onChange={seleccionarPdfPrincipal}
           />
           <p id="documento-principal-ayuda" className="text-sm text-foreground/70">
             {documentoPrincipalId !== null
               ? "El archivo existente se conserva si no seleccionás uno nuevo."
-              : "Si seleccionaste un PDF borrador en el paso anterior, ya está disponible como documento principal."}
+              : "Seleccioná un PDF de hasta 20 MB como documento principal."}
           </p>
           {archivoPrincipal ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-ui-border bg-page p-3 text-sm">
@@ -198,7 +242,7 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
               <button
                 type="button"
                 onClick={() => seleccionarPdfPrincipal(undefined)}
-                className="min-h-9 rounded-sm px-2 font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                className="min-h-9 cursor-pointer rounded-sm px-2 font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 Quitar PDF
               </button>
@@ -243,7 +287,7 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                 archivo: null,
               })
             }
-            className="min-h-11 rounded-sm border border-ui-border px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="min-h-11 cursor-pointer rounded-sm border border-ui-border px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             Agregar anexo
           </button>
@@ -287,6 +331,7 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                       label="Tipo de anexo"
                       requiredMark
                       required
+                      className="enabled:cursor-pointer"
                       {...register(`anexos.${index}.tipo`)}
                       aria-invalid={Boolean(anexoError?.tipo)}
                       aria-describedby={
@@ -319,6 +364,7 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                       id={tituloId}
                       label="Título del anexo *"
                       icon={textIcon}
+                      floatingLabel={false}
                       required
                       {...register(`anexos.${index}.titulo`)}
                       aria-invalid={Boolean(anexoError?.titulo)}
@@ -339,23 +385,20 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor={archivoId} className="block text-sm font-medium">
+                  <span id={`${archivoId}-label`} className="block text-sm font-medium">
                     Archivo PDF del anexo <span aria-hidden="true">*</span>
-                  </label>
-                  <input
+                  </span>
+                  <PdfFilePicker
                     id={archivoId}
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    aria-invalid={Boolean(anexoError?.archivo)}
-                    aria-describedby={
+                    labelId={`${archivoId}-label`}
+                    ariaInvalid={Boolean(anexoError?.archivo)}
+                    ariaDescribedBy={
                       anexoError?.archivo
                         ? `${archivoId}-ayuda ${archivoId}-error`
                         : `${archivoId}-ayuda`
                     }
-                    onChange={(event) =>
-                      seleccionarAnexo(index, event.currentTarget.files?.[0])
-                    }
-                    className="block min-h-11 w-full rounded-sm border border-ui-border bg-surface px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-page file:px-3 file:py-1.5 file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    selectedFileName={archivo?.name}
+                    onChange={(file) => seleccionarAnexo(index, file)}
                   />
                   <p id={`${archivoId}-ayuda`} className="text-sm text-foreground/70">
                     Seleccioná un documento en formato PDF.
@@ -385,7 +428,7 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                   <button
                     type="button"
                     onClick={() => remove(index)}
-                    className="min-h-10 rounded-sm px-3 text-sm font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    className="min-h-10 cursor-pointer rounded-sm px-3 text-sm font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   >
                     Quitar anexo {index + 1}
                   </button>
@@ -438,7 +481,9 @@ function Requirement({
       <span
         aria-hidden="true"
         className={`mt-px font-bold ${
-          complete ? "text-brand-text" : "text-foreground/60"
+          complete
+            ? "text-green-800 dark:text-green-300"
+            : "text-red-700 dark:text-red-300"
         }`}
       >
         {complete ? "✓" : "×"}

@@ -10,10 +10,7 @@ import type { UsuarioAutenticado } from "@/types/auth";
 import type { InstitucionFirmante, UnidadAcademica } from "@/types/unidad";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import {
-  isValidPdfFile,
-  type ConvenioFormValues,
-} from "@/components/convenios/form/schema";
+import type { ConvenioFormValues } from "@/components/convenios/form/schema";
 
 type StepDatosBasicosProps = {
   form: UseFormReturn<ConvenioFormValues>;
@@ -35,12 +32,6 @@ const searchIcon = (
   </svg>
 );
 
-function formatFileSize(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
-
 export default function StepDatosBasicos({
   form,
   user,
@@ -50,12 +41,10 @@ export default function StepDatosBasicos({
 }: StepDatosBasicosProps) {
   const [busqueda, setBusqueda] = useState("");
   const {
-    clearErrors,
     control,
     formState: { errors },
     getValues,
     register,
-    setError,
     setValue,
   } = form;
   const claseInstrumento = useWatch({ control, name: "claseInstrumento" });
@@ -64,7 +53,6 @@ export default function StepDatosBasicos({
     control,
     name: "institucionesFirmantes",
   });
-  const archivoPrincipal = useWatch({ control, name: "archivoPrincipal" });
   const unidadAsignada = unidades.find(
     (unidad) => unidad.id_unidad_academica === user.id_unidad,
   );
@@ -108,34 +96,6 @@ export default function StepDatosBasicos({
     }
   }
 
-  function seleccionarPdf(file: File | undefined) {
-    clearErrors("archivoPrincipal");
-    if (!file) {
-      setValue("archivoPrincipal", null, {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-      return;
-    }
-
-    if (!isValidPdfFile(file)) {
-      setValue("archivoPrincipal", null, { shouldDirty: true });
-      setError("archivoPrincipal", {
-        type: "validate",
-        message:
-          file.size > 20 * 1024 * 1024
-            ? "El PDF no puede superar los 20 MB."
-            : "El archivo debe ser un PDF.",
-      });
-      return;
-    }
-
-    setValue("archivoPrincipal", file, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  }
-
   return (
     <section aria-labelledby="form-step-1-title" className="space-y-6">
       <div>
@@ -149,49 +109,6 @@ export default function StepDatosBasicos({
         <p className="mt-1 text-sm text-foreground/70">
           Definí el instrumento y las partes que lo integran.
         </p>
-      </div>
-
-      <div className="space-y-2">
-        <label htmlFor="pdf-borrador" className="block text-sm font-medium">
-          PDF borrador (opcional)
-        </label>
-        <input
-          id="pdf-borrador"
-          type="file"
-          accept="application/pdf,.pdf"
-          aria-invalid={Boolean(errors.archivoPrincipal)}
-          aria-describedby="pdf-borrador-ayuda pdf-borrador-error"
-          onChange={(event) => seleccionarPdf(event.currentTarget.files?.[0])}
-          className="block min-h-11 w-full rounded-sm border border-ui-border bg-surface px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-page file:px-3 file:py-1.5 file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-        />
-        <p id="pdf-borrador-ayuda" className="text-sm text-foreground/70">
-          Si el PDF trae título y asunto en sus propiedades, completaremos esos
-          campos.
-        </p>
-        {/* TODO: Leer los metadatos del PDF para completar título y asunto. */}
-        {archivoPrincipal ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-ui-border bg-page p-3 text-sm">
-            <span className="min-w-0 break-all">
-              {archivoPrincipal.name} · {formatFileSize(archivoPrincipal.size)}
-            </span>
-            <button
-              type="button"
-              onClick={() => seleccionarPdf(undefined)}
-              className="min-h-9 rounded-sm px-2 font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            >
-              Quitar PDF
-            </button>
-          </div>
-        ) : null}
-        {errors.archivoPrincipal ? (
-          <p
-            id="pdf-borrador-error"
-            role="alert"
-            className="text-sm font-medium text-brand-text"
-          >
-            {errors.archivoPrincipal.message}
-          </p>
-        ) : null}
       </div>
 
       <fieldset
@@ -246,6 +163,7 @@ export default function StepDatosBasicos({
             label="Tipo"
             requiredMark
             required
+            className="enabled:cursor-pointer"
             {...register("tipo")}
             aria-invalid={Boolean(errors.tipo)}
             aria-describedby={errors.tipo ? "tipo-error" : undefined}
@@ -265,6 +183,7 @@ export default function StepDatosBasicos({
           <Input
             label="Título *"
             icon={textIcon}
+            floatingLabel={false}
             maxLength={255}
             required
             placeholder="Título del convenio"
@@ -288,6 +207,7 @@ export default function StepDatosBasicos({
             label="Unidad académica"
             requiredMark
             required
+            className="enabled:cursor-pointer"
             value={unidadSeleccionada}
             disabled={user.rol?.nombre === "Gestión"}
             onChange={(event) => seleccionarUnidad(event.currentTarget.value)}
@@ -324,6 +244,7 @@ export default function StepDatosBasicos({
               label="Convenio marco relacionado"
               requiredMark
               required
+              className="enabled:cursor-pointer"
               {...register("idConvenioMarco")}
               aria-invalid={Boolean(errors.idConvenioMarco)}
               aria-describedby={
@@ -394,7 +315,7 @@ export default function StepDatosBasicos({
                   onClick={() =>
                     agregarInstitucion(String(institucion.id_institucion))
                   }
-                  className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+                  className="flex min-h-12 w-full cursor-pointer flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
                 >
                   <span>{institucion.razon_social}</span>
                   {institucion.cuit ? (
@@ -429,7 +350,7 @@ export default function StepDatosBasicos({
                     { shouldDirty: true, shouldValidate: true },
                   )
                 }
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-brand-text hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-brand-text hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <span aria-hidden="true">×</span>
               </button>

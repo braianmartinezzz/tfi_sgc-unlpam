@@ -154,7 +154,12 @@ export default function StepFichaPlazos({ form }: StepFichaPlazosProps) {
         />
       </div>
 
-      <Checkbox label="El convenio incluye cláusula de confidencialidad" {...register("confidencialidad")} />
+      <Checkbox
+        label="El convenio incluye cláusula de confidencialidad"
+        className="cursor-pointer"
+        labelClassName="cursor-pointer"
+        {...register("confidencialidad")}
+      />
 
       <div className="grid gap-5 md:grid-cols-2">
         <div>
@@ -162,6 +167,7 @@ export default function StepFichaPlazos({ form }: StepFichaPlazosProps) {
             label="Fecha de inicio"
             icon={calendarIcon}
             type="date"
+            className="[&::-webkit-calendar-picker-indicator]:cursor-pointer"
             {...fechaInicioRegistration}
             aria-invalid={Boolean(errors.fechaInicio)}
             aria-describedby={errors.fechaInicio ? "inicio-error" : undefined}
@@ -184,6 +190,7 @@ export default function StepFichaPlazos({ form }: StepFichaPlazosProps) {
             label="Fecha de vencimiento"
             icon={calendarIcon}
             type="date"
+            className="[&::-webkit-calendar-picker-indicator]:cursor-pointer"
             min={fechaInicio || undefined}
             {...fechaVencimientoRegistration}
             aria-invalid={Boolean(errors.fechaVencimiento)}

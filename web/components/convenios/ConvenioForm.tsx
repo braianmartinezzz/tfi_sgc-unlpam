@@ -1163,7 +1163,7 @@ export default function ConvenioForm({
                 isEditMode ? `/convenios/${convenioId}` : "/convenios",
               )
             }
-            className="min-h-11 rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            className="min-h-11 enabled:cursor-pointer rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             Cancelar
           </button>
@@ -1174,7 +1174,7 @@ export default function ConvenioForm({
                 type="button"
                 disabled={busy}
                 onClick={() => setStep(currentStep - 1)}
-                className="min-h-11 rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                className="min-h-11 enabled:cursor-pointer rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 Anterior
               </button>
@@ -1184,7 +1184,7 @@ export default function ConvenioForm({
               disabled={busy}
               aria-busy={operation === "saving"}
               onClick={() => void saveAndExit()}
-              className="min-h-11 rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="min-h-11 enabled:cursor-pointer rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {operation === "saving" ? "Guardando..." : "Guardar y salir"}
             </button>
@@ -1193,7 +1193,7 @@ export default function ConvenioForm({
                 type="button"
                 disabled={busy}
                 onClick={() => void goToNextStep()}
-                className="!w-full sm:!w-auto"
+                className="!w-full enabled:cursor-pointer sm:!w-auto"
               >
                 {operation === "validating" ? "Validando..." : "Siguiente"}
               </Button>
@@ -1204,7 +1204,7 @@ export default function ConvenioForm({
                   type="button"
                   disabled={busy}
                   onClick={() => void requestReview()}
-                  className="!w-full sm:!w-auto"
+                  className="!w-full enabled:cursor-pointer sm:!w-auto"
                 >
                   {operation === "validating"
                     ? "Validando..."

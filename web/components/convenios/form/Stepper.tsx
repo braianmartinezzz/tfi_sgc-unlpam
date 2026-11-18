@@ -30,7 +30,7 @@ export default function Stepper({
                 aria-current={isCurrent ? "step" : undefined}
                 disabled={disabled}
                 onClick={() => onStepChange(step)}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-2 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:justify-start sm:px-3 ${
+                className={`flex min-h-11 w-full enabled:cursor-pointer items-center justify-center gap-2 rounded-md border px-2 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:justify-start sm:px-3 ${
                   isCurrent
                     ? "border-brand bg-brand text-white"
                     : "border-ui-border bg-surface text-foreground/70"
