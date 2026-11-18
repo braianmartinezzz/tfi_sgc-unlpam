@@ -10,16 +10,20 @@ import {
   type UseFormReturn,
 } from "react-hook-form";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import ErrorState from "@/components/feedback/ErrorState";
 import StepDatosBasicos from "@/components/convenios/form/StepDatosBasicos";
 import StepDocumentos from "@/components/convenios/form/StepDocumentos";
 import StepFichaPlazos from "@/components/convenios/form/StepFichaPlazos";
 import Stepper from "@/components/convenios/form/Stepper";
 import { convenioFormSchema, type ConvenioFormValues } from "@/components/convenios/form/schema";
 import { useAuth } from "@/context/AuthContext";
+import { canManageDraftConvenio } from "@/lib/permissions";
 import { ApiError } from "@/services/api-client";
 import * as convenios from "@/services/convenios";
 import * as institucionesFirmantes from "@/services/instituciones-firmantes";
 import * as unidadesAcademicas from "@/services/unidades";
+import type { Convenio } from "@/types/convenio";
+import type { DocumentoListResponse } from "@/types/documento";
 import type { InstitucionFirmante, UnidadAcademica } from "@/types/unidad";
 import Button from "@/components/ui/Button";
 
@@ -35,12 +39,17 @@ type UploadCandidate = {
   clientId: string;
   tipo: string;
   titulo: string;
-  archivo: File;
+  archivo: File | null;
+  documentoId: number | null;
   fileField: FieldPath<ConvenioFormValues>;
   titleField: FieldPath<ConvenioFormValues>;
 };
 type UploadedDocument = {
   id: number;
+};
+type EditLoadError = {
+  message: string;
+  status?: number;
 };
 
 class DocumentSyncError extends Error {
@@ -105,6 +114,7 @@ const apiFieldMap: Record<string, FieldPath<ConvenioFormValues>> = {
 };
 
 const defaultValues: ConvenioFormValues = {
+  editMode: false,
   claseInstrumento: "",
   tipo: "",
   titulo: "",
@@ -112,6 +122,8 @@ const defaultValues: ConvenioFormValues = {
   idConvenioMarco: "",
   institucionesFirmantes: [],
   archivoPrincipal: null,
+  documentoPrincipalId: null,
+  nombreArchivoPrincipal: null,
   expediente: "",
   resolucionConsejoSuperior: "",
   objeto: "",
@@ -128,6 +140,93 @@ const defaultValues: ConvenioFormValues = {
   tituloDocumentoPrincipal: "",
   anexos: [],
 };
+
+function dateInputValue(value: string | null | undefined): string {
+  return value ? value.slice(0, 10) : "";
+}
+
+function mapEditValues(
+  convenio: Convenio,
+  documents: DocumentoListResponse,
+): {
+  values: ConvenioFormValues;
+  uploadedDocuments: Map<string, UploadedDocument>;
+} {
+  const principal = documents.data.find(
+    ({ documento }) => documento.tipo === "Convenio",
+  );
+  const annexes = documents.data.filter(
+    ({ documento }) => documento.tipo !== "Convenio",
+  );
+  const uploadedDocuments = new Map<string, UploadedDocument>();
+
+  if (principal) {
+    uploadedDocuments.set("principal", {
+      id: principal.documento.id_documento,
+    });
+  }
+
+  const formAnnexes = annexes.map(({ documento, ultima_version }) => {
+    const clientId = crypto.randomUUID();
+    uploadedDocuments.set(clientId, { id: documento.id_documento });
+    return {
+      clientId,
+      documentoId: documento.id_documento,
+      nombreArchivo: ultima_version?.nombre_archivo ?? null,
+      tipo: documento.tipo,
+      titulo: documento.titulo,
+      archivo: null,
+    };
+  });
+  const instrumento = convenio.instrumento;
+  const tipo =
+    convenio.tipo === "Colaboración" || convenio.tipo === "Pasantía"
+      ? convenio.tipo
+      : "";
+
+  return {
+    uploadedDocuments,
+    values: {
+      ...defaultValues,
+      editMode: true,
+      claseInstrumento:
+        convenio.marco != null
+          ? "Marco"
+          : convenio.especifico != null
+            ? "Específico"
+            : "",
+      tipo,
+      titulo: instrumento?.titulo ?? "",
+      idUnidadAcademica: String(convenio.id_unidad_academica ?? ""),
+      idConvenioMarco:
+        convenio.especifico != null
+          ? String(convenio.especifico.id_convenio_marco)
+          : "",
+      institucionesFirmantes:
+        convenio.instituciones_firmantes?.map(({ pivot }) =>
+          String(pivot.id_institucion),
+        ) ?? [],
+      expediente: instrumento?.expediente ?? "",
+      resolucionConsejoSuperior: instrumento?.resolucion ?? "",
+      objeto: instrumento?.objeto ?? "",
+      alcance: convenio.alcance ?? "",
+      obligaciones: convenio.obligaciones ?? "",
+      marcoLegal: convenio.marco_legal ?? "",
+      condicionesRescision: convenio.condiciones_recision ?? "",
+      condicionRenovacion: convenio.condicion_renovacion ?? "",
+      confidencialidad: convenio.confidencialidad ?? false,
+      fechaInicio: dateInputValue(instrumento?.inicio),
+      fechaVencimiento: dateInputValue(instrumento?.vencimiento),
+      diasPreaviso: instrumento?.dias_preaviso ?? "",
+      notas: instrumento?.notas ?? "",
+      tituloDocumentoPrincipal: principal?.documento.titulo ?? "",
+      documentoPrincipalId: principal?.documento.id_documento ?? null,
+      nombreArchivoPrincipal:
+        principal?.ultima_version?.nombre_archivo ?? null,
+      anexos: formAnnexes,
+    },
+  };
+}
 
 function isManagementRole(role: string | undefined): boolean {
   return role === "Gestión" || role === "Administración";
@@ -212,7 +311,10 @@ function toCreateInput(values: ConvenioFormValues): Parameters<
     es_marco: isMarco,
     ...(isMarco ? {} : { id_convenio_marco: Number(values.idConvenioMarco) }),
     instituciones_ids: values.institucionesFirmantes.map(Number),
-    dias_preaviso: values.diasPreaviso,
+    dias_preaviso:
+      typeof values.diasPreaviso === "number"
+        ? values.diasPreaviso
+        : 30,
   };
 }
 
@@ -227,7 +329,8 @@ function toUpdateInput(values: ConvenioFormValues): Parameters<
     resolucion: values.resolucionConsejoSuperior.trim() || null,
     inicio: values.fechaInicio || null,
     vencimiento: values.fechaVencimiento || null,
-    dias_preaviso: values.diasPreaviso,
+    dias_preaviso:
+      typeof values.diasPreaviso === "number" ? values.diasPreaviso : null,
     notas: values.notas.trim() || null,
     tipo: values.tipo,
     alcance: values.alcance.trim() || null,
@@ -251,24 +354,26 @@ async function fileHash(file: File): Promise<string> {
 
 function getDocumentCandidates(values: ConvenioFormValues): UploadCandidate[] {
   const candidates: UploadCandidate[] = [];
-  if (values.archivoPrincipal) {
+  if (values.archivoPrincipal || values.documentoPrincipalId !== null) {
     candidates.push({
       clientId: "principal",
       tipo: "Convenio",
       titulo: values.tituloDocumentoPrincipal.trim(),
       archivo: values.archivoPrincipal,
+      documentoId: values.documentoPrincipalId,
       fileField: "archivoPrincipal",
       titleField: "tituloDocumentoPrincipal",
     });
   }
 
   values.anexos.forEach((anexo, index) => {
-    if (!anexo.archivo) return;
+    if (!anexo.archivo && anexo.documentoId === null) return;
     candidates.push({
       clientId: anexo.clientId,
       tipo: anexo.tipo,
       titulo: anexo.titulo.trim(),
       archivo: anexo.archivo,
+      documentoId: anexo.documentoId,
       fileField: `anexos.${index}.archivo`,
       titleField: `anexos.${index}.titulo`,
     });
@@ -280,17 +385,15 @@ function getSelectedDocumentFields(
   values: ConvenioFormValues,
 ): FieldPath<ConvenioFormValues>[] {
   const fields: FieldPath<ConvenioFormValues>[] = [];
-  if (values.archivoPrincipal) {
-    fields.push("tituloDocumentoPrincipal", "archivoPrincipal");
+  if (values.archivoPrincipal || values.documentoPrincipalId !== null) {
+    fields.push("tituloDocumentoPrincipal");
+    if (values.archivoPrincipal) fields.push("archivoPrincipal");
   }
 
   values.anexos.forEach((anexo, index) => {
-    if (!anexo.archivo) return;
-    fields.push(
-      `anexos.${index}.tipo`,
-      `anexos.${index}.titulo`,
-      `anexos.${index}.archivo`,
-    );
+    if (!anexo.archivo && anexo.documentoId === null) return;
+    fields.push(`anexos.${index}.tipo`, `anexos.${index}.titulo`);
+    if (anexo.archivo) fields.push(`anexos.${index}.archivo`);
   });
   return fields;
 }
@@ -299,16 +402,22 @@ async function waitForSuccessNotice(): Promise<void> {
   await new Promise<void>((resolve) => window.setTimeout(resolve, 900));
 }
 
-export default function ConvenioForm() {
+export default function ConvenioForm({
+  convenioId,
+}: {
+  convenioId?: number;
+}) {
   const router = useRouter();
   const { status: authStatus, user } = useAuth();
   const sendButtonRef = useRef<HTMLButtonElement>(null);
   const previousStep = useRef<StepNumber>(1);
   const processingRef = useRef(false);
   const creationUncertainRef = useRef(false);
-  const instrumentIdRef = useRef<number | null>(null);
+  const instrumentIdRef = useRef<number | null>(convenioId ?? null);
   const uploadedDocumentsRef = useRef(new Map<string, UploadedDocument>());
-  const [instrumentId, setInstrumentId] = useState<number | null>(null);
+  const [instrumentId, setInstrumentId] = useState<number | null>(
+    convenioId ?? null,
+  );
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
   const [highestStep, setHighestStep] = useState<StepNumber>(1);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -318,6 +427,14 @@ export default function ConvenioForm() {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsInitialized, setOptionsInitialized] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingExisting, setLoadingExisting] = useState(
+    convenioId !== undefined,
+  );
+  const [editLoaded, setEditLoaded] = useState(convenioId === undefined);
+  const [editDenied, setEditDenied] = useState(false);
+  const [editLoadError, setEditLoadError] = useState<EditLoadError | null>(
+    null,
+  );
   const [options, setOptions] = useState<FormOptions | null>(null);
   const form = useForm<ConvenioFormValues>({
     resolver: zodResolver(convenioFormSchema),
@@ -343,8 +460,13 @@ export default function ConvenioForm() {
     name: "institucionesFirmantes",
   });
   const archivoPrincipal = useWatch({ control, name: "archivoPrincipal" });
+  const documentoPrincipalId = useWatch({
+    control,
+    name: "documentoPrincipalId",
+  });
   const role = user?.rol?.nombre;
   const canManage = isManagementRole(role);
+  const isEditMode = convenioId !== undefined;
   const busy = operation !== null;
 
   const fetchOptions = useCallback(async (): Promise<FormOptions> => {
@@ -389,18 +511,20 @@ export default function ConvenioForm() {
         return;
       }
 
-      reset({
-        ...defaultValues,
-        idUnidadAcademica: unitId,
-        institucionesFirmantes:
-          isGestion && institutionId !== undefined
-            ? [String(institutionId)]
-            : [],
-      });
+      if (!isEditMode) {
+        reset({
+          ...defaultValues,
+          idUnidadAcademica: unitId,
+          institucionesFirmantes:
+            isGestion && institutionId !== undefined
+              ? [String(institutionId)]
+              : [],
+        });
+      }
       setLoadError(null);
       setOptionsInitialized(true);
     },
-    [reset, user],
+    [isEditMode, reset, user],
   );
 
   const loadOptions = useCallback(async () => {
@@ -414,6 +538,75 @@ export default function ConvenioForm() {
       setLoadingOptions(false);
     }
   }, [fetchOptions, initializeOptions]);
+
+  const loadEditData = useCallback(async () => {
+    if (
+      convenioId === undefined ||
+      !Number.isSafeInteger(convenioId) ||
+      convenioId <= 0
+    ) {
+      return;
+    }
+
+    try {
+      const convenio = await convenios.get(convenioId);
+      if (
+        !canManageDraftConvenio(
+          role ?? null,
+          convenio.instrumento?.estado ?? "",
+        )
+      ) {
+        setEditDenied(true);
+        return;
+      }
+
+      const documents = await convenios.listDocuments(convenioId);
+      const mapped = mapEditValues(convenio, documents);
+      reset(mapped.values);
+      uploadedDocumentsRef.current = mapped.uploadedDocuments;
+      instrumentIdRef.current = convenioId;
+      setInstrumentId(convenioId);
+      setEditLoaded(true);
+    } catch (error) {
+      setEditLoadError({
+        message:
+          error instanceof ApiError && error.status === 403
+            ? "No tenés permisos para consultar o editar este convenio."
+            : error instanceof ApiError && error.status === 404
+              ? "No se encontró el convenio solicitado."
+              : getApiMessage(error),
+        status: error instanceof ApiError ? error.status : undefined,
+      });
+    } finally {
+      setLoadingExisting(false);
+    }
+  }, [convenioId, reset, role]);
+
+  useEffect(() => {
+    if (
+      isEditMode &&
+      authStatus === "authenticated" &&
+      user &&
+      canManage &&
+      Number.isSafeInteger(convenioId) &&
+      convenioId > 0 &&
+      optionsInitialized &&
+      !loadingOptions &&
+      options
+    ) {
+      void Promise.resolve().then(loadEditData);
+    }
+  }, [
+    authStatus,
+    canManage,
+    convenioId,
+    isEditMode,
+    loadEditData,
+    loadingOptions,
+    options,
+    optionsInitialized,
+    user,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -448,7 +641,7 @@ export default function ConvenioForm() {
     claseInstrumento !== "" &&
     institucionesSeleccionadas.length >= 2 &&
     (claseInstrumento !== "Específico" || idConvenioMarco !== "") &&
-    archivoPrincipal !== null;
+    (archivoPrincipal !== null || documentoPrincipalId !== null);
 
   function setStep(step: number) {
     if (
@@ -482,6 +675,7 @@ export default function ConvenioForm() {
   }
 
   async function ensureInstrument(values: ConvenioFormValues): Promise<number> {
+    if (convenioId !== undefined) return convenioId;
     if (instrumentIdRef.current !== null) return instrumentIdRef.current;
     if (creationUncertainRef.current) {
       throw new ApiError(
@@ -520,7 +714,12 @@ export default function ConvenioForm() {
 
   async function saveDraft(values: ConvenioFormValues): Promise<number> {
     const id = await ensureInstrument(values);
-    setNotice({ kind: "info", message: "Guardando la ficha del borrador..." });
+    setNotice({
+      kind: "info",
+      message: isEditMode
+        ? "Guardando los cambios del convenio..."
+        : "Guardando la ficha del borrador...",
+    });
     await convenios.update(id, toUpdateInput(values));
     return id;
   }
@@ -548,10 +747,12 @@ export default function ConvenioForm() {
       await synchronizeDocuments(id, values);
       setNotice({
         kind: "success",
-        message: "Borrador guardado correctamente. Volviendo a convenios...",
+        message: isEditMode
+          ? "Cambios guardados correctamente. Volviendo al detalle..."
+          : "Borrador guardado correctamente. Volviendo a convenios...",
       });
       await waitForSuccessNotice();
-      router.push("/convenios");
+      router.push(isEditMode ? `/convenios/${id}` : "/convenios");
     } catch (error) {
       const documentError =
         error instanceof DocumentSyncError ? error.originalError : error;
@@ -594,7 +795,9 @@ export default function ConvenioForm() {
         kind: "info",
         message: `Verificando "${candidate.titulo}"...`,
       });
-      const hash = await fileHash(candidate.archivo);
+      const hash = candidate.archivo
+        ? await fileHash(candidate.archivo)
+        : null;
       const tracked = uploadedDocumentsRef.current.get(candidate.clientId);
       const trackedDocument = tracked
         ? serverDocuments.find(
@@ -606,24 +809,24 @@ export default function ConvenioForm() {
         uploadedDocumentsRef.current.delete(candidate.clientId);
       }
 
-      const matchingDocument =
+      const existingDocument =
         trackedDocument ??
-        serverDocuments.find(
-          ({ documento, ultima_version }) =>
-            !claimedIds.has(documento.id_documento) &&
-            documento.tipo === candidate.tipo &&
-            documento.titulo === candidate.titulo &&
-            ultima_version?.hash_sha256.toLowerCase() === hash,
-        );
+        (candidate.documentoId === null
+          ? undefined
+          : serverDocuments.find(
+              ({ documento }) =>
+                documento.id_documento === candidate.documentoId,
+            ));
 
-      if (matchingDocument) {
-        const documentId = matchingDocument.documento.id_documento;
+      if (existingDocument) {
+        const documentId = existingDocument.documento.id_documento;
         const currentHash =
-          matchingDocument.ultima_version?.hash_sha256.toLowerCase();
-        const sameFile = currentHash === hash;
+          existingDocument.ultima_version?.hash_sha256.toLowerCase();
+        const sameFile =
+          candidate.archivo === null || currentHash === hash;
         const sameDetails =
-          matchingDocument.documento.tipo === candidate.tipo &&
-          matchingDocument.documento.titulo === candidate.titulo;
+          existingDocument.documento.tipo === candidate.tipo &&
+          existingDocument.documento.titulo === candidate.titulo;
 
         if (!sameFile || !sameDetails) {
           setNotice({
@@ -636,7 +839,7 @@ export default function ConvenioForm() {
                 tipo: candidate.tipo,
                 titulo: candidate.titulo,
               });
-            } else {
+            } else if (candidate.archivo) {
               await convenios.updateDocument(documentId, {
                 tipo: candidate.tipo,
                 titulo: candidate.titulo,
@@ -649,6 +852,32 @@ export default function ConvenioForm() {
           }
         }
 
+        claimedIds.add(documentId);
+        uploadedDocumentsRef.current.set(candidate.clientId, { id: documentId });
+        continue;
+      }
+
+      if (candidate.documentoId !== null && candidate.archivo === null) {
+        throw new DocumentSyncError(
+          candidate.titulo,
+          new ApiError(
+            404,
+            "El documento existente ya no está disponible. Seleccioná un archivo PDF para cargarlo nuevamente.",
+          ),
+        );
+      }
+
+      if (candidate.archivo === null || hash === null) continue;
+
+      const matchingDocument = serverDocuments.find(
+        ({ documento, ultima_version }) =>
+          !claimedIds.has(documento.id_documento) &&
+          documento.tipo === candidate.tipo &&
+          documento.titulo === candidate.titulo &&
+          ultima_version?.hash_sha256.toLowerCase() === hash,
+      );
+      if (matchingDocument) {
+        const documentId = matchingDocument.documento.id_documento;
         claimedIds.add(documentId);
         uploadedDocumentsRef.current.set(candidate.clientId, { id: documentId });
         continue;
@@ -742,7 +971,10 @@ export default function ConvenioForm() {
         });
         requirementsValid = false;
       }
-      if (!values.archivoPrincipal) {
+      if (
+        !values.archivoPrincipal &&
+        values.documentoPrincipalId === null
+      ) {
         setError("archivoPrincipal", {
           type: "required",
           message: "El documento principal PDF es obligatorio.",
@@ -750,7 +982,7 @@ export default function ConvenioForm() {
         requirementsValid = false;
       }
       values.anexos.forEach((anexo, index) => {
-        if (!anexo.archivo) {
+        if (!anexo.archivo && anexo.documentoId === null) {
           setError(`anexos.${index}.archivo`, {
             type: "required",
             message: "Adjuntá un archivo PDF para este anexo.",
@@ -819,10 +1051,19 @@ export default function ConvenioForm() {
 
   if (!user || !canManage) {
     return (
-      <p role="alert" className="rounded-md border border-ui-border bg-surface p-4">
-        Solo los usuarios de Gestión o Administración pueden crear convenios.
-      </p>
+      <ErrorState
+        message={`Solo los usuarios de Gestión o Administración pueden ${
+          isEditMode ? "editar" : "crear"
+        } convenios.`}
+      />
     );
+  }
+
+  if (
+    isEditMode &&
+    (!Number.isSafeInteger(convenioId) || convenioId <= 0)
+  ) {
+    return <ErrorState message="No se encontró el convenio solicitado." />;
   }
 
   if (loadError || (!loadingOptions && (!options || !optionsInitialized))) {
@@ -840,6 +1081,57 @@ export default function ConvenioForm() {
     return (
       <p role="status" aria-live="polite" className="rounded-md border border-ui-border bg-surface p-4">
         Cargando unidades, instituciones y convenios marco...
+      </p>
+    );
+  }
+
+  if (isEditMode && loadingExisting) {
+    return (
+      <p role="status" aria-live="polite" className="rounded-md border border-ui-border bg-surface p-4">
+        Cargando el convenio y sus documentos...
+      </p>
+    );
+  }
+
+  if (isEditMode && editDenied) {
+    return (
+      <div className="space-y-3 rounded-md border border-ui-border bg-surface p-4">
+        <ErrorState message="Solo se pueden editar convenios en estado Borrador." />
+        <Button type="button" onClick={() => router.push(`/convenios/${convenioId}`)}>
+          Volver al convenio
+        </Button>
+      </div>
+    );
+  }
+
+  if (isEditMode && editLoadError) {
+    return (
+      <div className="space-y-3 rounded-md border border-ui-border bg-surface p-4">
+        <ErrorState message={editLoadError.message} />
+        {editLoadError.status !== 403 && editLoadError.status !== 404 ? (
+          <Button
+            type="button"
+            onClick={() => {
+              setLoadingExisting(true);
+              setEditLoadError(null);
+              setEditDenied(false);
+              void loadEditData();
+            }}
+          >
+            Reintentar
+          </Button>
+        ) : null}
+        <Button type="button" onClick={() => router.push("/convenios")}>
+          Volver a convenios
+        </Button>
+      </div>
+    );
+  }
+
+  if (isEditMode && !editLoaded) {
+    return (
+      <p role="status" aria-live="polite" className="rounded-md border border-ui-border bg-surface p-4">
+        Cargando el convenio y sus documentos...
       </p>
     );
   }
@@ -873,8 +1165,9 @@ export default function ConvenioForm() {
             ) : null}
             {instrumentId ? (
               <p className="text-sm text-foreground/70">
-                Borrador #{instrumentId}. Los cambios se guardarán sobre este
-                convenio; no se crearán registros adicionales.
+                {isEditMode ? "Convenio" : "Borrador"} #{instrumentId}. Los
+                cambios se guardarán sobre este convenio; no se crearán
+                registros adicionales.
               </p>
             ) : null}
 
@@ -896,7 +1189,11 @@ export default function ConvenioForm() {
           <button
             type="button"
             disabled={busy}
-            onClick={() => router.push("/convenios")}
+            onClick={() =>
+              router.push(
+                isEditMode ? `/convenios/${convenioId}` : "/convenios",
+              )
+            }
             className="min-h-11 rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             Cancelar

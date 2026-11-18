@@ -24,11 +24,13 @@ export interface ConvenioInstrumento {
 
 export interface ConvenioMarco {
   id_instrumento: number;
+  instrumento?: ConvenioInstrumento | null;
 }
 
 export interface ConvenioEspecifico {
   id_instrumento: number;
   id_convenio_marco: number;
+  marco?: ConvenioMarco | null;
 }
 
 export interface HistorialEstado {
@@ -39,6 +41,10 @@ export interface HistorialEstado {
   motivo: string | null;
   id_instrumento: number;
   id_usuario: number;
+  usuario?: {
+    id_usuario: number;
+    nombre: string;
+  } | null;
 }
 
 export interface Convenio {

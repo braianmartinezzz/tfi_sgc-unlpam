@@ -21,11 +21,12 @@ const optionalPdfSchema = z.custom<File | null>(
 
 const anexoSchema = z.object({
   clientId: z.string().uuid(),
-  tipo: z.enum([
-    "Acta de aprobación",
-    "Documentación de la parte externa",
-    "Otro",
-  ]),
+  documentoId: z.number().int().positive().nullable(),
+  nombreArchivo: z.string().nullable(),
+  tipo: z
+    .string()
+    .min(1, "Seleccioná el tipo de anexo.")
+    .max(50, "El tipo de anexo no puede superar los 50 caracteres."),
   titulo: z
     .string()
     .trim()
@@ -36,6 +37,7 @@ const anexoSchema = z.object({
 
 export const convenioFormSchema = z
   .object({
+    editMode: z.boolean(),
     claseInstrumento: z.enum(["", "Marco", "Específico"]),
     tipo: z.enum(["", "Colaboración", "Pasantía"]),
     titulo: z
@@ -49,6 +51,8 @@ export const convenioFormSchema = z
       .array(z.string())
       .min(1, "Seleccioná al menos una institución firmante."),
     archivoPrincipal: optionalPdfSchema,
+    documentoPrincipalId: z.number().int().positive().nullable(),
+    nombreArchivoPrincipal: z.string().nullable(),
     expediente: z
       .string()
       .max(100, "El expediente no puede superar los 100 caracteres."),
@@ -64,10 +68,13 @@ export const convenioFormSchema = z
     confidencialidad: z.boolean(),
     fechaInicio: z.string(),
     fechaVencimiento: z.string(),
-    diasPreaviso: z
-      .number()
-      .int("Ingresá una cantidad entera de días.")
-      .min(0, "Los días de preaviso no pueden ser negativos."),
+    diasPreaviso: z.union([
+      z.literal(""),
+      z
+        .number()
+        .int("Ingresá una cantidad entera de días.")
+        .min(0, "Los días de preaviso no pueden ser negativos."),
+    ]),
     notas: z.string(),
     tituloDocumentoPrincipal: z
       .string()
@@ -80,6 +87,14 @@ export const convenioFormSchema = z
     anexos: z.array(anexoSchema),
   })
   .superRefine((values, context) => {
+    if (!values.editMode && values.diasPreaviso === "") {
+      context.addIssue({
+        code: "custom",
+        path: ["diasPreaviso"],
+        message: "Ingresá una cantidad entera de días.",
+      });
+    }
+
     if (values.claseInstrumento === "") {
       context.addIssue({
         code: "custom",

@@ -4,6 +4,18 @@ export interface InstitucionFirmante {
   cuit: string | null;
   domicilio_legal: string | null;
   tipo_institucion: string | null;
+  representantes?: RepresentanteInstitucion[];
+}
+
+export interface RepresentanteInstitucion {
+  id_persona: number;
+  id_institucion: number;
+  cargo: string | null;
+  persona?: {
+    id_persona: number;
+    nombre: string;
+    apellido: string;
+  } | null;
 }
 
 export interface UnidadAcademica {

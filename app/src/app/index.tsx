@@ -14,7 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_URL } from '@/constants/api';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getToken, setToken } from '@/lib/auth-storage';
 
@@ -59,25 +58,22 @@ export default function LoginScreen() {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         signal: controller.signal,
-        // Ojo: el backend espera "mail", no "email"
         body: JSON.stringify({ mail: mail.trim(), password }),
       });
       const data = await res.json();
 
       if (!res.ok) {
-        // 401: credenciales inválidas | 422: datos inválidos (data.errors)
-        const firstFieldError = data?.errors ? Object.values<string[]>(data.errors)[0]?.[0] : null;
+        const firstFieldError = data?.errors
+          ? Object.values<string[]>(data.errors)[0]?.[0]
+          : null;
         setError(firstFieldError ?? data?.message ?? 'No se pudo iniciar sesión.');
         return;
       }
 
-      // data.access_token -> token Bearer para el resto de los endpoints
-      // data.user         -> datos del usuario (rol, unidad académica, etc.)
       await setToken(data.access_token);
-      console.log('Login OK', data.user);
       router.replace('/dashboard');
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+    } catch (loginError) {
+      if (loginError instanceof Error && loginError.name === 'AbortError') {
         setError(`No se pudo conectar con el servidor (${API_URL}). Verificá que Laravel esté levantado.`);
         return;
       }
@@ -89,102 +85,142 @@ export default function LoginScreen() {
     }
   }
 
+  const isDark = theme.background === '#000000';
+  const surface = isDark ? '#1c1d22' : '#ffffff';
+  const border = isDark ? '#454751' : '#d3d5de';
+  const page = isDark ? '#17181e' : '#f1f0f5';
+  const brandText = isDark ? '#FF8A8A' : '#C52D34';
+  const brand = '#D13B3B';
+
   const inputStyle = [
     styles.input,
-    { backgroundColor: theme.backgroundElement, color: theme.text },
+    { backgroundColor: surface, borderColor: border, color: theme.text },
   ];
 
   if (checkingSession) {
     return (
-      <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
-          <ActivityIndicator size="large" color="#208AEF" />
+      <ThemedView style={[styles.container, { backgroundColor: page }]}>
+        <SafeAreaView style={styles.safeAreaCentered}>
+          <ActivityIndicator size="large" color={brand} />
         </SafeAreaView>
       </ThemedView>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, { backgroundColor: page }]}>
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.form}>
-          <View style={styles.header}>
-            <View style={styles.brandContainer}>
-              <View style={styles.brandAccent} />
-              <ThemedText type="title" style={styles.brandText}>
-                UNLPam
-              </ThemedText>
-              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.brandSubtext}>
-                Sistema de Gestión de Convenios
-              </ThemedText>
-            </View>
-            <ThemedText type="subtitle">Iniciar sesión</ThemedText>
-          </View>
+          style={styles.centered}>
+          <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
+            <View style={[styles.brandLine, { backgroundColor: brand }]} />
 
-          <View style={styles.field}>
-            <ThemedText type="smallBold">Correo</ThemedText>
-            <TextInput
-              style={inputStyle}
-              value={mail}
-              onChangeText={setMail}
-              placeholder="usuario@unlpam.edu.ar"
-              placeholderTextColor={theme.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              textContentType="emailAddress"
-              autoComplete="email"
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <ThemedText type="smallBold">Contraseña</ThemedText>
-            <View>
-              <TextInput
-                style={[inputStyle, styles.passwordInput]}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                placeholderTextColor={theme.textSecondary}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                textContentType="password"
-                autoComplete="password"
-                onSubmitEditing={handleLogin}
-                returnKeyType="go"
-                editable={!loading}
-              />
-              <Pressable style={styles.toggle} onPress={() => setShowPassword((v) => !v)}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {showPassword ? 'Ocultar' : 'Mostrar'}
+            <View style={styles.cardContent}>
+              <View style={styles.header}>
+                <ThemedText style={[styles.brandText, { color: brandText }]}>UNLPam</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.brandSubtext}>
+                  Sistema de Gestión de Convenios
                 </ThemedText>
-              </Pressable>
+
+                <ThemedText style={[styles.systemTitle, { color: theme.text }]}>
+                  Sistema de Gestión de Convenios
+                </ThemedText>
+                <ThemedText style={[styles.loginTitle, { color: theme.text }]}>
+                  Iniciar Sesión
+                </ThemedText>
+              </View>
+
+              <View style={styles.formFields}>
+                <View style={styles.field}>
+                  <ThemedText type="smallBold" style={styles.label}>Correo Electrónico</ThemedText>
+                  <TextInput
+                    style={inputStyle}
+                    value={mail}
+                    onChangeText={setMail}
+                    placeholder="nombre@unlpam.edu.ar"
+                    placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    autoComplete="email"
+                    editable={!loading}
+                  />
+                </View>
+
+                <View style={styles.field}>
+                  <ThemedText type="smallBold" style={styles.label}>Contraseña</ThemedText>
+                  <View>
+                    <TextInput
+                      style={[inputStyle, styles.passwordInput]}
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="••••••••"
+                      placeholderTextColor={theme.textSecondary}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      textContentType="password"
+                      autoComplete="password"
+                      onSubmitEditing={handleLogin}
+                      returnKeyType="go"
+                      editable={!loading}
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      style={styles.toggle}
+                      onPress={() => setShowPassword((visible) => !visible)}>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {showPassword ? 'Ocultar' : 'Mostrar'}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {error && (
+                  <ThemedText type="small" style={styles.error}>
+                    {error}
+                  </ThemedText>
+                )}
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleLogin}
+                  disabled={!canSubmit}
+                  style={({ pressed }) => [
+                    styles.button,
+                    { backgroundColor: brand },
+                    (!canSubmit || pressed) && styles.buttonDim,
+                  ]}>
+                  {loading ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <ThemedText style={styles.buttonText}>Iniciar Sesión</ThemedText>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.forgotButton}
+                  onPress={() => setError('La recuperación de contraseña estará disponible próximamente.') }>
+                  <ThemedText style={[styles.forgotText, { color: brandText }]}>
+                    Olvidé mi contraseña
+                  </ThemedText>
+                </Pressable>
+              </View>
             </View>
           </View>
 
-          {error && (
-            <ThemedText type="small" style={styles.error}>
-              {error}
+          <View style={styles.footer}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.footerText}>
+              Acceso exclusivo para personal autorizado.
             </ThemedText>
-          )}
-
-          <Pressable
-            onPress={handleLogin}
-            disabled={!canSubmit}
-            style={({ pressed }) => [
-              styles.button,
-              (!canSubmit || pressed) && styles.buttonDim,
-            ]}>
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <ThemedText style={styles.buttonText}>Ingresar</ThemedText>
-            )}
-          </Pressable>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.footerText}>
+              UNLPam - Facultad de Ingeniería, 2026.
+            </ThemedText>
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </ThemedView>
@@ -193,56 +229,123 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center' },
+  safeAreaCentered: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   safeArea: {
     flex: 1,
     width: '100%',
-    maxWidth: MaxContentWidth,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.four,
+    maxWidth: 420,
   },
-  form: { gap: Spacing.three },
-  header: { gap: Spacing.one, marginBottom: Spacing.three, alignItems: 'center' },
-  brandContainer: { alignItems: 'center', gap: Spacing.one },
-  brandAccent: {
-    width: 56,
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+  card: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 6,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  brandLine: {
     height: 5,
-    borderRadius: 999,
-    backgroundColor: '#208AEF',
+    width: '100%',
+  },
+  cardContent: {
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 32,
+  },
+  header: {
+    alignItems: 'center',
   },
   brandText: {
     fontSize: 42,
-    lineHeight: 48,
+    lineHeight: 46,
     fontWeight: '800',
     letterSpacing: -1,
     textAlign: 'center',
   },
   brandSubtext: {
+    marginTop: 4,
     textAlign: 'center',
   },
-  field: { gap: Spacing.two },
+  systemTitle: {
+    marginTop: 24,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  loginTitle: {
+    marginTop: 4,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  formFields: {
+    marginTop: 24,
+    gap: 12,
+  },
+  field: { gap: 4 },
+  label: { lineHeight: 20 },
   input: {
     height: 48,
-    borderRadius: 12,
-    paddingHorizontal: Spacing.three,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 14,
     fontSize: 16,
   },
-  passwordInput: { paddingRight: 90 },
+  passwordInput: { paddingRight: 86 },
   toggle: {
     position: 'absolute',
-    right: Spacing.three,
+    right: 12,
     top: 0,
     bottom: 0,
     justifyContent: 'center',
   },
-  error: { color: '#D93025' },
+  error: {
+    color: '#D93025',
+    textAlign: 'center',
+  },
   button: {
     height: 48,
-    borderRadius: 12,
-    backgroundColor: '#208AEF',
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.two,
+    marginTop: 8,
   },
-  buttonDim: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '600' },
+  buttonDim: { opacity: 0.65 },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+  },
+  forgotButton: {
+    alignItems: 'center',
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  forgotText: {
+    fontSize: 14,
+  },
+  footer: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  footerText: {
+    textAlign: 'center',
+  },
 });
