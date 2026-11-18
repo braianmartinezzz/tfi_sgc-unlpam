@@ -90,6 +90,15 @@ const stepFields: Record<StepNumber, FieldPath<ConvenioFormValues>[]> = {
   3: ["tituloDocumentoPrincipal", "archivoPrincipal", "anexos"],
 };
 
+const draftFields: FieldPath<ConvenioFormValues>[] = [
+  ...stepFields[1],
+  ...stepFields[2],
+  ...stepFields[3].filter(
+    (field) =>
+      field !== "tituloDocumentoPrincipal" && field !== "archivoPrincipal",
+  ),
+];
+
 const apiFieldMap: Record<string, FieldPath<ConvenioFormValues>> = {
   titulo: "titulo",
   objeto: "objeto",
@@ -699,7 +708,7 @@ export default function ConvenioForm({
     setNotice(null);
     clearErrors();
     try {
-      if (!(await trigger())) {
+      if (!(await trigger(draftFields))) {
         setCurrentStep(getFirstStepWithErrors(form) ?? 1);
         return;
       }
@@ -787,9 +796,14 @@ export default function ConvenioForm({
           existingDocument.ultima_version?.hash_sha256.toLowerCase();
         const sameFile =
           candidate.archivo === null || currentHash === hash;
+        const keepExistingPrincipalTitle =
+          candidate.titleField === "tituloDocumentoPrincipal" &&
+          candidate.titulo === "" &&
+          candidate.archivo === null;
         const sameDetails =
           existingDocument.documento.tipo === candidate.tipo &&
-          existingDocument.documento.titulo === candidate.titulo;
+          (existingDocument.documento.titulo === candidate.titulo ||
+            keepExistingPrincipalTitle);
 
         if (!sameFile || !sameDetails) {
           setNotice({
