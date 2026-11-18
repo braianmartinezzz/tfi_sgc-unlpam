@@ -12,9 +12,11 @@ function proximamente(titulo: string, detalle?: string): Href {
 }
 
 export const Destinos = {
-  buscarConvenios: (texto: string): Href =>
-    proximamente('Búsqueda de convenios', texto ? `Texto buscado: "${texto}"` : undefined),
-  busquedaAvanzada: (): Href => proximamente('Búsqueda avanzada'),
+  buscarConvenios: (texto: string): Href => ({
+    pathname: '/convenios',
+    params: texto ? { buscar: texto } : {},
+  }),
+  busquedaAvanzada: (): Href => '/convenios',
   firmador: (): Href => proximamente('Firmador de convenios'),
   escanearQr: (): Href => proximamente('Lector de código QR'),
   convenio: (idInstrumento: number): Href => proximamente('Ficha del convenio', `Convenio #${idInstrumento}`),
