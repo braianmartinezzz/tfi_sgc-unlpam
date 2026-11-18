@@ -204,7 +204,15 @@ class ConvenioReadTest extends TestCase
                 'data.especifico.marco.instrumento.titulo',
                 'Convenio marco padre'
             )
-            ->assertJsonPath('data.historial_estados.0.estado_nuevo', 'Borrador');
+            ->assertJsonPath('data.historial_estados.0.estado_nuevo', 'Borrador')
+            ->assertJsonPath(
+                'data.historial_estados.0.usuario.id_usuario',
+                $context['usuario']->id_usuario
+            )
+            ->assertJsonPath(
+                'data.historial_estados.0.usuario.nombre',
+                $context['usuario']->nombre
+            );
 
         $institutions = collect($response->json('data.instituciones_firmantes'))
             ->keyBy('id_institucion');
