@@ -368,7 +368,18 @@ function DocumentsPanel({ id, active }: { id: number; active: boolean }) {
     setDownloadingId(documentId);
     setDownloadError(null);
     try {
-      await apiDownload(`/documentos/${documentId}/descargar`);
+      const filename = documents.find(
+        ({ documento }) => documento.id_documento === documentId,
+      )?.ultima_version?.nombre_archivo;
+      const fallbackFilename = filename
+        ? filename.toLowerCase().endsWith(".pdf")
+          ? filename
+          : `${filename}.pdf`
+        : undefined;
+      await apiDownload(
+        `/documentos/${documentId}/descargar`,
+        fallbackFilename,
+      );
     } catch (error) {
       setDownloadError({
         id: documentId,

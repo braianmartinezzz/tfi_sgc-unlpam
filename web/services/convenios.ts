@@ -158,5 +158,8 @@ export function remove(
 export function exportar(
   filters: Omit<ConvenioListFilters, "page"> = {},
 ): Promise<void> {
-  return apiDownload(`/convenios/exportar${buildQuery(filters)}`);
+  return apiDownload(
+    `/convenios/exportar${buildQuery(filters)}`,
+    "convenios.csv",
+  );
 }
