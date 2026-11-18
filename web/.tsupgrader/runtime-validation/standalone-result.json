@@ -1,0 +1,89 @@
+{
+  "planHash": "0ac7b9deb51efcf8f4c849dc5d535549880b6aa2983c512a0852c4074f508894",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-11-18T00:52:59.4802539Z",
+  "retryCount": 0,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "frontend-lint",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E web@0.1.0 lint\r\n\u003E eslint\r\n\r\n",
+        "durationMs": 6153
+      },
+      {
+        "name": "frontend-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E web@0.1.0 build\r\n\u003E next build\r\n\r\n\u25B2 Next.js 16.4.6 (Turbopack)\r\n- Environments: .env.local\r\n\u2713 Running next.config.ts took 48ms\r\n- Cache Components enabled\r\n- Partial Prefetching enabled\r\n- Experiments (use with caution):\r\n  \u2713 agentFeedback\r\n\r\n  Creating an optimized production build ...\r\n\u2713 Compiled successfully in 1496ms\r\n  Running TypeScript ...\r\n  Finished TypeScript in 2.2s ...\r\n  Collecting page data using 7 workers ...\r\n  Generating static pages using 7 workers (0/17) ...\r\n  Generating static pages using 7 workers (4/17) \r\n  Generating static pages using 7 workers (8/17) \r\n  Generating static pages using 7 workers (12/17) \r\n\u2713 Generating static pages using 7 workers (17/17) in 1324ms\r\n  Finalizing page optimization ...\r\n\r\nRoute (app)\r\n\u250C \u25CB /\r\n\u251C \u25CB /_not-found\r\n\u251C \u25CB /alertas\r\n\u251C \u25CB /auditoria\r\n\u251C \u25CB /configuracion\r\n\u251C \u25CB /convenios\r\n\u251C   /convenios/[id]\r\n\u2502 \u2514 \u25D0 /convenios/[id]\r\n\u251C   /convenios/[id]/edit\r\n\u2502 \u2514 \u25D0 /convenios/[id]/edit\r\n\u251C \u25CB /convenios/new\r\n\u251C \u25CB /dashboard\r\n\u251C \u25CB /login\r\n\u251C \u25CB /revision\r\n\u251C \u25CB /unidades\r\n\u251C \u25CB /usuarios\r\n\u2514 \u25CB /vencimientos\r\n\r\n\r\n\u25CB  (Static)             prerendered as static content\r\n\u25D0  (Partial Prerender)  prerendered as static HTML with dynamic server-streamed content\r\n\r\n",
+        "durationMs": 8814
+      },
+      {
+        "name": "login-route",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!DOCTYPE html\u003E\u003Chtml lang=\u0022es\u0022 data-theme=\u0022light\u0022 class=\u0022geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__variable roboto_condensed_b9db42f1-module__G0K71a__variable h-full antialiased\u0022\u003E\u003Chead\u003E\u003Cmeta charSet=\u0022utf-8\u0022/\u003E\u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1\u0022/\u003E\u003Clink rel=\u0022stylesheet\u0022 href=\u0022/_next/static/chunks/%5Broot-of-the-server%5D__1te11xigv2b4m._.css\u0022 data-precedence=\u0022next_static/chunks/[root-of-the-server]__1te11xigv2b4m._.css\u0022/\u003E\u003Clink rel=\u0022preload\u0022 as=\u0022script\u0022 fetchPriority=\u0022low\u0022 href=\u0022/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0oc3hfxhoz2c3._.js\u0022/\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jmam7qwg.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/1daa_next_dist_compiled_react-dom_cjs_react-dom-client_development_0mp0cp_t-ezj9.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/1q96_modules_next_dist_compiled_react-dom_cjs_react-dom_development_1sqry0_53krp4.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_react-dom_0grqycjrj6mju._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-67asdr9._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_1amofcmz--cdp._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_client_1ohys4wzsw--s._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_1bjkg68unqmjx._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_%40swc_helpers_cjs_1r9vbqwj2323d._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_1anvha4rlo79g._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/turbopack-_1nhx3glkvfrg4._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_0mc45lbv0sa84._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_200e689oek-cn._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_107-ox739224v._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_react-hook-form_dist_index_esm_mjs_0b0kr13k-yekm._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_zod_v4_classic_10ivgx6i87kxd._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_zod_v4_core_14qn2mg1f8pkp._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_zod_v4_locales_1-ided7izgr--._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_0o9i6u_dz10qu._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/components_0-5q6yktnyz0s._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Ctitle\u003EUNLPam\u003C/title\u003E\u003Cmeta name=\u0022description\u0022 content=\u0022Sistema de Gesti\u00F3n de Convenios de la UNLPam.\u0022/\u003E\u003Clink rel=\u0022icon\u0022 href=\u0022/favicon.ico?favicon.117ezoe8m31dk.ico\u0022 sizes=\u002248x48\u0022 type=\u0022image/x-icon\u0022/\u003E\u003Cmeta name=\u0022next-size-adjust\u0022 content=\u0022\u0022/\u003E\u003Cscript\u003E(function(){try{var theme=localStorage.getItem(\u0022sgc_theme\u0022);document.documentElement.dataset.theme=theme===\u0022dark\u0022?\u0022dark\u0022:\u0022light\u0022}catch(error){document.documentElement.dataset.theme=\u0022light\u0022;console.warn(\u0022No se pudo leer la preferencia del tema.\u0022,error)}})()\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js\u0022 noModule=\u0022\u0022\u003E\u003C/script\u003E\u003C/head\u003E\u003Cbody class=\u0022min-h-full flex flex-col\u0022\u003E\u003Cdiv hidden=\u0022\u0022\u003E\u003C!--$--\u003E\u003C!--/$--\u003E\u003C/div\u003E\u003C!--\u0026--\u003E\u003Cdiv class=\u0022relative flex min-h-screen flex-col overflow-hidden bg-linear-to-br from-page via-background to-row-alternate text-foreground\u0022\u003E\u003Cdiv aria-hidden=\u0022true\u0022 class=\u0022pointer-events-none absolute inset-0 overflow-hidden\u0022\u003E\u003Cdiv class=\u0022absolute -left-40 top-[12%] h-[30rem] w-[30rem] rounded-full bg-foreground/5 blur-3xl\u0022\u003E\u003C/div\u003E\u003Cdiv class=\u0022absolute -right-36 top-[8%] h-[32rem] w-[32rem] rounded-full border-[2.5rem] border-foreground/10 blur-2xl\u0022\u003E\u003C/div\u003E\u003Cdiv class=\u0022absolute -bottom-48 left-[18%] h-[34rem] w-[68rem] rounded-[50%] border-[2rem] border-foreground/5 blur-2xl\u0022\u003E\u003C/div\u003E\u003C/div\u003E\u003Cmain class=\u0022relative z-10 flex flex-1 items-center justify-center px-4 py-10 sm:py-12\u0022\u003E\u003C!--\u0026--\u003E\u003C!--\u0026--\u003E\u003Csection ar\n\u2026[truncated]",
+        "durationMs": 11977
+      }
+    ],
+    "executions": [
+      {
+        "source": "frontend-lint",
+        "resolvedExecutable": "E:\\Programas\\Node\\npm.CMD",
+        "args": [
+          "run",
+          "lint"
+        ],
+        "cwd": "E:\\Facultad\\POW\\2026\\Proyecto\\repo\\tfi_sgc-unlpam\\web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "frontend-build",
+        "resolvedExecutable": "E:\\Programas\\Node\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "E:\\Facultad\\POW\\2026\\Proyecto\\repo\\tfi_sgc-unlpam\\web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "login-route",
+        "resolvedExecutable": "E:\\Programas\\Node\\npm.CMD",
+        "args": [
+          "run",
+          "dev"
+        ],
+        "cwd": "E:\\Facultad\\POW\\2026\\Proyecto\\repo\\tfi_sgc-unlpam\\web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}
