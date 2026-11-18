@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,8 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-
-const AUTH_TOKEN_KEY = 'auth_token';
+import { clearToken, getToken } from '@/lib/auth-storage';
 
 export default function DashboardScreen() {
   const theme = useTheme();
@@ -17,7 +15,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     const verifySession = async () => {
-      const token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+      const token = await getToken();
       if (!token) {
         router.replace('/');
       }
@@ -27,12 +25,12 @@ export default function DashboardScreen() {
   }, [router]);
 
   const handleLogout = async () => {
-    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+    await clearToken();
     router.replace('/');
   };
 
   const handleBack = async () => {
-    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+    await clearToken();
     router.replace('/');
   };
 

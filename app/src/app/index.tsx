@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,8 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { API_URL } from '@/constants/api';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-
-const AUTH_TOKEN_KEY = 'auth_token';
+import { getToken, setToken } from '@/lib/auth-storage';
 
 export default function LoginScreen() {
   const theme = useTheme();
@@ -34,7 +32,7 @@ export default function LoginScreen() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+        const token = await getToken();
         if (token) {
           router.replace('/dashboard');
         }
@@ -75,7 +73,7 @@ export default function LoginScreen() {
 
       // data.access_token -> token Bearer para el resto de los endpoints
       // data.user         -> datos del usuario (rol, unidad académica, etc.)
-      await SecureStore.setItemAsync(AUTH_TOKEN_KEY, data.access_token);
+      await setToken(data.access_token);
       console.log('Login OK', data.user);
       router.replace('/dashboard');
     } catch (error) {
