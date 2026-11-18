@@ -53,6 +53,14 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
     name: "institucionesFirmantes",
   });
   const archivoPrincipal = useWatch({ control, name: "archivoPrincipal" });
+  const documentoPrincipalId = useWatch({
+    control,
+    name: "documentoPrincipalId",
+  });
+  const nombreArchivoPrincipal = useWatch({
+    control,
+    name: "nombreArchivoPrincipal",
+  });
   const anexos = useWatch({ control, name: "anexos" });
 
   const fichaCompleta =
@@ -60,7 +68,8 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
   const institucionesCompletas = institucionesFirmantes.length >= 2;
   const marcoCompleto =
     claseInstrumento !== "Específico" || idConvenioMarco !== "";
-  const pdfPrincipalCargado = archivoPrincipal !== null;
+  const pdfPrincipalCargado =
+    archivoPrincipal !== null || documentoPrincipalId !== null;
 
   function seleccionarPdfPrincipal(file: File | undefined) {
     clearErrors("archivoPrincipal");
@@ -157,13 +166,18 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
 
         <div className="space-y-2">
           <label htmlFor="documento-principal-file" className="block text-sm font-medium">
-            Archivo PDF principal <span aria-hidden="true">*</span>
+            {documentoPrincipalId === null
+              ? "Archivo PDF principal"
+              : "Reemplazar archivo PDF principal"}{" "}
+            {documentoPrincipalId === null ? (
+              <span aria-hidden="true">*</span>
+            ) : null}
           </label>
           <input
             id="documento-principal-file"
             type="file"
             accept="application/pdf,.pdf"
-            required
+            required={documentoPrincipalId === null}
             aria-invalid={Boolean(errors.archivoPrincipal)}
             aria-describedby="documento-principal-ayuda documento-principal-error"
             onChange={(event) =>
@@ -172,8 +186,9 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
             className="block min-h-11 w-full rounded-sm border border-ui-border bg-surface px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-page file:px-3 file:py-1.5 file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           />
           <p id="documento-principal-ayuda" className="text-sm text-foreground/70">
-            Si seleccionaste un PDF borrador en el paso anterior, ya está
-            disponible como documento principal.
+            {documentoPrincipalId !== null
+              ? "El archivo existente se conserva si no seleccionás uno nuevo."
+              : "Si seleccionaste un PDF borrador en el paso anterior, ya está disponible como documento principal."}
           </p>
           {archivoPrincipal ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-ui-border bg-page p-3 text-sm">
@@ -188,6 +203,11 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                 Quitar PDF
               </button>
             </div>
+          ) : null}
+          {!archivoPrincipal && nombreArchivoPrincipal ? (
+            <p className="break-all text-sm">
+              Archivo actual: {nombreArchivoPrincipal}
+            </p>
           ) : null}
           {errors.archivoPrincipal ? (
             <p
@@ -216,6 +236,8 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
             onClick={() =>
               append({
                 clientId: crypto.randomUUID(),
+                documentoId: null,
+                nombreArchivo: null,
                 tipo: "Otro",
                 titulo: "",
                 archivo: null,
@@ -237,6 +259,15 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
           {fields.map((field, index) => {
             const anexoError = errors.anexos?.[index];
             const archivo = anexos[index]?.archivo;
+            const nombreArchivo = anexos[index]?.nombreArchivo;
+            const tipoAnexo = anexos[index]?.tipo;
+            const tipoAnexoNoListado =
+              tipoAnexo &&
+              ![
+                "Acta de aprobación",
+                "Documentación de la parte externa",
+                "Otro",
+              ].includes(tipoAnexo);
             const tituloId = `anexo-${field.id}-titulo`;
             const tipoId = `anexo-${field.id}-tipo`;
             const archivoId = `anexo-${field.id}-archivo`;
@@ -267,6 +298,11 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                         Documentación de la parte externa
                       </option>
                       <option value="Otro">Otro</option>
+                      {tipoAnexo && tipoAnexoNoListado ? (
+                        <option value={tipoAnexo}>
+                          {tipoAnexo}
+                        </option>
+                      ) : null}
                     </Select>
                     {anexoError?.tipo ? (
                       <p
@@ -327,6 +363,11 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
                   {archivo ? (
                     <p className="break-all text-sm">
                       {archivo.name} · {formatFileSize(archivo.size)}
+                    </p>
+                  ) : nombreArchivo ? (
+                    <p className="break-all text-sm">
+                      Archivo actual: {nombreArchivo}. Se conserva si no
+                      seleccionás uno nuevo.
                     </p>
                   ) : null}
                   {anexoError?.archivo ? (
