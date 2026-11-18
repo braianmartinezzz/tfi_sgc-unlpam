@@ -104,6 +104,41 @@ class EstadisticaService
             return $r->dias_preaviso !== null && $restantes <= (int) $r->dias_preaviso;
         })->count();
 
+        $conveniosVigentes = $base()
+            ->where('i.estado', 'Firmado')
+            ->whereNotNull('i.inicio')
+            ->whereNotNull('i.vencimiento')
+            ->whereDate('i.inicio', '<=', $hoy->toDateString())
+            ->whereDate('i.vencimiento', '>=', $hoy->toDateString())
+            ->count();
+
+        $conveniosEnTramite = $base()
+            ->whereIn('i.estado', [
+                'Borrador',
+                'EnCorreccion',
+                'Revisión',
+                'Aprobado',
+            ])
+            ->count();
+
+        $firmadosUltimoAnio = $base()
+            ->whereNotNull('i.fecha_firma')
+            ->whereDate('i.fecha_firma', '>=', $hoy->copy()->subMonthsNoOverflow(12)->toDateString())
+            ->whereDate('i.fecha_firma', '<=', $hoy->toDateString())
+            ->count();
+
+        $personasUnicas = $base()
+            ->join('firma as f', 'f.id_instrumento', '=', 'c.id_instrumento')
+            ->distinct()
+            ->count('f.id_persona');
+
+        $pasantesUnicos = $base()
+            ->join('especifico as es', 'es.id_instrumento', '=', 'c.id_instrumento')
+            ->join('pasantia as p', 'p.id_convenio_especifico', '=', 'es.id_instrumento')
+            ->join('estudiante as e', 'e.id_persona', '=', 'p.id_estudiante')
+            ->distinct()
+            ->count('p.id_estudiante');
+
         return [
             'totales' => [
                 'convenios' => $total,
@@ -119,6 +154,13 @@ class EstadisticaService
                 'vencidos' => $vencidos,
                 'proximos' => $proximos->count(),
                 'en_preaviso' => $enPreaviso,
+            ],
+            'indicadores' => [
+                'convenios_vigentes' => $conveniosVigentes,
+                'convenios_en_tramite' => $conveniosEnTramite,
+                'firmados_ultimo_anio' => $firmadosUltimoAnio,
+                'personas_unicas' => $personasUnicas,
+                'pasantes_unicos' => $pasantesUnicos,
             ],
         ];
     }
