@@ -165,12 +165,16 @@ export async function apiRequest<T>(
   }
 }
 
-export async function apiDownload(path: string): Promise<void> {
+export async function apiDownload(
+  path: string,
+  fallbackFilename?: string,
+): Promise<void> {
   const response = await fetchApi(path);
   const contentDisposition = response.headers.get("Content-Disposition");
   const filename =
-    contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] ??
-    "convenios.csv";
+    contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] ||
+    fallbackFilename ||
+    "descarga";
   const objectUrl = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = objectUrl;

@@ -176,7 +176,7 @@ class ConvenioService
             ]),
             'marco',
             'especifico.marco.instrumento',
-            'historialEstados',
+            'historialEstados.usuario:id_usuario,nombre',
         ]);
     }
 

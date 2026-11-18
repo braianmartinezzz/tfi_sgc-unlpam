@@ -214,14 +214,14 @@ export default function ConveniosPageContent() {
   return (
     <section aria-labelledby="convenios-title" className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="w-fit">
           <h1
             id="convenios-title"
             className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
           >
             Convenios Registrados
           </h1>
-          <div aria-hidden="true" className="mt-2 h-1 w-16 rounded-full bg-brand" />
+          <div aria-hidden="true" className="mt-2 h-1 w-full rounded-full bg-brand" />
         </div>
         {canCreateConvenio(rol) ? (
           <Link

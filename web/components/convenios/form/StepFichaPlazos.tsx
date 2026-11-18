@@ -238,7 +238,9 @@ export default function StepFichaPlazos({ form }: StepFichaPlazosProps) {
             type="number"
             min={0}
             step={1}
-            {...register("diasPreaviso", { valueAsNumber: true })}
+            {...register("diasPreaviso", {
+              setValueAs: (value) => (value === "" ? "" : Number(value)),
+            })}
             aria-invalid={Boolean(errors.diasPreaviso)}
             aria-describedby={errors.diasPreaviso ? "preaviso-error" : undefined}
           />
