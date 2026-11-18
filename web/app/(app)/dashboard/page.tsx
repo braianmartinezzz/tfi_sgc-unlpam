@@ -1,5 +1,5 @@
-import EmptyState from "@/components/feedback/EmptyState";
+import EstadisticasDashboard from "@/components/estadisticas/EstadisticasDashboard";
 
 export default function DashboardPage() {
-  return <EmptyState title="Dashboard" />;
+  return <EstadisticasDashboard />;
 }
