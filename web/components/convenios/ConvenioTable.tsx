@@ -110,7 +110,7 @@ export default function ConvenioTable({
                     {canReviewConvenio(rol, estado) ? (
                       <Link
                         href={`${detalleHref}/revisar`}
-                        className={rowActionClassName}
+                        className={`${rowActionClassName} cursor-pointer`}
                       >
                         Revisar
                       </Link>

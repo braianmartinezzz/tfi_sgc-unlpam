@@ -963,7 +963,7 @@ export default function DetalleConvenio({
             {puedeRevisar ? (
               <Button
                 type="button"
-                className="!w-auto"
+                className="!w-auto enabled:cursor-pointer"
                 onClick={() => router.push(`/convenios/${parsedId}/revisar`)}
               >
                 Revisar

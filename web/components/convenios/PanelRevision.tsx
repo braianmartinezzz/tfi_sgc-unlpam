@@ -155,6 +155,7 @@ export default function PanelRevision({ id }: { id: number }) {
         <textarea
           id={`observaciones-${id}`}
           value={observacion}
+          placeholder="Ingrese las observaciones sobre el convenio..."
           onChange={(event) => {
             setObservacion(event.currentTarget.value);
             setErrorMessage(null);
@@ -208,7 +209,7 @@ export default function PanelRevision({ id }: { id: number }) {
           onClick={(event) =>
             openConfirmation("approve", event.currentTarget)
           }
-          className="min-h-11 rounded-md bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 rounded-md bg-brand px-4 py-2 font-semibold text-white enabled:cursor-pointer hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Aprobar
         </button>
@@ -216,7 +217,7 @@ export default function PanelRevision({ id }: { id: number }) {
           type="button"
           disabled={busy || texto.length < 5}
           onClick={(event) => openConfirmation("return", event.currentTarget)}
-          className="min-h-11 rounded-md border border-ui-border bg-surface px-4 py-2 font-semibold text-foreground hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 rounded-md border border-ui-border bg-surface px-4 py-2 font-semibold text-foreground enabled:cursor-pointer hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
         >
           Devolver a corrección
         </button>
