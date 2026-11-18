@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import EstadoBadge from "@/components/convenios/EstadoBadge";
-import { canManageDraftConvenio } from "@/lib/permissions";
+import {
+  canManageDraftConvenio,
+  canReviewConvenio,
+} from "@/lib/permissions";
 import type { ConvenioListItem } from "@/types/convenio";
 
 interface ConvenioTableProps {
@@ -102,6 +105,14 @@ export default function ConvenioTable({
                     <Link href={detalleHref} className={rowActionClassName}>
                       Ver
                     </Link>
+                    {canReviewConvenio(rol, estado) ? (
+                      <Link
+                        href={`${detalleHref}/revisar`}
+                        className={rowActionClassName}
+                      >
+                        Revisar
+                      </Link>
+                    ) : null}
                     {puedeEditar ? (
                       <>
                         <Link

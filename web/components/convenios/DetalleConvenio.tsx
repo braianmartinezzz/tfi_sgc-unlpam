@@ -9,10 +9,14 @@ import ErrorState from "@/components/feedback/ErrorState";
 import EstadoBadge from "@/components/convenios/EstadoBadge";
 import { useAuth } from "@/context/AuthContext";
 import { useConvenio, useConvenioDocuments } from "@/hooks/useConvenios";
-import { canManageDraftConvenio } from "@/lib/permissions";
+import {
+  canManageDraftConvenio,
+  canReviewConvenio,
+} from "@/lib/permissions";
 import { ApiError, apiDownload } from "@/services/api-client";
 import type { Convenio, HistorialEstado } from "@/types/convenio";
 import type { DocumentoListItem } from "@/types/documento";
+import PanelRevision from "@/components/convenios/PanelRevision";
 
 const tabs = [
   { id: "general", label: "General" },
@@ -538,7 +542,13 @@ function HistoryPanel({ convenio }: { convenio: Convenio }) {
   );
 }
 
-export default function DetalleConvenio({ id }: { id: string }) {
+export default function DetalleConvenio({
+  id,
+  reviewMode = false,
+}: {
+  id: string;
+  reviewMode?: boolean;
+}) {
   const router = useRouter();
   const { status: authStatus, user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -668,6 +678,7 @@ export default function DetalleConvenio({ id }: { id: string }) {
 
   const estado = convenio.instrumento?.estado;
   const rol = user.rol?.nombre ?? null;
+  const puedeRevisar = canReviewConvenio(rol, estado ?? "");
 
   return (
     <section
@@ -677,12 +688,21 @@ export default function DetalleConvenio({ id }: { id: string }) {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="w-fit">
-            <h1
-              id={`convenio-title-${parsedId}`}
-              className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
-            >
-              {convenio.instrumento?.titulo || "—"}
-            </h1>
+            {reviewMode ? (
+              <h2
+                id={`convenio-title-${parsedId}`}
+                className="font-condensed text-2xl font-bold tracking-tight sm:text-3xl"
+              >
+                {convenio.instrumento?.titulo || "—"}
+              </h2>
+            ) : (
+              <h1
+                id={`convenio-title-${parsedId}`}
+                className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
+              >
+                {convenio.instrumento?.titulo || "—"}
+              </h1>
+            )}
             <div
               aria-hidden="true"
               className="mt-2 h-1 w-full rounded-full bg-brand"
@@ -695,90 +715,133 @@ export default function DetalleConvenio({ id }: { id: string }) {
             {estado ? <EstadoBadge estado={estado} /> : null}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="link"
-            onClick={() => router.push("/convenios")}
-          >
-            Volver
-          </Button>
-          {canManageDraftConvenio(rol, estado ?? "") ? (
+        {!reviewMode ? (
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              className="!w-auto"
-              onClick={() => router.push(`/convenios/${parsedId}/edit`)}
+              variant="link"
+              onClick={() => router.push("/convenios")}
             >
-              Editar
+              Volver
             </Button>
-          ) : null}
-        </div>
+            {puedeRevisar ? (
+              <Button
+                type="button"
+                className="!w-auto"
+                onClick={() => router.push(`/convenios/${parsedId}/revisar`)}
+              >
+                Revisar
+              </Button>
+            ) : null}
+            {canManageDraftConvenio(rol, estado ?? "") ? (
+              <Button
+                type="button"
+                className="!w-auto"
+                onClick={() => router.push(`/convenios/${parsedId}/edit`)}
+              >
+                Editar
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <div
-        role="tablist"
-        aria-label="Secciones del convenio"
-        aria-orientation="horizontal"
-        className="max-w-full overflow-x-auto border-b border-ui-border"
+        className={
+          reviewMode
+            ? "grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
+            : "space-y-5"
+        }
       >
-        <div className="flex w-max min-w-full">
-          {tabs.map((tab, index) => {
+        <div className="min-w-0 space-y-5">
+          <div
+            role="tablist"
+            aria-label="Secciones del convenio"
+            aria-orientation="horizontal"
+            className="max-w-full overflow-x-auto border-b border-ui-border"
+          >
+            <div className="flex w-max min-w-full">
+              {tabs.map((tab, index) => {
+                const selected = activeTab === tab.id;
+                const tabId = `convenio-tab-${parsedId}-${tab.id}`;
+                const panelId = `convenio-panel-${parsedId}-${tab.id}`;
+                return (
+                  <button
+                    key={tab.id}
+                    ref={(element) => {
+                      tabRefs.current[index] = element;
+                    }}
+                    id={tabId}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={panelId}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => setActiveTab(tab.id)}
+                    onKeyDown={(event) => handleTabKeyDown(event, index)}
+                    className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
+                      selected
+                        ? "border-brand text-brand-text"
+                        : "border-transparent text-foreground/70 hover:bg-row-alternate hover:text-foreground"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {tabs.map((tab) => {
             const selected = activeTab === tab.id;
             const tabId = `convenio-tab-${parsedId}-${tab.id}`;
             const panelId = `convenio-panel-${parsedId}-${tab.id}`;
             return (
-              <button
+              <section
                 key={tab.id}
-                ref={(element) => {
-                  tabRefs.current[index] = element;
-                }}
-                id={tabId}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                aria-controls={panelId}
-                tabIndex={selected ? 0 : -1}
-                onClick={() => setActiveTab(tab.id)}
-                onKeyDown={(event) => handleTabKeyDown(event, index)}
-                className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
-                  selected
-                    ? "border-brand text-brand-text"
-                    : "border-transparent text-foreground/70 hover:bg-row-alternate hover:text-foreground"
-                }`}
+                id={panelId}
+                role="tabpanel"
+                aria-labelledby={tabId}
+                tabIndex={0}
+                hidden={!selected}
+                className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
-                {tab.label}
-              </button>
+                {tab.id === "general" ? (
+                  <GeneralPanel convenio={convenio} />
+                ) : tab.id === "partes" ? (
+                  <PartsPanel convenio={convenio} />
+                ) : tab.id === "documentos" ? (
+                  <DocumentsPanel id={parsedId} active={selected} />
+                ) : (
+                  <HistoryPanel convenio={convenio} />
+                )}
+              </section>
             );
           })}
         </div>
-      </div>
 
-      {tabs.map((tab) => {
-        const selected = activeTab === tab.id;
-        const tabId = `convenio-tab-${parsedId}-${tab.id}`;
-        const panelId = `convenio-panel-${parsedId}-${tab.id}`;
-        return (
-          <section
-            key={tab.id}
-            id={panelId}
-            role="tabpanel"
-            aria-labelledby={tabId}
-            tabIndex={0}
-            hidden={!selected}
-            className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-          >
-            {tab.id === "general" ? (
-              <GeneralPanel convenio={convenio} />
-            ) : tab.id === "partes" ? (
-              <PartsPanel convenio={convenio} />
-            ) : tab.id === "documentos" ? (
-              <DocumentsPanel id={parsedId} active={selected} />
-            ) : (
-              <HistoryPanel convenio={convenio} />
-            )}
-          </section>
-        );
-      })}
+        {reviewMode ? (
+          puedeRevisar ? (
+            <PanelRevision id={parsedId} />
+          ) : (
+            <aside className={cardClassName}>
+              <h2 className={headingClassName}>
+                Panel de revisión no disponible
+              </h2>
+              <p role="status">
+                Solo un usuario con rol Revisión puede revisar convenios que
+                estén en estado Revisión.
+              </p>
+              <Link
+                href={`/convenios/${parsedId}`}
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-ui-border bg-surface px-4 py-2 font-semibold text-foreground hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                Ir al detalle
+              </Link>
+            </aside>
+          )
+        ) : null}
+      </div>
     </section>
   );
 }

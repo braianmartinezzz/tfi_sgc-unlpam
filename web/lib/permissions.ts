@@ -71,6 +71,13 @@ export function canManageDraftConvenio(
   return canCreateConvenio(role) && estado === "Borrador";
 }
 
+export function canReviewConvenio(
+  role: string | null,
+  estado: string,
+): boolean {
+  return role === "Revisión" && estado === "Revisión";
+}
+
 export function canFilterByFaculty(
   role: string | null,
   alcanceGlobal: boolean | undefined,

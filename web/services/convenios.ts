@@ -15,6 +15,11 @@ import type {
   DocumentoUploadInput,
   EnviarRevisionResponse,
 } from "@/types/documento";
+import type {
+  CrearObservacionInput,
+  CrearObservacionResponse,
+  DevolverConvenioInput,
+} from "@/types/observacion";
 
 function buildQuery(filters: ConvenioListFilters): string {
   const params = new URLSearchParams();
@@ -145,6 +150,35 @@ export function sendForReview(
     `/convenios/${id}/enviar-revision`,
     { method: "POST" },
   );
+}
+
+export function createObservation(
+  id: number | string,
+  input: CrearObservacionInput,
+): Promise<CrearObservacionResponse> {
+  return apiRequest<CrearObservacionResponse>(
+    `/convenios/${id}/observaciones`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function approve(id: number | string): Promise<ApiMessageResponse> {
+  return apiRequest<ApiMessageResponse>(`/convenios/${id}/aprobar`, {
+    method: "POST",
+  });
+}
+
+export function returnToCorrection(
+  id: number | string,
+  input: DevolverConvenioInput,
+): Promise<ApiMessageResponse> {
+  return apiRequest<ApiMessageResponse>(`/convenios/${id}/devolver`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function remove(
