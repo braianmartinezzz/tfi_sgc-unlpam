@@ -1,135 +1,244 @@
-import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, type Href } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import { clearToken, getToken } from '@/lib/auth-storage';
+import { AccesosRapidos } from '@/components/panel/accesos-rapidos';
+import { Card } from '@/components/panel/card';
+import { PorEstadoCard, PorUnidadCard } from '@/components/panel/distribucion-cards';
+import { MovimientosCard } from '@/components/panel/movimientos-card';
+import { NotificacionesCard } from '@/components/panel/notificaciones-card';
+import { OfflineBanner } from '@/components/panel/offline-banner';
+import { PanelHeader } from '@/components/panel/panel-header';
+import { PendientesCard } from '@/components/panel/pendientes-card';
+import { ProfileMenu } from '@/components/panel/profile-menu';
+import { StatBox } from '@/components/panel/stat-box';
+import { Txt } from '@/components/panel/txt';
+import { Destinos } from '@/constants/navigation';
+import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
+import { usePanel } from '@/hooks/use-panel';
+import { useSgcTheme } from '@/hooks/use-sgc-theme';
+import { getToken } from '@/lib/auth-storage';
+import { formatFecha, formatHora } from '@/lib/format';
+import { cerrarSesion } from '@/services/auth';
 
-export default function DashboardScreen() {
-  const theme = useTheme();
+/** Roles que pueden registrar la firma de un convenio aprobado. */
+const ROLES_QUE_FIRMAN = ['Gestión', 'Administración'];
+
+export default function PanelScreen() {
+  const tema = useSgcTheme();
   const router = useRouter();
+  const { me, panel, actualizado, estado, sinConexion, actualizando, error, actualizar } = usePanel();
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
+  // Sin token no hay panel: se vuelve al inicio de sesión.
   useEffect(() => {
-    const verifySession = async () => {
-      const token = await getToken();
-      if (!token) {
-        router.replace('/');
-      }
-    };
+    let activo = true;
 
-    verifySession();
+    getToken().then((token) => {
+      if (activo && !token) router.replace('/');
+    });
+
+    return () => {
+      activo = false;
+    };
   }, [router]);
 
-  const handleLogout = async () => {
-    await clearToken();
-    router.replace('/');
+  const puedeFirmar = ROLES_QUE_FIRMAN.includes(me?.rol?.nombre ?? '');
+
+  const irA = (destino: Href) => {
+    setMenuAbierto(false);
+    router.push(destino);
   };
 
-  const handleBack = async () => {
-    await clearToken();
+  const salir = async () => {
+    setMenuAbierto(false);
+    await cerrarSesion();
     router.replace('/');
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.card}>
-          <ThemedText style={styles.title}>UNLPam</ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-            Sistema de Gestión de Convenios
-          </ThemedText>
+    <View style={[styles.pantalla, { backgroundColor: tema.page }]}>
+      <PanelHeader
+        nombreUsuario={me?.nombre ?? null}
+        sinConexion={sinConexion}
+        onBuscar={(texto) => irA(Destinos.buscarConvenios(texto))}
+        onBusquedaAvanzada={() => irA(Destinos.busquedaAvanzada())}
+        onAbrirPerfil={() => setMenuAbierto(true)}
+      />
 
-          <ThemedText style={styles.greeting}>¡Bienvenido!</ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.description}>
-            La sesión quedó iniciada correctamente y esta es la pantalla limpia de inicio.
-          </ThemedText>
+      {sinConexion ? <OfflineBanner actualizado={actualizado} /> : null}
 
-          <Pressable
-            onPress={handleBack}
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: theme.backgroundElement },
-              pressed && { opacity: 0.8 },
-            ]}>
-            <ThemedText style={styles.buttonText}>Volver</ThemedText>
-          </Pressable>
+      <ScrollView
+        contentContainerStyle={styles.contenido}
+        refreshControl={
+          <RefreshControl
+            refreshing={actualizando}
+            onRefresh={actualizar}
+            tintColor={tema.brand}
+            colors={[tema.brand]}
+          />
+        }>
+        <View style={styles.columna}>
+          <View>
+            <Txt variante="titulo">Panel</Txt>
+            {me ? (
+              <Txt variante="detalle" color="textSecondary">
+                {[me.rol?.nombre, me.unidad_academica?.nombre].filter(Boolean).join(' · ')}
+              </Txt>
+            ) : null}
+          </View>
 
-          <Pressable
-            onPress={handleLogout}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              { backgroundColor: 'transparent', borderColor: theme.textSecondary },
-              pressed && { opacity: 0.8 },
-            ]}>
-            <ThemedText style={styles.secondaryButtonText}>Cerrar sesión</ThemedText>
-          </Pressable>
+          {estado === 'cargando' ? (
+            <View style={styles.centrado}>
+              <ActivityIndicator color={tema.brand} />
+              <Txt variante="detalle" color="textSecondary">
+                Cargando el panel…
+              </Txt>
+            </View>
+          ) : null}
+
+          {estado === 'error' ? (
+            <Card titulo="No se pudo cargar el panel" bordeSuperior={tema.danger}>
+              <Txt color="textSecondary">{error}</Txt>
+              <Txt variante="detalle" color="textSecondary">
+                Deslizá hacia abajo para reintentar.
+              </Txt>
+            </Card>
+          ) : null}
+
+          {error && estado === 'listo' && !sinConexion ? (
+            <Card bordeSuperior={tema.warning}>
+              <Txt variante="detalle" color="textSecondary">
+                No se pudieron actualizar los datos: {error}
+              </Txt>
+            </Card>
+          ) : null}
+
+          {panel && estado === 'listo' ? (
+            <>
+              {/* En modo offline solo se muestran los pendientes de firma guardados. */}
+              <PendientesCard
+                pendientes={panel.pendientes_firma}
+                sinConexion={sinConexion}
+                onAbrirFirmador={() => irA(Destinos.firmador())}
+                onAbrirConvenio={(id) => irA(Destinos.convenio(id))}
+              />
+
+              {!sinConexion ? (
+                <>
+                  <View style={styles.grilla}>
+                    <StatBox
+                      valor={panel.resumen.firmados_ultimo_anio}
+                      etiqueta="Firmados en el último año"
+                      color={tema.success}
+                    />
+                    <StatBox
+                      valor={panel.resumen.vigentes}
+                      etiqueta="Vigentes"
+                      color={tema.info}
+                    />
+                    <StatBox
+                      valor={panel.resumen.en_tramite}
+                      etiqueta="En trámite"
+                      color={tema.warning}
+                      nota="Elaboración, revisión o aprobación"
+                    />
+                    <StatBox
+                      valor={panel.resumen.en_preaviso}
+                      etiqueta="En preaviso"
+                      color={tema.brand}
+                      nota={
+                        panel.resumen.vencidos > 0
+                          ? `${panel.resumen.vencidos} vencido(s) sin archivar`
+                          : undefined
+                      }
+                    />
+                  </View>
+
+                  <NotificacionesCard
+                    alertas={panel.alertas}
+                    notificaciones={panel.notificaciones.items}
+                    noLeidas={panel.notificaciones.no_leidas}
+                    onAbrirConvenio={(id) => irA(Destinos.convenio(id))}
+                    onVerTodas={() => irA(Destinos.notificaciones())}
+                  />
+
+                  <MovimientosCard
+                    movimientos={panel.ultimos_movimientos}
+                    onAbrirConvenio={(id) => irA(Destinos.convenio(id))}
+                  />
+
+                  <AccesosRapidos
+                    sinConexion={sinConexion}
+                    puedeFirmar={puedeFirmar}
+                    onEscanearQr={() => irA(Destinos.escanearQr())}
+                    onFirmador={() => irA(Destinos.firmador())}
+                    onBusquedaAvanzada={() => irA(Destinos.busquedaAvanzada())}
+                    onAyuda={() => irA(Destinos.ayuda())}
+                  />
+
+                  <PorEstadoCard porEstado={panel.resumen.por_estado} />
+                  <PorUnidadCard unidades={panel.por_unidad} />
+                </>
+              ) : null}
+
+              {actualizado ? (
+                <Txt variante="etiqueta" color="textSecondary" style={styles.pie}>
+                  Actualizado el {formatFecha(actualizado.toISOString())} a las {formatHora(actualizado)}
+                </Txt>
+              ) : null}
+            </>
+          ) : null}
+
+          {sinConexion && !panel && estado === 'listo' ? (
+            <Card bordeSuperior={tema.warning}>
+              <Txt color="textSecondary">
+                No hay datos guardados en este dispositivo. Conectate a internet para ver el panel.
+              </Txt>
+            </Card>
+          ) : null}
         </View>
-      </SafeAreaView>
-    </ThemedView>
+      </ScrollView>
+
+      <ProfileMenu
+        visible={menuAbierto}
+        usuario={me}
+        onCerrar={() => setMenuAbierto(false)}
+        onMiPerfil={() => irA(Destinos.miPerfil())}
+        onRegistrarIdentidad={() => irA(Destinos.registrarIdentidad())}
+        onAyuda={() => irA(Destinos.ayuda())}
+        onCerrarSesion={salir}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  pantalla: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  safeArea: {
+  contenido: {
+    padding: SgcSpacing.lg,
+    paddingBottom: SgcSpacing.xl * 2,
+  },
+  columna: {
     width: '100%',
-    maxWidth: MaxContentWidth,
-    paddingHorizontal: Spacing.four,
+    maxWidth: 800,
+    alignSelf: 'center',
+    gap: SgcSpacing.lg,
   },
-  card: {
-    gap: Spacing.three,
-    padding: Spacing.five,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(128, 128, 128, 0.2)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+  grilla: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SgcSpacing.md,
   },
-  title: {
-    fontSize: 36,
-    lineHeight: 42,
-    fontWeight: '800',
-    letterSpacing: -1,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  greeting: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '700',
-  },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  button: {
-    marginTop: Spacing.two,
-    paddingVertical: Spacing.three,
-    borderRadius: 12,
+  centrado: {
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: SgcSpacing.sm,
+    padding: SgcSpacing.xl,
+    borderRadius: SgcRadius.md,
   },
-  secondaryButton: {
-    paddingVertical: Spacing.three,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    fontWeight: '700',
-  },
-  secondaryButtonText: {
-    fontWeight: '600',
-    opacity: 0.9,
+  pie: {
+    textAlign: 'center',
   },
 });
