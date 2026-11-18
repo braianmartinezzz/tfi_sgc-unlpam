@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import DetalleConvenio from "@/components/convenios/DetalleConvenio";
+import PanelRevision from "@/components/convenios/PanelRevision";
 
 export default function RevisarConvenioPage({
   params,
@@ -46,7 +47,11 @@ async function RevisarConvenioContent({
           Volver
         </Link>
       </header>
-      <DetalleConvenio id={id} reviewMode />
+      <DetalleConvenio
+        id={id}
+        reviewMode
+        asideContent={<PanelRevision id={Number(id)} />}
+      />
     </section>
   );
 }

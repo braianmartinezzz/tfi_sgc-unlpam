@@ -16,7 +16,6 @@ import {
 import { ApiError, apiDownload } from "@/services/api-client";
 import type { Convenio, HistorialEstado } from "@/types/convenio";
 import type { DocumentoListItem } from "@/types/documento";
-import PanelRevision from "@/components/convenios/PanelRevision";
 
 const tabs = [
   { id: "general", label: "General" },
@@ -545,9 +544,11 @@ function HistoryPanel({ convenio }: { convenio: Convenio }) {
 export default function DetalleConvenio({
   id,
   reviewMode = false,
+  asideContent,
 }: {
   id: string;
   reviewMode?: boolean;
+  asideContent?: ReactNode;
 }) {
   const router = useRouter();
   const { status: authStatus, user } = useAuth();
@@ -747,51 +748,51 @@ export default function DetalleConvenio({
       </header>
 
       <div
+        role="tablist"
+        aria-label="Secciones del convenio"
+        aria-orientation="horizontal"
+        className="max-w-full overflow-x-auto border-b border-ui-border"
+      >
+        <div className="flex w-max min-w-full">
+          {tabs.map((tab, index) => {
+            const selected = activeTab === tab.id;
+            const tabId = `convenio-tab-${parsedId}-${tab.id}`;
+            const panelId = `convenio-panel-${parsedId}-${tab.id}`;
+            return (
+              <button
+                key={tab.id}
+                ref={(element) => {
+                  tabRefs.current[index] = element;
+                }}
+                id={tabId}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={panelId}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(event) => handleTabKeyDown(event, index)}
+                className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
+                  selected
+                    ? "border-brand text-brand-text"
+                    : "border-transparent text-foreground/70 hover:bg-row-alternate hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div
         className={
-          reviewMode
+          asideContent
             ? "grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
-            : "space-y-5"
+            : ""
         }
       >
-        <div className="min-w-0 space-y-5">
-          <div
-            role="tablist"
-            aria-label="Secciones del convenio"
-            aria-orientation="horizontal"
-            className="max-w-full overflow-x-auto border-b border-ui-border"
-          >
-            <div className="flex w-max min-w-full">
-              {tabs.map((tab, index) => {
-                const selected = activeTab === tab.id;
-                const tabId = `convenio-tab-${parsedId}-${tab.id}`;
-                const panelId = `convenio-panel-${parsedId}-${tab.id}`;
-                return (
-                  <button
-                    key={tab.id}
-                    ref={(element) => {
-                      tabRefs.current[index] = element;
-                    }}
-                    id={tabId}
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    aria-controls={panelId}
-                    tabIndex={selected ? 0 : -1}
-                    onClick={() => setActiveTab(tab.id)}
-                    onKeyDown={(event) => handleTabKeyDown(event, index)}
-                    className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
-                      selected
-                        ? "border-brand text-brand-text"
-                        : "border-transparent text-foreground/70 hover:bg-row-alternate hover:text-foreground"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
+        <div className="min-w-0">
           {tabs.map((tab) => {
             const selected = activeTab === tab.id;
             const tabId = `convenio-tab-${parsedId}-${tab.id}`;
@@ -820,9 +821,11 @@ export default function DetalleConvenio({
           })}
         </div>
 
-        {reviewMode ? (
+        {asideContent ? (
           puedeRevisar ? (
-            <PanelRevision id={parsedId} />
+            <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+              {asideContent}
+            </div>
           ) : (
             <aside className={cardClassName}>
               <h2 className={headingClassName}>
