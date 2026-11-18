@@ -112,7 +112,7 @@ export default function ConvenioTable({
                         </Link>
                         <button
                           type="button"
-                          className={rowActionClassName}
+                          className={`${rowActionClassName} cursor-pointer`}
                           onClick={(event) =>
                             onEliminar(convenio, event.currentTarget)
                           }

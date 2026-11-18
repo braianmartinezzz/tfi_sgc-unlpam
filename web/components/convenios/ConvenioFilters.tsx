@@ -1,5 +1,6 @@
 "use client";
 
+import { filterControlInteractionClassName } from "@/components/ui/filter-control-styles";
 import type { UnidadAcademica } from "@/types/unidad";
 
 interface ConvenioFiltersProps {
@@ -23,7 +24,7 @@ interface ConvenioFiltersProps {
 }
 
 const controlClassName =
-  "mt-1 min-h-11 w-full rounded-md border border-ui-border bg-surface px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+  `mt-1 min-h-11 w-full rounded-md border border-ui-border bg-surface px-3 py-2 text-base text-foreground ${filterControlInteractionClassName}`;
 
 export default function ConvenioFilters({
   buscar,
@@ -54,16 +55,36 @@ export default function ConvenioFilters({
           <label htmlFor="convenio-buscar" className="font-semibold">
             Búsqueda
           </label>
-          <input
-            id="convenio-buscar"
-            key={`buscar-${buscar}`}
-            className={controlClassName}
-            type="search"
-            onChange={(event) => onBuscarChange(event.currentTarget.value)}
-            defaultValue={buscar}
-            placeholder="Buscar por título"
-            autoComplete="off"
-          />
+          <div className="relative">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-foreground"
+            >
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-4-4" />
+              </svg>
+            </span>
+            <input
+              id="convenio-buscar"
+              key={`buscar-${buscar}`}
+              className={`${controlClassName} pl-10`}
+              type="search"
+              onChange={(event) => onBuscarChange(event.currentTarget.value)}
+              defaultValue={buscar}
+              placeholder="Buscar por título"
+              autoComplete="off"
+            />
+          </div>
         </div>
         <div>
           <label htmlFor="convenio-tipo" className="font-semibold">
@@ -86,7 +107,7 @@ export default function ConvenioFilters({
           </label>
           <select
             id="convenio-subtipo"
-            className={controlClassName}
+            className={`${controlClassName} enabled:cursor-pointer`}
             value={esMarco}
             onChange={(event) => onEsMarcoChange(event.currentTarget.value)}
           >
@@ -101,7 +122,7 @@ export default function ConvenioFilters({
           </label>
           <select
             id="convenio-estado"
-            className={controlClassName}
+            className={`${controlClassName} enabled:cursor-pointer`}
             value={estado}
             onChange={(event) => onEstadoChange(event.currentTarget.value)}
           >
@@ -120,7 +141,7 @@ export default function ConvenioFilters({
             </label>
             <select
               id="convenio-facultad"
-              className={controlClassName}
+              className={`${controlClassName} enabled:cursor-pointer`}
               value={facultad}
               onChange={(event) => onFacultadChange(event.currentTarget.value)}
               disabled={unidadesCargando || Boolean(errorUnidades)}
@@ -161,7 +182,7 @@ export default function ConvenioFilters({
         <button
           type="button"
           onClick={onLimpiar}
-          className="min-h-11 rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="min-h-11 cursor-pointer rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           Limpiar filtros
         </button>

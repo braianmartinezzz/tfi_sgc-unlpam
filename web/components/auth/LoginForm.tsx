@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { ApiError } from "@/services/api-client";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import PasswordVisibilityToggle from "@/components/ui/PasswordVisibilityToggle";
 
 const loginSchema = z.object({
   mail: z
@@ -145,30 +146,16 @@ export default function LoginForm() {
         }
         {...register("password")}
         type={passwordVisible ? "text" : "password"}
+        className="[&::-ms-reveal]:hidden"
         autoComplete="current-password"
         placeholder="••••••••"
         aria-invalid={Boolean(errors.password)}
         aria-describedby={errors.password ? passwordErrorId : undefined}
         endAdornment={
-          <button
-            type="button"
-            aria-pressed={passwordVisible}
-            aria-label={
-              passwordVisible ? "Ocultar contraseña" : "Mostrar contraseña"
-            }
-            onClick={() => setPasswordVisible((visible) => !visible)}
-            className="inline-flex items-center gap-1 rounded-sm px-1 py-1 text-xs text-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-          >
-            <span aria-hidden="true">ver contraseña</span>
-            <svg
-              aria-hidden="true"
-              className="h-[18px] w-[18px]"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path d="M12 5c-5.2 0-9.4 3.2-11 7 1.6 3.8 5.8 7 11 7s9.4-3.2 11-7c-1.6-3.8-5.8-7-11-7Zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
-            </svg>
-          </button>
+          <PasswordVisibilityToggle
+            visible={passwordVisible}
+            onToggle={() => setPasswordVisible((visible) => !visible)}
+          />
         }
       />
       {errors.password ? (
@@ -181,7 +168,11 @@ export default function LoginForm() {
         </p>
       ) : null}
       <div className="space-y-3 pt-1 text-center">
-        <Button type="submit" loading={isSubmitting}>
+        <Button
+          type="submit"
+          loading={isSubmitting}
+          className="enabled:cursor-pointer"
+        >
           Iniciar Sesión
         </Button>
         <Button

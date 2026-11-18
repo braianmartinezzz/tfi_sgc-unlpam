@@ -278,7 +278,7 @@ export default function ConveniosPageContent() {
           onClick={() => void exportCsv()}
           disabled={exportando || conveniosQuery.isPending}
           aria-busy={exportando}
-          className="min-h-11 rounded-md border border-brand px-4 py-2 font-semibold text-brand-text hover:bg-brand hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 enabled:cursor-pointer rounded-md border border-brand px-4 py-2 font-semibold text-brand-text hover:bg-brand hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
         >
           {exportando ? "Exportando CSV..." : "Exportar CSV"}
         </button>

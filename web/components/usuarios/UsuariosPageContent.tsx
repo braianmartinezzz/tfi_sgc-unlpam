@@ -44,14 +44,14 @@ function AccessDenied() {
       aria-labelledby="usuarios-title"
       className="space-y-5"
     >
-      <div>
+      <div className="w-fit">
         <h1
           id="usuarios-title"
           className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
         >
           Gestión de usuarios
         </h1>
-        <div aria-hidden="true" className="mt-2 h-1 w-16 rounded-full bg-brand" />
+        <div aria-hidden="true" className="mt-2 h-1 w-full rounded-full bg-brand" />
       </div>
       <p
         role="alert"
@@ -171,14 +171,14 @@ function UsuariosList() {
   return (
     <section aria-labelledby="usuarios-title" className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="w-fit">
           <h1
             id="usuarios-title"
             className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
           >
             Gestión de usuarios
           </h1>
-          <div aria-hidden="true" className="mt-2 h-1 w-16 rounded-full bg-brand" />
+          <div aria-hidden="true" className="mt-2 h-1 w-full rounded-full bg-brand" />
         </div>
         <Link
           href="/usuarios/new"

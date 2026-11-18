@@ -3,6 +3,7 @@
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
+import { filterControlInteractionClassName } from "@/components/ui/filter-control-styles";
 import type { Rol } from "@/types/auth";
 import type { UnidadAcademica } from "@/types/unidad";
 
@@ -81,6 +82,7 @@ export default function UsuarioFilters({
             id="usuario-buscar"
             label="Búsqueda"
             floatingLabel={false}
+            className={filterControlInteractionClassName}
             icon={
               <svg
                 aria-hidden="true"
@@ -110,6 +112,7 @@ export default function UsuarioFilters({
           <Select
             id="usuario-rol"
             label="Rol"
+            className={`${filterControlInteractionClassName} enabled:cursor-pointer`}
             value={rol}
             onChange={(event) => onRolChange(event.currentTarget.value)}
             disabled={rolesCargando || Boolean(errorRoles)}
@@ -138,6 +141,7 @@ export default function UsuarioFilters({
           <Select
             id="usuario-unidad"
             label="Unidad académica"
+            className={`${filterControlInteractionClassName} enabled:cursor-pointer`}
             value={unidad}
             onChange={(event) => onUnidadChange(event.currentTarget.value)}
             disabled={unidadesCargando || Boolean(errorUnidades)}
@@ -168,6 +172,7 @@ export default function UsuarioFilters({
         <Select
           id="usuario-estado"
           label="Estado"
+          className={`${filterControlInteractionClassName} enabled:cursor-pointer`}
           value={estado}
           onChange={(event) => onEstadoChange(event.currentTarget.value)}
         >
@@ -180,7 +185,7 @@ export default function UsuarioFilters({
         <Button
           variant="link"
           onClick={onLimpiar}
-          className="min-h-11 cursor-pointer rounded-md border border-ui-border px-4 py-2 font-semibold !no-underline text-foreground hover:bg-row-alternate"
+          className="min-h-11 cursor-pointer !rounded-md border border-ui-border px-4 py-2 font-semibold !no-underline text-foreground hover:bg-row-alternate"
         >
           Limpiar filtros
         </Button>

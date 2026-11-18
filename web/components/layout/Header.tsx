@@ -37,7 +37,7 @@ export default function Header() {
           onClick={() => void handleLogout()}
           disabled={isLoggingOut}
           aria-busy={isLoggingOut}
-          className="min-h-11 shrink-0 rounded-sm border border-white/30 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-topbar disabled:cursor-not-allowed disabled:opacity-70"
+          className="min-h-11 shrink-0 rounded-sm border border-white/30 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-topbar enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isLoggingOut ? "Cerrando sesión..." : "Cerrar sesión"}
         </button>

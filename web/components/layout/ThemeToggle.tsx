@@ -2,14 +2,22 @@
 
 import { useTheme } from "@/context/ThemeContext";
 
-export default function ThemeToggle() {
+export default function ThemeToggle({
+  variant = "topbar",
+}: {
+  variant?: "topbar" | "surface";
+}) {
   const { toggleTheme } = useTheme();
+  const colorClassName =
+    variant === "surface"
+      ? "border-ui-border text-foreground hover:bg-row-alternate focus-visible:ring-brand focus-visible:ring-offset-background"
+      : "border-white/30 text-white hover:bg-white/10 focus-visible:ring-white focus-visible:ring-offset-topbar";
 
   return (
     <button
       type="button"
       onClick={toggleTheme}
-      className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-white/30 text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-topbar"
+      className={`inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${colorClassName}`}
     >
       <span className="theme-toggle-label-dark sr-only">
         Cambiar a modo oscuro

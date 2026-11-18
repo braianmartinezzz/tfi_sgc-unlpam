@@ -1,10 +1,14 @@
 import type { ReactNode } from "react";
+import ThemeToggle from "@/components/layout/ThemeToggle";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div
       className="relative flex min-h-screen flex-col overflow-hidden bg-linear-to-br from-page via-background to-row-alternate text-foreground"
     >
+      <div className="absolute right-4 top-4 z-20">
+        <ThemeToggle variant="surface" />
+      </div>
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 overflow-hidden"

@@ -13,6 +13,7 @@ import { ApiError } from "@/services/api-client";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import Input from "@/components/ui/Input";
+import PasswordVisibilityToggle from "@/components/ui/PasswordVisibilityToggle";
 import Select from "@/components/ui/Select";
 import type { UsuarioResponse } from "@/types/usuario";
 
@@ -335,37 +336,12 @@ function UsuarioCreateForm() {
                 }}
                 endAdornment={
                   passwordValue ? (
-                    <button
-                      type="button"
-                      aria-pressed={passwordVisible}
-                      aria-label={
-                        passwordVisible
-                          ? "Ocultar contraseña"
-                          : "Mostrar contraseña"
-                      }
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() =>
+                    <PasswordVisibilityToggle
+                      visible={passwordVisible}
+                      onToggle={() =>
                         setPasswordVisible((visible) => !visible)
                       }
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-foreground hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                    >
-                      <svg
-                        aria-hidden="true"
-                        className="h-[18px] w-[18px]"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
-                        <circle cx="12" cy="12" r="3" />
-                        {passwordVisible ? (
-                          <path d="m3 3 18 18" />
-                        ) : null}
-                      </svg>
-                    </button>
+                    />
                   ) : undefined
                 }
               />
