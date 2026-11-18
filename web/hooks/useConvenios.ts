@@ -17,6 +17,22 @@ export function useConvenios(filters: ConvenioListFilters = {}) {
   });
 }
 
+export function useConvenio(id: number, enabled = true) {
+  return useQuery({
+    queryKey: ["convenio", id],
+    queryFn: () => convenios.get(id),
+    enabled: enabled && id > 0,
+  });
+}
+
+export function useConvenioDocuments(id: number, enabled = true) {
+  return useQuery({
+    queryKey: ["convenio", id, "documentos"],
+    queryFn: () => convenios.listDocuments(id),
+    enabled: enabled && id > 0,
+  });
+}
+
 export function useRemoveConvenio() {
   const queryClient = useQueryClient();
 
