@@ -3,7 +3,8 @@
 import Link from "next/link";
 import EstadoBadge from "@/components/convenios/EstadoBadge";
 import {
-  canManageDraftConvenio,
+  canDeleteDraftConvenio,
+  canEditConvenio,
   canReviewConvenio,
 } from "@/lib/permissions";
 import type { ConvenioListItem } from "@/types/convenio";
@@ -68,7 +69,8 @@ export default function ConvenioTable({
               convenio.unidad_academica?.sigla ||
               convenio.unidad_academica?.nombre ||
               "—";
-            const puedeEditar = canManageDraftConvenio(rol, estado);
+            const puedeEditar = canEditConvenio(rol, estado);
+            const puedeEliminar = canDeleteDraftConvenio(rol, estado);
             const detalleHref = `/convenios/${convenio.id_instrumento}`;
 
             return (
@@ -114,23 +116,23 @@ export default function ConvenioTable({
                       </Link>
                     ) : null}
                     {puedeEditar ? (
-                      <>
-                        <Link
-                          href={`${detalleHref}/edit`}
-                          className={rowActionClassName}
-                        >
-                          Editar
-                        </Link>
-                        <button
-                          type="button"
-                          className={rowActionClassName}
-                          onClick={(event) =>
-                            onEliminar(convenio, event.currentTarget)
-                          }
-                        >
-                          Eliminar
-                        </button>
-                      </>
+                      <Link
+                        href={`${detalleHref}/edit`}
+                        className={rowActionClassName}
+                      >
+                        Editar
+                      </Link>
+                    ) : null}
+                    {puedeEliminar ? (
+                      <button
+                        type="button"
+                        className={rowActionClassName}
+                        onClick={(event) =>
+                          onEliminar(convenio, event.currentTarget)
+                        }
+                      >
+                        Eliminar
+                      </button>
                     ) : null}
                   </div>
                 </td>

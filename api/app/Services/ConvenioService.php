@@ -711,8 +711,10 @@ class ConvenioService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($instrumento->estado !== 'Borrador') {
-                throw new \DomainException('El convenio no está en fase de edición.');
+            if (! in_array($instrumento->estado, ['Borrador', 'EnCorreccion'], true)) {
+                throw new \DomainException(
+                    'El convenio solo puede editarse en estado Borrador o En corrección.'
+                );
             }
 
             $instrumentoFields = array_intersect_key($data, array_flip([

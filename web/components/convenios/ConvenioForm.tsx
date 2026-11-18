@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useForm,
@@ -16,7 +17,8 @@ import StepFichaPlazos from "@/components/convenios/form/StepFichaPlazos";
 import Stepper from "@/components/convenios/form/Stepper";
 import { convenioFormSchema, type ConvenioFormValues } from "@/components/convenios/form/schema";
 import { useAuth } from "@/context/AuthContext";
-import { canManageDraftConvenio } from "@/lib/permissions";
+import { useConvenioObservations } from "@/hooks/useConvenios";
+import { canEditConvenio } from "@/lib/permissions";
 import { ApiError } from "@/services/api-client";
 import * as convenios from "@/services/convenios";
 import * as institucionesFirmantes from "@/services/instituciones-firmantes";
@@ -417,6 +419,7 @@ export default function ConvenioForm({
   const [editLoadError, setEditLoadError] = useState<EditLoadError | null>(
     null,
   );
+  const [editState, setEditState] = useState<string | null>(null);
   const [options, setOptions] = useState<FormOptions | null>(null);
   const form = useForm<ConvenioFormValues>({
     resolver: zodResolver(convenioFormSchema),
@@ -436,6 +439,14 @@ export default function ConvenioForm({
   const canManage = isManagementRole(role);
   const isEditMode = convenioId !== undefined;
   const busy = operation !== null;
+  const observationsQuery = useConvenioObservations(
+    convenioId ?? 0,
+    isEditMode && editLoaded && editState === "EnCorreccion",
+  );
+  const pendingObservations =
+    observationsQuery.data?.data.filter(
+      (observation) => observation.estado_tramite === "Pendiente",
+    ) ?? [];
 
   const fetchOptions = useCallback(async (): Promise<FormOptions> => {
     const [unidades, instituciones, conveniosMarco] = await Promise.all([
@@ -519,7 +530,7 @@ export default function ConvenioForm({
     try {
       const convenio = await convenios.get(convenioId);
       if (
-        !canManageDraftConvenio(
+        !canEditConvenio(
           role ?? null,
           convenio.instrumento?.estado ?? "",
         )
@@ -531,6 +542,7 @@ export default function ConvenioForm({
       const documents = await convenios.listDocuments(convenioId);
       const mapped = mapEditValues(convenio, documents);
       reset(mapped.values);
+      setEditState(convenio.instrumento?.estado ?? null);
       uploadedDocumentsRef.current = mapped.uploadedDocuments;
       instrumentIdRef.current = convenioId;
       setInstrumentId(convenioId);
@@ -684,9 +696,7 @@ export default function ConvenioForm({
     const id = await ensureInstrument(values);
     setNotice({
       kind: "info",
-      message: isEditMode
-        ? "Guardando los cambios del convenio..."
-        : "Guardando la ficha del borrador...",
+      message: "Guardando el convenio...",
     });
     await convenios.update(id, toUpdateInput(values));
     return id;
@@ -710,12 +720,10 @@ export default function ConvenioForm({
       if (!isEditMode) resetNewConvenio();
       setNotice({
         kind: "success",
-        message: isEditMode
-          ? "Cambios guardados correctamente. Volviendo al detalle..."
-          : "Borrador guardado correctamente. Volviendo a convenios...",
+        message: "Convenio guardado correctamente. Volviendo a convenios...",
       });
       await waitForSuccessNotice();
-      router.push(isEditMode ? `/convenios/${id}` : "/convenios");
+      router.push("/convenios");
     } catch (error) {
       const documentError =
         error instanceof DocumentSyncError ? error.originalError : error;
@@ -1060,7 +1068,7 @@ export default function ConvenioForm({
   if (isEditMode && editDenied) {
     return (
       <div className="space-y-3 rounded-md border border-ui-border bg-surface p-4">
-        <ErrorState message="Solo se pueden editar convenios en estado Borrador." />
+        <ErrorState message="Solo se pueden editar convenios en estado Borrador o En corrección." />
         <Button type="button" onClick={() => router.push(`/convenios/${convenioId}`)}>
           Volver al convenio
         </Button>
@@ -1102,6 +1110,22 @@ export default function ConvenioForm({
 
   return (
     <div className="mx-auto w-full max-w-5xl">
+      {pendingObservations.length > 0 ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mb-4 rounded-md border border-ui-border bg-surface p-4 text-foreground"
+        >
+          Tenés {pendingObservations.length} observaciones pendientes de
+          respuesta. Respondelas para poder reenviar el convenio a revisión.{" "}
+          <Link
+            href={`/convenios/${convenioId}?tab=observaciones`}
+            className="font-semibold text-brand-text underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            Ir a observaciones
+          </Link>
+        </p>
+      ) : null}
       <Stepper
         currentStep={currentStep}
         onStepChange={setStep}

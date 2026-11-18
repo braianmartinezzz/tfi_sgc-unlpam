@@ -19,6 +19,9 @@ import type {
   CrearObservacionInput,
   CrearObservacionResponse,
   DevolverConvenioInput,
+  ObservacionesResponse,
+  ResponderObservacionInput,
+  ResponderObservacionResponse,
 } from "@/types/observacion";
 
 function buildQuery(filters: ConvenioListFilters): string {
@@ -87,6 +90,26 @@ export function listDocuments(
   id: number | string,
 ): Promise<DocumentoListResponse> {
   return apiRequest<DocumentoListResponse>(`/convenios/${id}/documentos`);
+}
+
+export function listObservaciones(
+  id: number | string,
+): Promise<ObservacionesResponse> {
+  return apiRequest<ObservacionesResponse>(`/convenios/${id}/observaciones`);
+}
+
+export function responderObservacion(
+  id: number | string,
+  idObservacion: number | string,
+  input: ResponderObservacionInput,
+): Promise<ResponderObservacionResponse> {
+  return apiRequest<ResponderObservacionResponse>(
+    `/convenios/${id}/observaciones/${idObservacion}/responder`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function uploadDocument(
