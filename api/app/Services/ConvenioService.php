@@ -26,6 +26,30 @@ use Illuminate\Support\Facades\Storage;
 
 class ConvenioService
 {
+    private const GESTION_VISIBLE_STATES = [
+        'Borrador',
+        'EnCorreccion',
+        'Revisión',
+        'Aprobado',
+        'Firmado',
+        'Rescindido',
+    ];
+
+    private const REVISION_VISIBLE_STATES = [
+        'Revisión',
+        'EnCorreccion',
+        'Aprobado',
+        'Rechazado',
+        'Rescindido',
+        'Archivado',
+    ];
+
+    private const CONSULTA_VISIBLE_STATES = [
+        'Firmado',
+        'Rescindido',
+        'Archivado',
+    ];
+
     public function paginate(array $filters, Usuario $usuario): LengthAwarePaginator
     {
         $query = Convenio::query()->with([
@@ -36,51 +60,10 @@ class ConvenioService
             'especifico',
         ]);
 
-        switch ($usuario->rol?->nombre) {
-            case 'Administración':
-                break;
-
-            case 'Gestión':
-                $query->where(
-                    'convenio.id_unidad_academica',
-                    $usuario->id_unidad
-                )->whereHas('instrumento', function ($instrumentoQuery) {
-                    $instrumentoQuery->whereIn('estado', [
-                        'Borrador',
-                        'EnCorreccion',
-                        'Revisión',
-                        'Aprobado',
-                        'Firmado',
-                        'Rescindido',
-                    ]);
-                });
-                break;
-
-            case 'Revisión':
-                $this->applyRevisionVisibility($query, $usuario);
-                break;
-
-            case 'Consulta':
-                if (! $usuario->alcance_global) {
-                    $query->where(
-                        'convenio.id_unidad_academica',
-                        $usuario->id_unidad
-                    );
-                }
-
-                $query->whereHas('instrumento', function ($instrumentoQuery) {
-                    $instrumentoQuery->whereIn('estado', [
-                        'Firmado',
-                        'Rescindido',
-                        'Archivado',
-                    ]);
-                });
-                break;
-
-            default:
-                $query->whereRaw('1 = 0');
-                break;
-        }
+        $this->applyVisibilityScope(
+            $query,
+            $this->visibilityScope($usuario)
+        );
 
         if (isset($filters['estado']) && $filters['estado'] !== '') {
             $query->whereHas('instrumento', function ($instrumentoQuery) use ($filters) {
@@ -117,20 +100,85 @@ class ConvenioService
         return $query->paginate(15)->appends($filters);
     }
 
+    /**
+     * @return array{id_unidad_academica: ?int, estados: ?array}|null
+     */
+    public function visibilityScope(Usuario $usuario): ?array
+    {
+        $rol = $usuario->rol?->nombre;
+        $unidad = $usuario->id_unidad !== null
+            && is_numeric($usuario->id_unidad)
+            && (int) $usuario->id_unidad > 0
+                ? (int) $usuario->id_unidad
+                : null;
+
+        return match ($rol) {
+            'Administración' => [
+                'id_unidad_academica' => null,
+                'estados' => null,
+            ],
+            'Gestión' => $unidad === null
+                ? null
+                : [
+                    'id_unidad_academica' => $unidad,
+                    'estados' => self::GESTION_VISIBLE_STATES,
+                ],
+            'Revisión' => $usuario->alcance_global
+                ? [
+                    'id_unidad_academica' => null,
+                    'estados' => self::REVISION_VISIBLE_STATES,
+                ]
+                : ($unidad === null
+                    ? null
+                    : [
+                        'id_unidad_academica' => $unidad,
+                        'estados' => self::REVISION_VISIBLE_STATES,
+                    ]),
+            'Consulta' => $usuario->alcance_global
+                ? [
+                    'id_unidad_academica' => null,
+                    'estados' => self::CONSULTA_VISIBLE_STATES,
+                ]
+                : ($unidad === null
+                    ? null
+                    : [
+                        'id_unidad_academica' => $unidad,
+                        'estados' => self::CONSULTA_VISIBLE_STATES,
+                    ]),
+            default => null,
+        };
+    }
+
+    private function applyVisibilityScope(
+        Builder $query,
+        ?array $scope
+    ): Builder {
+        if ($scope === null) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        if ($scope['id_unidad_academica'] !== null) {
+            $query->where(
+                'convenio.id_unidad_academica',
+                $scope['id_unidad_academica']
+            );
+        }
+
+        if ($scope['estados'] !== null) {
+            $query->whereHas('instrumento', function ($instrumentoQuery) use ($scope) {
+                $instrumentoQuery->whereIn('estado', $scope['estados']);
+            });
+        }
+
+        return $query;
+    }
+
     private function applyRevisionVisibility(Builder $query, Usuario $usuario): Builder
     {
-        $this->applyRevisionUnitScope($query, $usuario);
-
-        return $query->whereHas('instrumento', function ($instrumentoQuery) {
-            $instrumentoQuery->whereIn('estado', [
-                'Revisión',
-                'EnCorreccion',
-                'Aprobado',
-                'Rechazado',
-                'Rescindido',
-                'Archivado',
-            ]);
-        });
+        return $this->applyVisibilityScope(
+            $query,
+            $this->visibilityScope($usuario)
+        );
     }
 
     private function applyRevisionUnitScope(Builder $query, Usuario $usuario): Builder

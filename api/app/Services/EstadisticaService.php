@@ -8,14 +8,42 @@ use Illuminate\Support\Facades\DB;
 
 class EstadisticaService
 {
-    public function resumen(int $dias = 90, ?int $idUnidad = null): array
+    /**
+     * @param  array{id_unidad_academica: ?int, estados: ?array}  $scope
+     * @param  array{fecha_desde?: ?string, fecha_hasta?: ?string, tipo?: ?string}  $filters
+     */
+    public function resumen(int $dias, array $scope, array $filters = []): array
     {
         $hoy = Carbon::today();
         $hasta = $hoy->copy()->addDays($dias);
+        $idUnidad = $scope['id_unidad_academica'];
+        $estados = $scope['estados'];
+        $fechaDesde = $filters['fecha_desde'] ?? null;
+        $fechaHasta = $filters['fecha_hasta'] ?? null;
+        $tipo = $filters['tipo'] ?? null;
 
         $base = fn (): Builder => DB::table('convenio as c')
             ->join('instrumento as i', 'i.id_instrumento', '=', 'c.id_instrumento')
-            ->when($idUnidad, fn ($q) => $q->where('c.id_unidad_academica', $idUnidad));
+            ->when(
+                $idUnidad !== null,
+                fn ($q) => $q->where('c.id_unidad_academica', $idUnidad)
+            )
+            ->when(
+                $estados !== null,
+                fn ($q) => $q->whereIn('i.estado', $estados)
+            )
+            ->when(
+                $fechaDesde !== null,
+                fn ($q) => $q->whereDate('i.fecha_firma', '>=', $fechaDesde)
+            )
+            ->when(
+                $fechaHasta !== null,
+                fn ($q) => $q->whereDate('i.fecha_firma', '<=', $fechaHasta)
+            )
+            ->when(
+                $tipo !== null,
+                fn ($q) => $q->where('c.tipo', $tipo)
+            );
 
         $total = $base()->count();
         $marco = $base()
@@ -34,6 +62,21 @@ class EstadisticaService
             ->select('c.tipo', DB::raw('COUNT(*) as total'))
             ->groupBy('c.tipo')
             ->orderByDesc('total')
+            ->get();
+
+        $yearExpression = match (DB::connection()->getDriverName()) {
+            'sqlite' => "CAST(strftime('%Y', i.fecha_firma) AS INTEGER)",
+            'mysql', 'mariadb' => 'YEAR(i.fecha_firma)',
+            'pgsql' => 'CAST(EXTRACT(YEAR FROM i.fecha_firma) AS INTEGER)',
+            default => throw new \RuntimeException(
+                'El motor de base de datos no admite agrupar fechas de firma por año.'
+            ),
+        };
+        $porAnio = $base()
+            ->whereNotNull('i.fecha_firma')
+            ->selectRaw($yearExpression.' as anio, COUNT(*) as total')
+            ->groupBy('anio')
+            ->orderBy('anio')
             ->get();
 
         $porUnidad = $base()
@@ -57,6 +100,7 @@ class EstadisticaService
 
         $enPreaviso = $proximos->filter(function ($r) use ($hoy) {
             $restantes = $hoy->diffInDays(Carbon::parse($r->vencimiento), false);
+
             return $r->dias_preaviso !== null && $restantes <= (int) $r->dias_preaviso;
         })->count();
 
@@ -68,6 +112,7 @@ class EstadisticaService
             ],
             'por_estado' => $porEstado,
             'por_tipo' => $porTipo,
+            'por_anio' => $porAnio,
             'por_unidad_academica' => $porUnidad,
             'vencimientos' => [
                 'dias' => $dias,
