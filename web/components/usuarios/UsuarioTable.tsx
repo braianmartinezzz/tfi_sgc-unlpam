@@ -12,12 +12,11 @@ export default function UsuarioTable({ usuarios }: { usuarios: Usuario[] }) {
       tabIndex={0}
       aria-label="Tabla de usuarios; desplácese horizontalmente para ver todas las columnas"
     >
-      <table className="w-full min-w-[1050px] border-collapse bg-surface text-left text-foreground">
+      <table className="w-full min-w-[900px] border-collapse bg-surface text-left text-foreground">
         <caption className="sr-only">Listado de usuarios</caption>
         <thead className="bg-table-head text-white">
           <tr>
-            <th scope="col" className="px-4 py-3 font-bold">Nombre</th>
-            <th scope="col" className="px-4 py-3 font-bold">Apellido</th>
+            <th scope="col" className="px-4 py-3 font-bold">Nombre de usuario</th>
             <th scope="col" className="px-4 py-3 font-bold">Correo electrónico</th>
             <th scope="col" className="px-4 py-3 font-bold">Rol</th>
             <th scope="col" className="px-4 py-3 font-bold">Unidad académica</th>
@@ -38,12 +37,6 @@ export default function UsuarioTable({ usuarios }: { usuarios: Usuario[] }) {
                 className="bg-surface text-foreground even:bg-row-alternate"
               >
                 <td className="max-w-xs px-4 py-3">{usuario.nombre || "—"}</td>
-                <td
-                  className="px-4 py-3"
-                  title="El apellido no está disponible en los datos actuales."
-                >
-                  —
-                </td>
                 <td className="px-4 py-3">{usuario.mail}</td>
                 <td className="px-4 py-3">{usuario.rol?.nombre ?? "—"}</td>
                 <td className="px-4 py-3">{unidad}</td>

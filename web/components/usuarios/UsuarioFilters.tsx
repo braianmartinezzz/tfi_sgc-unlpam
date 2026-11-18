@@ -79,8 +79,8 @@ export default function UsuarioFilters({
         <div>
           <Input
             id="usuario-buscar"
-            key={`buscar-${buscar}`}
             label="Búsqueda"
+            floatingLabel={false}
             icon={
               <svg
                 aria-hidden="true"
@@ -97,7 +97,7 @@ export default function UsuarioFilters({
               </svg>
             }
             type="search"
-            defaultValue={buscar}
+            value={buscar}
             onChange={(event) => onBuscarChange(event.currentTarget.value)}
             placeholder="Nombre o correo electrónico"
             autoComplete="off"
@@ -180,7 +180,7 @@ export default function UsuarioFilters({
         <Button
           variant="link"
           onClick={onLimpiar}
-          className="min-h-11 rounded-md border border-ui-border px-4 py-2 font-semibold no-underline text-foreground hover:bg-row-alternate"
+          className="min-h-11 cursor-pointer rounded-md border border-ui-border px-4 py-2 font-semibold !no-underline text-foreground hover:bg-row-alternate"
         >
           Limpiar filtros
         </Button>

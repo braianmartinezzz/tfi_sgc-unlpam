@@ -67,19 +67,22 @@ function UsuariosList() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [draftRevision, setDraftRevision] = useState(0);
-  const draftsRef = useRef({
-    buscar: searchParams.get("buscar") ?? "",
-  });
+  const [draftBuscar, setDraftBuscar] = useState(
+    searchParams.get("buscar") ?? "",
+  );
   const page = parsePage(searchParams.get("page"));
   const buscar = searchParams.get("buscar") ?? "";
+  const lastNavigatedBuscarRef = useRef(buscar);
 
   useEffect(() => {
-    draftsRef.current.buscar = buscar;
+    if (buscar === lastNavigatedBuscarRef.current) return;
+
+    lastNavigatedBuscarRef.current = buscar;
+    setDraftBuscar(buscar);
   }, [buscar]);
 
   useEffect(() => {
-    const buscarNuevo = draftsRef.current.buscar.trim();
+    const buscarNuevo = draftBuscar.trim();
     if (buscar === buscarNuevo) return;
 
     const timeout = window.setTimeout(() => {
@@ -87,11 +90,12 @@ function UsuariosList() {
       if (buscarNuevo) params.set("buscar", buscarNuevo);
       else params.delete("buscar");
       params.delete("page");
+      lastNavigatedBuscarRef.current = buscarNuevo;
       router.push(withQuery(pathname, params), { scroll: false });
-    }, 300);
+    }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [buscar, draftRevision, pathname, router]);
+  }, [buscar, draftBuscar, pathname, router]);
 
   const filters = useMemo<UsuarioListFilters>(() => {
     const rolId = parsePositiveInteger(searchParams.get("id_rol"));
@@ -142,18 +146,19 @@ function UsuariosList() {
 
   function updateFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
-    const currentSearch = draftsRef.current.buscar.trim();
+    const currentSearch = draftBuscar.trim();
     if (currentSearch) params.set("buscar", currentSearch);
     else params.delete("buscar");
     if (value) params.set(key, value);
     else params.delete(key);
     params.delete("page");
+    lastNavigatedBuscarRef.current = currentSearch;
     router.push(withQuery(pathname, params), { scroll: false });
   }
 
   function clearFilters() {
-    draftsRef.current.buscar = "";
-    setDraftRevision((revision) => revision + 1);
+    lastNavigatedBuscarRef.current = "";
+    setDraftBuscar("");
     router.push(pathname, { scroll: false });
   }
 
@@ -199,7 +204,7 @@ function UsuariosList() {
       </div>
 
       <UsuarioFilters
-        buscar={buscar}
+        buscar={draftBuscar}
         rol={rolId ? String(rolId) : ""}
         unidad={unidadId ? String(unidadId) : ""}
         estado={activo === "true" || activo === "false" ? activo : ""}
@@ -218,8 +223,7 @@ function UsuariosList() {
             : null
         }
         onBuscarChange={(value) => {
-          draftsRef.current.buscar = value;
-          setDraftRevision((revision) => revision + 1);
+          setDraftBuscar(value);
         }}
         onRolChange={(value) => updateFilter("id_rol", value)}
         onUnidadChange={(value) => updateFilter("id_unidad", value)}

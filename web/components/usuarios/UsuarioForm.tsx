@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
-import { useForm, type FieldPath } from "react-hook-form";
+import { useForm, useWatch, type FieldPath } from "react-hook-form";
 import { useRouter, useSearchParams } from "next/navigation";
 import { z } from "zod";
 import { usePermissions } from "@/context/PermissionContext";
@@ -145,9 +145,11 @@ function UsuarioCreateForm() {
   const unidadesQuery = useUnidades();
   const createMutation = useCreateUsuario();
   const [formError, setFormError] = useState<string | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [createdUsuario, setCreatedUsuario] =
     useState<UsuarioResponse | null>(null);
   const {
+    control,
     clearErrors,
     formState: { errors },
     handleSubmit,
@@ -158,6 +160,8 @@ function UsuarioCreateForm() {
     mode: "onTouched",
     defaultValues: initialFormValues,
   });
+  const passwordRegistration = register("password");
+  const passwordValue = useWatch({ control, name: "password" });
 
   async function onSubmit(values: UsuarioFormValues) {
     if (createMutation.isPending) return;
@@ -312,16 +316,57 @@ function UsuarioCreateForm() {
                 id="usuario-password"
                 label="Contraseña *"
                 icon={passwordIcon}
-                type="password"
+                type={passwordVisible ? "text" : "password"}
                 autoComplete="new-password"
                 minLength={8}
                 maxLength={255}
                 required
                 placeholder="Al menos 8 caracteres"
-                {...register("password")}
+                className="[&::-ms-reveal]:hidden"
+                {...passwordRegistration}
                 aria-invalid={Boolean(errors.password)}
                 aria-describedby={
                   errors.password ? "usuario-password-error" : undefined
+                }
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  void passwordRegistration.onChange(event);
+                  if (!value) setPasswordVisible(false);
+                }}
+                endAdornment={
+                  passwordValue ? (
+                    <button
+                      type="button"
+                      aria-pressed={passwordVisible}
+                      aria-label={
+                        passwordVisible
+                          ? "Ocultar contraseña"
+                          : "Mostrar contraseña"
+                      }
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() =>
+                        setPasswordVisible((visible) => !visible)
+                      }
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-foreground hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        className="h-[18px] w-[18px]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                        <circle cx="12" cy="12" r="3" />
+                        {passwordVisible ? (
+                          <path d="m3 3 18 18" />
+                        ) : null}
+                      </svg>
+                    </button>
+                  ) : undefined
                 }
               />
               <FieldError
@@ -333,8 +378,9 @@ function UsuarioCreateForm() {
             <div>
               <Select
                 id="usuario-rol"
-                label="Rol *"
+                label="Rol"
                 requiredMark
+                floatingLabel
                 required
                 disabled={
                   rolesQuery.isPending ||
@@ -383,8 +429,9 @@ function UsuarioCreateForm() {
             <div>
               <Select
                 id="usuario-unidad"
-                label="Unidad académica *"
+                label="Unidad académica"
                 requiredMark
+                floatingLabel
                 required
                 disabled={
                   unidadesQuery.isPending ||
@@ -468,7 +515,7 @@ function UsuarioCreateForm() {
             type="button"
             disabled={createMutation.isPending}
             onClick={() => router.push("/usuarios")}
-            className="min-h-11 rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            className="min-h-11 cursor-pointer rounded-sm border border-ui-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             Cancelar
           </button>
@@ -476,7 +523,7 @@ function UsuarioCreateForm() {
             type="submit"
             loading={createMutation.isPending}
             disabled={!catalogsReady}
-            className="!w-full sm:!w-auto"
+            className="!w-full cursor-pointer sm:!w-auto"
           >
             {createMutation.isPending ? "Creando usuario..." : "Crear usuario"}
           </Button>

@@ -3,18 +3,33 @@ import { forwardRef, useId, type SelectHTMLAttributes } from "react";
 type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   label: string;
   requiredMark?: boolean;
+  floatingLabel?: boolean;
 };
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, id: providedId, label, requiredMark = false, ...props },
+  {
+    className,
+    floatingLabel = false,
+    id: providedId,
+    label,
+    requiredMark = false,
+    ...props
+  },
   ref,
 ) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
 
   return (
-    <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">
+    <div className={floatingLabel ? "relative" : undefined}>
+      <label
+        htmlFor={id}
+        className={
+          floatingLabel
+            ? "absolute -top-2 left-3 z-10 bg-surface px-1 text-xs font-medium text-foreground"
+            : "mb-1 block text-sm font-medium"
+        }
+      >
         {label}
         {requiredMark ? <span aria-hidden="true"> *</span> : null}
       </label>
