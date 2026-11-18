@@ -1,5 +1,16 @@
-import EmptyState from "@/components/feedback/EmptyState";
+import { Suspense } from "react";
+import UsuariosPageContent from "@/components/usuarios/UsuariosPageContent";
 
 export default function UsuariosPage() {
-  return <EmptyState title="Usuarios" />;
+  return (
+    <Suspense
+      fallback={
+        <p role="status" aria-live="polite" className="p-6">
+          Cargando usuarios...
+        </p>
+      }
+    >
+      <UsuariosPageContent />
+    </Suspense>
+  );
 }

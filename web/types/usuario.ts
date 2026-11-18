@@ -14,6 +14,7 @@ export interface UsuarioWrite {
   id_rol: number;
   id_unidad: number;
   activo?: boolean;
+  alcance_global?: boolean;
 }
 
 export interface UsuarioResponse {

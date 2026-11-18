@@ -5,6 +5,7 @@ interface ConvenioPaginationProps {
   lastPage: number;
   total: number;
   onPageChange: (page: number) => void;
+  ariaLabel?: string;
 }
 
 export default function ConvenioPagination({
@@ -12,6 +13,7 @@ export default function ConvenioPagination({
   lastPage,
   total,
   onPageChange,
+  ariaLabel = "Paginación de convenios",
 }: ConvenioPaginationProps) {
   const firstPage = Math.max(1, currentPage - 2);
   const finalPage = Math.min(lastPage, currentPage + 2);
@@ -26,7 +28,7 @@ export default function ConvenioPagination({
         Total de resultados: <span className="font-semibold">{total}</span>
       </p>
       <nav
-        aria-label="Paginación de convenios"
+        aria-label={ariaLabel}
         className="flex flex-wrap items-center justify-start gap-1 sm:justify-end"
       >
         <button

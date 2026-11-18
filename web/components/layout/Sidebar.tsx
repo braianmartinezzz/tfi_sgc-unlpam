@@ -3,12 +3,27 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { usePermissions } from "@/context/PermissionContext";
+import type { Permission } from "@/lib/permissions";
 
-const navigation = [
+interface NavigationItem {
+  href: string;
+  label: string;
+  icon: string;
+  permission?: Permission;
+}
+
+const navigation: NavigationItem[] = [
   {
     href: "/convenios",
     label: "Convenios",
     icon: "M4 5h16v14H4z M8 9h8 M8 13h8 M8 17h4",
+  },
+  {
+    href: "/usuarios",
+    label: "Usuarios",
+    icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 8v6 M23 11h-6",
+    permission: "usuarios:write",
   },
   {
     href: "/dashboard",
@@ -20,6 +35,10 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { can } = usePermissions();
+  const visibleNavigation = navigation.filter(
+    (item) => !item.permission || can(item.permission),
+  );
 
   return (
     <aside className="w-full shrink-0 bg-sidebar text-white md:min-h-full md:w-60">
@@ -48,11 +67,10 @@ export default function Sidebar() {
         className={`${isOpen ? "block" : "hidden"} md:block`}
       >
         <ul className="flex flex-col gap-1 pb-3 md:py-4">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive =
               pathname === item.href ||
-              (item.href === "/convenios" &&
-                pathname.startsWith("/convenios/"));
+              pathname.startsWith(`${item.href}/`);
 
             return (
               <li key={item.href}>
