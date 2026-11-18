@@ -214,7 +214,12 @@ export default function StepDocumentos({ form }: StepDocumentosProps) {
           <button
             type="button"
             onClick={() =>
-              append({ tipo: "Otro", titulo: "", archivo: null })
+              append({
+                clientId: crypto.randomUUID(),
+                tipo: "Otro",
+                titulo: "",
+                archivo: null,
+              })
             }
             className="min-h-11 rounded-sm border border-ui-border px-4 py-2 text-sm font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
