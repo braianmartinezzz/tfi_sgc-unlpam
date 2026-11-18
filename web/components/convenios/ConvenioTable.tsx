@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import EstadoBadge from "@/components/convenios/EstadoBadge";
-import { canManageDraftConvenio } from "@/lib/permissions";
+import {
+  canDeleteDraftConvenio,
+  canEditConvenio,
+  canReviewConvenio,
+} from "@/lib/permissions";
 import type { ConvenioListItem } from "@/types/convenio";
 
 interface ConvenioTableProps {
@@ -65,7 +69,8 @@ export default function ConvenioTable({
               convenio.unidad_academica?.sigla ||
               convenio.unidad_academica?.nombre ||
               "—";
-            const puedeEditar = canManageDraftConvenio(rol, estado);
+            const puedeEditar = canEditConvenio(rol, estado);
+            const puedeEliminar = canDeleteDraftConvenio(rol, estado);
             const detalleHref = `/convenios/${convenio.id_instrumento}`;
 
             return (
@@ -102,24 +107,33 @@ export default function ConvenioTable({
                     <Link href={detalleHref} className={rowActionClassName}>
                       Ver
                     </Link>
+                    {canReviewConvenio(rol, estado) ? (
+                      <Link
+                        href={`${detalleHref}/revisar`}
+                        className={rowActionClassName}
+                      >
+                        Revisar
+                      </Link>
+                    ) : null}
                     {puedeEditar ? (
-                      <>
-                        <Link
-                          href={`${detalleHref}/edit`}
-                          className={rowActionClassName}
-                        >
-                          Editar
-                        </Link>
-                        <button
-                          type="button"
-                          className={`${rowActionClassName} cursor-pointer`}
-                          onClick={(event) =>
-                            onEliminar(convenio, event.currentTarget)
-                          }
-                        >
-                          Eliminar
-                        </button>
-                      </>
+                      <Link
+                        href={`${detalleHref}/edit`}
+                        className={rowActionClassName}
+                      >
+                        Editar
+                      </Link>
+                    ) : null}
+
+                    {puedeEliminar ? (
+                      <button
+                        type="button"
+                        className={`${rowActionClassName} cursor-pointer`}
+                        onClick={(event) =>
+                          onEliminar(convenio, event.currentTarget)
+                        }
+                      >
+                        Eliminar
+                      </button>
                     ) : null}
                   </div>
                 </td>

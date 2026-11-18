@@ -1,27 +1,47 @@
 "use client";
 
-import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/feedback/EmptyState";
 import ErrorState from "@/components/feedback/ErrorState";
 import EstadoBadge from "@/components/convenios/EstadoBadge";
 import { useAuth } from "@/context/AuthContext";
-import { useConvenio, useConvenioDocuments } from "@/hooks/useConvenios";
-import { canManageDraftConvenio } from "@/lib/permissions";
+import {
+  useConvenio,
+  useConvenioDocuments,
+  useConvenioObservations,
+  useRespondObservation,
+} from "@/hooks/useConvenios";
+import {
+  canEditConvenio,
+  canReviewConvenio,
+} from "@/lib/permissions";
 import { ApiError, apiDownload } from "@/services/api-client";
 import type { Convenio, HistorialEstado } from "@/types/convenio";
 import type { DocumentoListItem } from "@/types/documento";
+import type { Observacion } from "@/types/observacion";
 
 const tabs = [
   { id: "general", label: "General" },
   { id: "partes", label: "Partes" },
   { id: "documentos", label: "Documentos" },
   { id: "historial", label: "Historial" },
+  { id: "observaciones", label: "Observaciones" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
+
+function isTabId(value: string | null): value is TabId {
+  return tabs.some((tab) => tab.id === value);
+}
 
 const cardClassName =
   "rounded-lg border border-ui-border bg-surface p-4 text-foreground sm:p-5";
@@ -538,10 +558,195 @@ function HistoryPanel({ convenio }: { convenio: Convenio }) {
   );
 }
 
-export default function DetalleConvenio({ id }: { id: string }) {
+function ObservationReply({
+  observation,
+  isSaving,
+  busy,
+  onSubmit,
+}: {
+  observation: Observacion;
+  isSaving: boolean;
+  busy: boolean;
+  onSubmit: (id: number, respuesta: string) => Promise<void>;
+}) {
+  const [respuesta, setRespuesta] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const fieldId = `observacion-respuesta-${observation.id_observacion}`;
+  const helpId = `${fieldId}-help`;
+  const errorId = `${fieldId}-error`;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (respuesta.length < 5 || busy) return;
+
+    setErrorMessage(null);
+    setFieldError(null);
+    try {
+      await onSubmit(observation.id_observacion, respuesta);
+      setRespuesta("");
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setErrorMessage(error.message);
+        setFieldError(error.errors?.respuesta?.[0] ?? null);
+      } else {
+        setErrorMessage("No se pudo enviar la respuesta. Intentá nuevamente.");
+      }
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+      <div>
+        <label htmlFor={fieldId} className="font-semibold">
+          Respuesta
+        </label>
+        <textarea
+          id={fieldId}
+          value={respuesta}
+          onChange={(event) => {
+            setRespuesta(event.target.value);
+            setErrorMessage(null);
+            setFieldError(null);
+          }}
+          aria-describedby={`${helpId}${fieldError ? ` ${errorId}` : ""}`}
+          aria-invalid={fieldError ? true : undefined}
+          rows={3}
+          className="mt-1 block w-full rounded-md border border-ui-border bg-surface px-3 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        />
+        <p id={helpId} className="mt-1 text-sm text-foreground/70">
+          Escribí al menos 5 caracteres.
+        </p>
+        {fieldError ? (
+          <p id={errorId} className="mt-1 text-sm text-brand-text">
+            {fieldError}
+          </p>
+        ) : null}
+      </div>
+      {errorMessage ? (
+        <p role="alert" className="text-sm text-brand-text">
+          {errorMessage}
+        </p>
+      ) : null}
+      <Button
+        type="submit"
+        className="!w-auto"
+        disabled={busy || respuesta.length < 5}
+        loading={isSaving}
+      >
+        Responder
+      </Button>
+    </form>
+  );
+}
+
+function ObservationsPanel({
+  observations,
+  canRespond,
+  busyObservationId,
+  isSaving,
+  onSubmit,
+  error,
+  success,
+}: {
+  observations: Observacion[];
+  canRespond: boolean;
+  busyObservationId: number | null;
+  isSaving: boolean;
+  onSubmit: (id: number, respuesta: string) => Promise<void>;
+  error: string | null;
+  success: string | null;
+}) {
+  const sortedObservations = [...observations].sort((left, right) => {
+    const difference =
+      new Date(right.fecha).getTime() - new Date(left.fecha).getTime();
+    return Number.isNaN(difference) || difference === 0
+      ? right.id_observacion - left.id_observacion
+      : difference;
+  });
+
+  return (
+    <div className="space-y-4">
+      <h2 className={headingClassName}>Observaciones</h2>
+      {success ? (
+        <p role="status" aria-live="polite" className={cardClassName}>
+          {success}
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className={cardClassName}>
+          {error}
+        </p>
+      ) : null}
+      <ul className="space-y-4">
+        {sortedObservations.map((observation) => {
+          const pending = observation.estado_tramite === "Pendiente";
+          return (
+            <li
+              key={observation.id_observacion}
+              className={cardClassName}
+            >
+              <p className="whitespace-pre-wrap">{observation.contenido}</p>
+              <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="font-semibold">Fecha y hora</dt>
+                  <dd>{formatDateTime(observation.fecha)}</dd>
+                </div>
+                <div>
+                  <dt className="font-semibold">Autor</dt>
+                  <dd>{observation.usuario.nombre}</dd>
+                </div>
+                <div>
+                  <dt className="font-semibold">Estado del trámite</dt>
+                  <dd>{observation.estado_tramite}</dd>
+                </div>
+              </dl>
+              {observation.respuesta ? (
+                <div className="mt-4 rounded-md border border-ui-border p-3">
+                  <h3 className="font-semibold">Respuesta</h3>
+                  <p className="mt-1 whitespace-pre-wrap">
+                    {observation.respuesta}
+                  </p>
+                  <p className="mt-2 text-sm text-foreground/70">
+                    {formatDateTime(observation.fecha_resolucion)}
+                  </p>
+                </div>
+              ) : null}
+              {canRespond && pending ? (
+                <ObservationReply
+                  observation={observation}
+                  isSaving={busyObservationId === observation.id_observacion}
+                  busy={isSaving}
+                  onSubmit={onSubmit}
+                />
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+export default function DetalleConvenio({
+  id,
+  reviewMode = false,
+  asideContent,
+}: {
+  id: string;
+  reviewMode?: boolean;
+  asideContent?: ReactNode;
+}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status: authStatus, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>("general");
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const requestedTab = searchParams.get("tab");
+    return isTabId(requestedTab) ? requestedTab : "general";
+  });
+  const [observationSuccess, setObservationSuccess] = useState<string | null>(
+    null,
+  );
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const parsedId = /^\d+$/.test(id) ? Number(id) : 0;
   const validId = Number.isSafeInteger(parsedId) && parsedId > 0;
@@ -549,6 +754,46 @@ export default function DetalleConvenio({ id }: { id: string }) {
     parsedId,
     validId && authStatus === "authenticated",
   );
+  const role = user?.rol?.nombre ?? null;
+  const observationsQuery = useConvenioObservations(
+    parsedId,
+    validId &&
+      authStatus === "authenticated" &&
+      Boolean(convenioQuery.data) &&
+      (role === "Gestión" || role === "Administración" || role === "Revisión"),
+  );
+  const respondObservationMutation = useRespondObservation(parsedId);
+  const observations = observationsQuery.data?.data ?? [];
+  const pendingObservationCount = observations.filter(
+    (observation) => observation.estado_tramite === "Pendiente",
+  ).length;
+  const observationError =
+    observationsQuery.error instanceof ApiError &&
+    observationsQuery.error.status !== 403
+      ? observationsQuery.error.message
+      : null;
+  const observationsTabVisible =
+    observations.length > 0 || observationError !== null;
+  const visibleTabs = observationsTabVisible
+    ? tabs
+    : tabs.filter((tab) => tab.id !== "observaciones");
+  const selectedTab = visibleTabs.some((tab) => tab.id === activeTab)
+    ? activeTab
+    : "general";
+  const canRespond =
+    canEditConvenio(role, convenioQuery.data?.instrumento?.estado ?? "") &&
+    convenioQuery.data?.instrumento?.estado === "EnCorreccion";
+
+  async function submitObservationResponse(
+    idObservacion: number,
+    respuesta: string,
+  ) {
+    await respondObservationMutation.mutateAsync({
+      idObservacion,
+      input: { respuesta },
+    });
+    setObservationSuccess("La respuesta se envió correctamente.");
+  }
 
   function handleTabKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
@@ -556,18 +801,18 @@ export default function DetalleConvenio({ id }: { id: string }) {
   ) {
     let nextIndex: number | null = null;
     if (event.key === "ArrowRight") {
-      nextIndex = (currentIndex + 1) % tabs.length;
+      nextIndex = (currentIndex + 1) % visibleTabs.length;
     } else if (event.key === "ArrowLeft") {
-      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      nextIndex = (currentIndex - 1 + visibleTabs.length) % visibleTabs.length;
     } else if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = tabs.length - 1;
+      nextIndex = visibleTabs.length - 1;
     }
 
     if (nextIndex === null) return;
     event.preventDefault();
-    setActiveTab(tabs[nextIndex].id);
+    setActiveTab(visibleTabs[nextIndex].id);
     tabRefs.current[nextIndex]?.focus();
   }
 
@@ -668,6 +913,7 @@ export default function DetalleConvenio({ id }: { id: string }) {
 
   const estado = convenio.instrumento?.estado;
   const rol = user.rol?.nombre ?? null;
+  const puedeRevisar = canReviewConvenio(rol, estado ?? "");
 
   return (
     <section
@@ -677,12 +923,21 @@ export default function DetalleConvenio({ id }: { id: string }) {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="w-fit">
-            <h1
-              id={`convenio-title-${parsedId}`}
-              className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
-            >
-              {convenio.instrumento?.titulo || "—"}
-            </h1>
+            {reviewMode ? (
+              <h2
+                id={`convenio-title-${parsedId}`}
+                className="font-condensed text-2xl font-bold tracking-tight sm:text-3xl"
+              >
+                {convenio.instrumento?.titulo || "—"}
+              </h2>
+            ) : (
+              <h1
+                id={`convenio-title-${parsedId}`}
+                className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
+              >
+                {convenio.instrumento?.titulo || "—"}
+              </h1>
+            )}
             <div
               aria-hidden="true"
               className="mt-2 h-1 w-full rounded-full bg-brand"
@@ -695,24 +950,35 @@ export default function DetalleConvenio({ id }: { id: string }) {
             {estado ? <EstadoBadge estado={estado} /> : null}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="link"
-            onClick={() => router.push("/convenios")}
-          >
-            Volver
-          </Button>
-          {canManageDraftConvenio(rol, estado ?? "") ? (
+        {!reviewMode ? (
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              className="!w-auto"
-              onClick={() => router.push(`/convenios/${parsedId}/edit`)}
+              variant="link"
+              onClick={() => router.push("/convenios")}
             >
-              Editar
+              Volver
             </Button>
-          ) : null}
-        </div>
+            {puedeRevisar ? (
+              <Button
+                type="button"
+                className="!w-auto"
+                onClick={() => router.push(`/convenios/${parsedId}/revisar`)}
+              >
+                Revisar
+              </Button>
+            ) : null}
+            {canEditConvenio(rol, estado ?? "") ? (
+              <Button
+                type="button"
+                className="!w-auto"
+                onClick={() => router.push(`/convenios/${parsedId}/edit`)}
+              >
+                Editar
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <div
@@ -722,8 +988,8 @@ export default function DetalleConvenio({ id }: { id: string }) {
         className="max-w-full overflow-x-auto border-b border-ui-border"
       >
         <div className="flex w-max min-w-full">
-          {tabs.map((tab, index) => {
-            const selected = activeTab === tab.id;
+          {visibleTabs.map((tab, index) => {
+            const selected = selectedTab === tab.id;
             const tabId = `convenio-tab-${parsedId}-${tab.id}`;
             const panelId = `convenio-panel-${parsedId}-${tab.id}`;
             return (
@@ -746,39 +1012,97 @@ export default function DetalleConvenio({ id }: { id: string }) {
                     : "border-transparent text-foreground/70 hover:bg-row-alternate hover:text-foreground"
                 }`}
               >
-                {tab.label}
+                {tab.id === "observaciones" ? (
+                  <span
+                    aria-label={`Observaciones, ${pendingObservationCount} pendientes`}
+                  >
+                    Observaciones{" "}
+                    <span aria-hidden="true">
+                      ({pendingObservationCount})
+                    </span>
+                  </span>
+                ) : (
+                  tab.label
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {tabs.map((tab) => {
-        const selected = activeTab === tab.id;
-        const tabId = `convenio-tab-${parsedId}-${tab.id}`;
-        const panelId = `convenio-panel-${parsedId}-${tab.id}`;
-        return (
-          <section
-            key={tab.id}
-            id={panelId}
-            role="tabpanel"
-            aria-labelledby={tabId}
-            tabIndex={0}
-            hidden={!selected}
-            className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-          >
-            {tab.id === "general" ? (
-              <GeneralPanel convenio={convenio} />
-            ) : tab.id === "partes" ? (
-              <PartsPanel convenio={convenio} />
-            ) : tab.id === "documentos" ? (
-              <DocumentsPanel id={parsedId} active={selected} />
-            ) : (
-              <HistoryPanel convenio={convenio} />
-            )}
-          </section>
-        );
-      })}
+      <div
+        className={
+          asideContent
+            ? "grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
+            : ""
+        }
+      >
+        <div className="min-w-0">
+          {visibleTabs.map((tab) => {
+            const selected = selectedTab === tab.id;
+            const tabId = `convenio-tab-${parsedId}-${tab.id}`;
+            const panelId = `convenio-panel-${parsedId}-${tab.id}`;
+            return (
+              <section
+                key={tab.id}
+                id={panelId}
+                role="tabpanel"
+                aria-labelledby={tabId}
+                tabIndex={0}
+                hidden={!selected}
+                className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                {tab.id === "general" ? (
+                  <GeneralPanel convenio={convenio} />
+                ) : tab.id === "partes" ? (
+                  <PartsPanel convenio={convenio} />
+                ) : tab.id === "documentos" ? (
+                  <DocumentsPanel id={parsedId} active={selected} />
+                ) : tab.id === "observaciones" ? (
+                  <ObservationsPanel
+                    observations={observations}
+                    canRespond={canRespond}
+                    busyObservationId={
+                      respondObservationMutation.variables?.idObservacion ??
+                      null
+                    }
+                    isSaving={respondObservationMutation.isPending}
+                    onSubmit={submitObservationResponse}
+                    error={observationError}
+                    success={observationSuccess}
+                  />
+                ) : (
+                  <HistoryPanel convenio={convenio} />
+                )}
+              </section>
+            );
+          })}
+        </div>
+
+        {asideContent ? (
+          puedeRevisar ? (
+            <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+              {asideContent}
+            </div>
+          ) : (
+            <aside className={cardClassName}>
+              <h2 className={headingClassName}>
+                Panel de revisión no disponible
+              </h2>
+              <p role="status">
+                Solo un usuario con rol Revisión puede revisar convenios que
+                estén en estado Revisión.
+              </p>
+              <Link
+                href={`/convenios/${parsedId}`}
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-ui-border bg-surface px-4 py-2 font-semibold text-foreground hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                Ir al detalle
+              </Link>
+            </aside>
+          )
+        ) : null}
+      </div>
     </section>
   );
 }

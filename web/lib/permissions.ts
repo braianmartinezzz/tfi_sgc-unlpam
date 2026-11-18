@@ -64,11 +64,28 @@ export function canCreateConvenio(role: string | null): boolean {
   return role === "Administración" || role === "Gestión";
 }
 
-export function canManageDraftConvenio(
+export function canEditConvenio(
+  role: string | null,
+  estado: string,
+): boolean {
+  return (
+    canCreateConvenio(role) &&
+    (estado === "Borrador" || estado === "EnCorreccion")
+  );
+}
+
+export function canDeleteDraftConvenio(
   role: string | null,
   estado: string,
 ): boolean {
   return canCreateConvenio(role) && estado === "Borrador";
+}
+
+export function canReviewConvenio(
+  role: string | null,
+  estado: string,
+): boolean {
+  return role === "Revisión" && estado === "Revisión";
 }
 
 export function canFilterByFaculty(

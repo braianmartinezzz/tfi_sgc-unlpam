@@ -56,6 +56,13 @@ export default function ConveniosPageContent() {
   const mostrarFacultad = canFilterByFaculty(rol, user?.alcance_global);
   const estadosVisibles = getVisibleConvenioStates(rol);
   const page = parsePage(searchParams.get("page"));
+  const resultadoRevision = searchParams.get("resultado");
+  const mensajeRevision =
+    resultadoRevision === "aprobado"
+      ? "Convenio aprobado."
+      : resultadoRevision === "devuelto"
+        ? "Convenio devuelto a corrección."
+        : null;
 
   useEffect(() => {
     draftsRef.current.buscar = searchParams.get("buscar") ?? "";
@@ -283,9 +290,9 @@ export default function ConveniosPageContent() {
           {exportando ? "Exportando CSV..." : "Exportar CSV"}
         </button>
       </div>
-      {mensaje ? (
+      {mensajeRevision || mensaje ? (
         <p role="status" aria-live="polite" className="font-semibold text-green-800 dark:text-green-300">
-          {mensaje}
+          {mensajeRevision ?? mensaje}
         </p>
       ) : null}
       {errorExportar ? (

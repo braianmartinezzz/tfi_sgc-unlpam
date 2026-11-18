@@ -183,26 +183,54 @@ class ConvenioUpdateTest extends TestCase
             ->assertJsonValidationErrors(['id_convenio_marco']);
     }
 
-    public function test_it_rejects_updates_when_the_convenio_is_not_a_draft(): void
+    public function test_it_updates_a_convenio_in_en_correccion(): void
     {
         $context = $this->authenticate();
         $convenio = $this->createConvenio(
             $context,
             true,
-            ['estado' => 'Firmado']
+            ['estado' => 'EnCorreccion']
         );
 
         $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
-            'titulo' => 'No debe cambiar',
+            'titulo' => 'Convenio corregido',
         ])
-            ->assertStatus(409)
-            ->assertJsonPath('message', 'El convenio no está en fase de edición.');
+            ->assertOk()
+            ->assertJsonPath('data.instrumento.estado', 'EnCorreccion')
+            ->assertJsonPath('data.instrumento.titulo', 'Convenio corregido');
 
         $this->assertDatabaseHas('instrumento', [
             'id_instrumento' => $convenio->id_instrumento,
-            'titulo' => 'Convenio de prueba',
-            'estado' => 'Firmado',
+            'estado' => 'EnCorreccion',
+            'titulo' => 'Convenio corregido',
         ]);
+    }
+
+    public function test_it_rejects_updates_outside_editable_states(): void
+    {
+        $context = $this->authenticate();
+        foreach (['Revisión', 'Aprobado', 'Firmado', 'Rescindido', 'Rechazado', 'Archivado'] as $state) {
+            $convenio = $this->createConvenio(
+                $context,
+                true,
+                ['estado' => $state]
+            );
+
+            $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+                'titulo' => 'No debe cambiar',
+            ])
+                ->assertStatus(409)
+                ->assertJsonPath(
+                    'message',
+                    'El convenio solo puede editarse en estado Borrador o En corrección.'
+                );
+
+            $this->assertDatabaseHas('instrumento', [
+                'id_instrumento' => $convenio->id_instrumento,
+                'titulo' => 'Convenio de prueba',
+                'estado' => $state,
+            ]);
+        }
     }
 
     public function test_it_returns_404_for_a_missing_convenio(): void
@@ -250,6 +278,62 @@ class ConvenioUpdateTest extends TestCase
         $this->assertDatabaseHas('instrumento', [
             'id_instrumento' => $otherUnitConvenio->id_instrumento,
             'titulo' => 'Convenio de prueba',
+        ]);
+    }
+
+    public function test_management_can_update_an_en_correccion_convenio_only_in_its_unit(): void
+    {
+        $context = $this->authenticate('Gestión');
+        $convenio = $this->createConvenio(
+            $context,
+            true,
+            ['estado' => 'EnCorreccion']
+        );
+        $otherUnitConvenio = $this->createConvenio(
+            $context,
+            true,
+            ['estado' => 'EnCorreccion'],
+            ['id_unidad_academica' => $context['otraUnidad']]
+        );
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Convenio corregido por su unidad',
+        ])->assertOk();
+
+        $this->putJson('/api/convenios/'.$otherUnitConvenio->id_instrumento, [
+            'titulo' => 'Cambio no autorizado',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'estado' => 'EnCorreccion',
+            'titulo' => 'Convenio corregido por su unidad',
+        ]);
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $otherUnitConvenio->id_instrumento,
+            'estado' => 'EnCorreccion',
+            'titulo' => 'Convenio de prueba',
+        ]);
+    }
+
+    public function test_administracion_can_update_an_en_correccion_convenio_in_another_unit(): void
+    {
+        $context = $this->authenticate('Administración');
+        $convenio = $this->createConvenio(
+            $context,
+            true,
+            ['estado' => 'EnCorreccion'],
+            ['id_unidad_academica' => $context['otraUnidad']]
+        );
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Convenio corregido por Administración',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'estado' => 'EnCorreccion',
+            'titulo' => 'Convenio corregido por Administración',
         ]);
     }
 

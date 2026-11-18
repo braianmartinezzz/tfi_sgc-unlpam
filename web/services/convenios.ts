@@ -15,6 +15,14 @@ import type {
   DocumentoUploadInput,
   EnviarRevisionResponse,
 } from "@/types/documento";
+import type {
+  CrearObservacionInput,
+  CrearObservacionResponse,
+  DevolverConvenioInput,
+  ObservacionesResponse,
+  ResponderObservacionInput,
+  ResponderObservacionResponse,
+} from "@/types/observacion";
 
 function buildQuery(filters: ConvenioListFilters): string {
   const params = new URLSearchParams();
@@ -84,6 +92,26 @@ export function listDocuments(
   return apiRequest<DocumentoListResponse>(`/convenios/${id}/documentos`);
 }
 
+export function listObservaciones(
+  id: number | string,
+): Promise<ObservacionesResponse> {
+  return apiRequest<ObservacionesResponse>(`/convenios/${id}/observaciones`);
+}
+
+export function responderObservacion(
+  id: number | string,
+  idObservacion: number | string,
+  input: ResponderObservacionInput,
+): Promise<ResponderObservacionResponse> {
+  return apiRequest<ResponderObservacionResponse>(
+    `/convenios/${id}/observaciones/${idObservacion}/responder`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function uploadDocument(
   id: number | string,
   input: DocumentoUploadInput,
@@ -145,6 +173,35 @@ export function sendForReview(
     `/convenios/${id}/enviar-revision`,
     { method: "POST" },
   );
+}
+
+export function createObservation(
+  id: number | string,
+  input: CrearObservacionInput,
+): Promise<CrearObservacionResponse> {
+  return apiRequest<CrearObservacionResponse>(
+    `/convenios/${id}/observaciones`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function approve(id: number | string): Promise<ApiMessageResponse> {
+  return apiRequest<ApiMessageResponse>(`/convenios/${id}/aprobar`, {
+    method: "POST",
+  });
+}
+
+export function returnToCorrection(
+  id: number | string,
+  input: DevolverConvenioInput,
+): Promise<ApiMessageResponse> {
+  return apiRequest<ApiMessageResponse>(`/convenios/${id}/devolver`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function remove(
