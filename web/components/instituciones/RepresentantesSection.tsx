@@ -8,6 +8,7 @@ import RepresentanteTable from "@/components/instituciones/RepresentanteTable";
 import { usePermissions } from "@/context/PermissionContext";
 import { useRepresentantes, useSetRepresentanteActivo } from "@/hooks/useRepresentantes";
 import { canManageRepresentantes, canToggleCatalogo } from "@/lib/permissions";
+import { paginateItems } from "@/lib/pagination";
 import { ApiError } from "@/services/api-client";
 import type { InstitucionFirmante } from "@/types/unidad";
 import type { Representante } from "@/types/representante";
@@ -38,12 +39,11 @@ export default function RepresentantesSection({
   const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const representativesQuery = useRepresentantes({
     id_institucion: institucion.id_institucion,
-    page,
   });
   const toggleMutation = useSetRepresentanteActivo();
   const data = representativesQuery.data;
-  const lastPage = Math.max(data?.last_page ?? 1, 1);
-  const currentPage = Math.min(Math.max(data?.current_page ?? page, 1), lastPage);
+  const paginatedData = paginateItems(data ?? [], page);
+  const { currentPage, lastPage } = paginatedData;
   const canManage = canManageRepresentantes(
     role,
     institutionId,
@@ -147,7 +147,7 @@ export default function RepresentantesSection({
 
       <p role="status" aria-live="polite" aria-atomic="true">
         {data
-          ? `Se encontraron ${data.total} representantes. Página ${currentPage} de ${lastPage}.`
+          ? `Se encontraron ${data.length} representantes. Página ${currentPage} de ${lastPage}.`
           : representativesQuery.isPending
             ? "Cargando representantes..."
             : ""}
@@ -178,15 +178,15 @@ export default function RepresentantesSection({
             </button>
           </div>
         ) : null}
-        {data && data.data.length === 0 ? (
+        {data && data.length === 0 ? (
           <div className="rounded-lg border border-ui-border bg-surface p-5">
             <p>Esta institución todavía no tiene representantes registrados.</p>
           </div>
         ) : null}
-        {data && data.data.length > 0 ? (
+        {data && data.length > 0 ? (
           <>
             <RepresentanteTable
-              representantes={data.data}
+              representantes={paginatedData.items}
               canManage={canManage}
               canToggle={canToggle}
               institutionActive={institucion.activo}
@@ -205,7 +205,7 @@ export default function RepresentantesSection({
               ariaLabel="Paginación de representantes"
               currentPage={currentPage}
               lastPage={lastPage}
-              total={data.total}
+              total={data.length}
               onPageChange={setPage}
             />
           </>

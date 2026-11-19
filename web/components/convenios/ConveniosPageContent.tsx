@@ -15,6 +15,7 @@ import {
   canFilterByFaculty,
   getVisibleConvenioStates,
 } from "@/lib/permissions";
+import { paginateItems } from "@/lib/pagination";
 import * as unidadesService from "@/services/unidades";
 import * as conveniosService from "@/services/convenios";
 import type { ConvenioListFilters, ConvenioListItem } from "@/types/convenio";
@@ -90,7 +91,7 @@ export default function ConveniosPageContent() {
     return () => window.clearTimeout(timeout);
   }, [draftRevision, pathname, router, searchParams]);
 
-  const filters = useMemo<ConvenioListFilters>(() => {
+  const filters = useMemo<Omit<ConvenioListFilters, "page">>(() => {
     const estado = searchParams.get("estado");
     const tipoFiltro = searchParams.get("tipo");
     const buscarFiltro = searchParams.get("buscar");
@@ -112,9 +113,8 @@ export default function ConveniosPageContent() {
       facultadId > 0
         ? { id_unidad_academica: facultadId }
         : {}),
-      page,
     };
-  }, [mostrarFacultad, page, searchParams]);
+  }, [mostrarFacultad, searchParams]);
 
   const conveniosQuery = useConvenios(filters);
   const unidadesQuery = useQuery({
@@ -123,19 +123,29 @@ export default function ConveniosPageContent() {
     enabled: mostrarFacultad,
   });
   const removeMutation = useRemoveConvenio();
-  const lastPage = Math.max(conveniosQuery.data?.last_page ?? 1, 1);
-  const currentPage = Math.min(
-    Math.max(conveniosQuery.data?.current_page ?? page, 1),
-    lastPage,
-  );
+  const data = conveniosQuery.data;
+  const paginatedData = paginateItems(data ?? [], page);
+  const { currentPage, lastPage } = paginatedData;
 
   useEffect(() => {
-    if (conveniosQuery.data && page > lastPage) {
+    if (
+      data &&
+      !conveniosQuery.isPlaceholderData &&
+      page > lastPage
+    ) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(lastPage));
       router.replace(withQuery(pathname, params), { scroll: false });
     }
-  }, [conveniosQuery.data, lastPage, page, pathname, router, searchParams]);
+  }, [
+    data,
+    conveniosQuery.isPlaceholderData,
+    lastPage,
+    page,
+    pathname,
+    router,
+    searchParams,
+  ]);
 
   function updateFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -216,8 +226,6 @@ export default function ConveniosPageContent() {
     }
   }
 
-  const data = conveniosQuery.data;
-
   return (
     <section aria-labelledby="convenios-title" className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -273,9 +281,9 @@ export default function ConveniosPageContent() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p aria-live="polite" aria-atomic="true" role="status">
           {conveniosQuery.isPlaceholderData
-            ? `Cargando página ${page}...`
+            ? "Actualizando resultados..."
             : data
-              ? `Se encontraron ${data.total} convenios. Página ${currentPage} de ${lastPage}.`
+              ? `Se encontraron ${data.length} convenios. Página ${currentPage} de ${lastPage}.`
               : conveniosQuery.isPending
                 ? "Cargando convenios..."
                 : ""}
@@ -322,7 +330,7 @@ export default function ConveniosPageContent() {
             </button>
           </div>
         ) : null}
-        {data && data.data.length === 0 ? (
+        {data && data.length === 0 ? (
           <div className="space-y-3 rounded-lg border border-ui-border bg-surface p-6 text-foreground">
             <p>No hay convenios que coincidan con los filtros.</p>
             <button
@@ -334,17 +342,17 @@ export default function ConveniosPageContent() {
             </button>
           </div>
         ) : null}
-        {data && data.data.length > 0 ? (
+        {data && data.length > 0 ? (
           <>
             <ConvenioTable
-              convenios={data.data}
+              convenios={paginatedData.items}
               rol={rol}
               onEliminar={requestDelete}
             />
             <ConvenioPagination
               currentPage={currentPage}
               lastPage={lastPage}
-              total={data.total}
+              total={data.length}
               onPageChange={changePage}
             />
           </>

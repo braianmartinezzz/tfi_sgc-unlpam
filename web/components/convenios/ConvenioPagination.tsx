@@ -15,6 +15,8 @@ export default function ConvenioPagination({
   onPageChange,
   ariaLabel = "Paginación de convenios",
 }: ConvenioPaginationProps) {
+  if (lastPage <= 1) return null;
+
   const firstPage = Math.max(1, currentPage - 2);
   const finalPage = Math.min(lastPage, currentPage + 2);
   const pages = Array.from(

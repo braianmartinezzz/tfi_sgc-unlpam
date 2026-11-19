@@ -10,10 +10,12 @@ import * as representantes from "@/services/representantes";
 import type { RepresentanteFilters } from "@/services/representantes";
 import type { RepresentanteWrite } from "@/types/representante";
 
-export function useRepresentantes(filters: RepresentanteFilters = {}) {
+export function useRepresentantes(
+  filters: Omit<RepresentanteFilters, "page"> = {},
+) {
   return useQuery({
     queryKey: ["representantes", filters],
-    queryFn: () => representantes.list(filters),
+    queryFn: () => representantes.listAll(filters),
     placeholderData: keepPreviousData,
   });
 }

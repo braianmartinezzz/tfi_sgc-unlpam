@@ -4,12 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import ConvenioPagination from "@/components/convenios/ConvenioPagination";
 import UnidadFilters from "@/components/unidades/UnidadFilters";
 import UnidadFormPanel from "@/components/unidades/UnidadForm";
 import UnidadTable from "@/components/unidades/UnidadTable";
 import { usePermissions } from "@/context/PermissionContext";
 import { useSetUnidadActivo, useUnidades } from "@/hooks/useUnidades";
 import { canChangeInstitucionOfRecord, canCreateUnidad, canEditUnidad, canToggleCatalogo } from "@/lib/permissions";
+import { paginateItems } from "@/lib/pagination";
 import { listAll } from "@/services/instituciones-firmantes";
 import { ApiError } from "@/services/api-client";
 import type { UnidadAcademica } from "@/types/unidad";
@@ -18,6 +20,11 @@ type PanelState =
   | { type: "closed" }
   | { type: "create" }
   | { type: "edit"; unidad: UnidadAcademica };
+
+function parsePage(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
+}
 
 function withQuery(pathname: string, params: URLSearchParams): string {
   const query = params.toString();
@@ -86,6 +93,7 @@ function UnidadesList() {
   const buscar = searchParams.get("buscar") ?? "";
   const institutionId = searchParams.get("id_institucion") ?? "";
   const activeFilter = searchParams.get("activo") ?? "";
+  const page = parsePage(searchParams.get("page"));
 
   useEffect(() => {
     if (buscar === lastNavigatedBuscarRef.current) return;
@@ -100,6 +108,7 @@ function UnidadesList() {
       const params = new URLSearchParams(window.location.search);
       if (newSearch) params.set("buscar", newSearch);
       else params.delete("buscar");
+      params.delete("page");
       lastNavigatedBuscarRef.current = newSearch;
       router.push(withQuery(pathname, params), { scroll: false });
     }, 400);
@@ -125,9 +134,19 @@ function UnidadesList() {
   });
   const toggleMutation = useSetUnidadActivo();
   const unidades = unidadesQuery.data ?? [];
+  const paginatedData = paginateItems(unidades, page);
+  const { currentPage, lastPage } = paginatedData;
   const activeInstitutions = (institucionesQuery.data ?? []).filter(
     (institucion) => institucion.activo,
   );
+
+  useEffect(() => {
+    if (unidadesQuery.data && page > lastPage) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", String(lastPage));
+      router.replace(withQuery(pathname, params), { scroll: false });
+    }
+  }, [lastPage, page, pathname, router, searchParams, unidadesQuery.data]);
 
   function updateFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -136,6 +155,7 @@ function UnidadesList() {
     else params.delete("buscar");
     if (value) params.set(key, value);
     else params.delete(key);
+    params.delete("page");
     lastNavigatedBuscarRef.current = currentSearch;
     router.push(withQuery(pathname, params), { scroll: false });
   }
@@ -147,6 +167,13 @@ function UnidadesList() {
     params.delete("buscar");
     params.delete("id_institucion");
     params.delete("activo");
+    params.delete("page");
+    router.push(withQuery(pathname, params), { scroll: false });
+  }
+
+  function changePage(nextPage: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(nextPage));
     router.push(withQuery(pathname, params), { scroll: false });
   }
 
@@ -270,7 +297,7 @@ function UnidadesList() {
 
       <p aria-live="polite" aria-atomic="true" role="status">
         {unidadesQuery.data
-          ? `Se encontraron ${unidades.length} unidades académicas.`
+          ? `Se encontraron ${unidades.length} unidades académicas. Página ${currentPage} de ${lastPage}.`
           : unidadesQuery.isPending
             ? "Cargando unidades académicas..."
             : ""}
@@ -309,20 +336,29 @@ function UnidadesList() {
           </div>
         ) : null}
         {unidades.length > 0 ? (
-          <UnidadTable
-            unidades={unidades}
-            ownUnitId={unitId}
-            canEdit={(unidad) =>
-              canEditUnidad(role, unitId, unidad.id_unidad_academica)
-            }
-            canToggle={canToggleCatalogo(role)}
-            onEdit={openEdit}
-            onToggle={(unidad, button) => {
-              returnFocusRef.current = button;
-              setConfirmError(null);
-              setConfirmUnidad(unidad);
-            }}
-          />
+          <>
+            <UnidadTable
+              unidades={paginatedData.items}
+              ownUnitId={unitId}
+              canEdit={(unidad) =>
+                canEditUnidad(role, unitId, unidad.id_unidad_academica)
+              }
+              canToggle={canToggleCatalogo(role)}
+              onEdit={openEdit}
+              onToggle={(unidad, button) => {
+                returnFocusRef.current = button;
+                setConfirmError(null);
+                setConfirmUnidad(unidad);
+              }}
+            />
+            <ConvenioPagination
+              ariaLabel="Paginación de unidades académicas"
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={unidades.length}
+              onPageChange={changePage}
+            />
+          </>
         ) : null}
       </div>
 

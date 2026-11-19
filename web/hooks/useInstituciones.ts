@@ -11,11 +11,11 @@ import type { InstitucionFirmanteFilters } from "@/services/instituciones-firman
 import type { InstitucionFirmanteWrite } from "@/types/unidad";
 
 export function useInstituciones(
-  filters: InstitucionFirmanteFilters = {},
+  filters: Omit<InstitucionFirmanteFilters, "page"> = {},
 ) {
   return useQuery({
     queryKey: ["instituciones-firmantes", filters],
-    queryFn: () => instituciones.list(filters),
+    queryFn: () => instituciones.listAll(filters),
     placeholderData: keepPreviousData,
   });
 }

@@ -1,4 +1,5 @@
 import { apiRequest } from "@/services/api-client";
+import { fetchAllPages } from "@/lib/pagination";
 import type { CatalogoEstadoResponse, Paginated } from "@/types/api";
 import type {
   InstitucionFirmante,
@@ -75,19 +76,7 @@ export function setActivo(
 }
 
 export async function listAll(
-  buscar?: string,
-  activo?: boolean,
+  filters: Omit<InstitucionFirmanteFilters, "page"> = {},
 ): Promise<InstitucionFirmante[]> {
-  const institutions: InstitucionFirmante[] = [];
-  let page = 1;
-  let lastPage = 1;
-
-  do {
-    const response = await list({ buscar, activo, page });
-    institutions.push(...response.data);
-    lastPage = response.last_page;
-    page += 1;
-  } while (page <= lastPage);
-
-  return institutions;
+  return fetchAllPages((page) => list({ ...filters, page }));
 }

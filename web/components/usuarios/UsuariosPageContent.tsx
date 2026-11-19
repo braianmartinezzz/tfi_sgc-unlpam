@@ -11,6 +11,7 @@ import { usePermissions } from "@/context/PermissionContext";
 import { useRoles } from "@/hooks/useRoles";
 import { useUnidades } from "@/hooks/useUnidades";
 import { useUsuarios } from "@/hooks/useUsuarios";
+import { paginateItems } from "@/lib/pagination";
 import type { UsuarioFilters as UsuarioListFilters } from "@/services/usuarios";
 
 function parsePage(value: string | null): number {
@@ -97,7 +98,7 @@ function UsuariosList() {
     return () => window.clearTimeout(timeout);
   }, [buscar, draftBuscar, pathname, router]);
 
-  const filters = useMemo<UsuarioListFilters>(() => {
+  const filters = useMemo<Omit<UsuarioListFilters, "page">>(() => {
     const rolId = parsePositiveInteger(searchParams.get("id_rol"));
     const unidadId = parsePositiveInteger(searchParams.get("id_unidad"));
     const activo = searchParams.get("activo");
@@ -111,25 +112,25 @@ function UsuariosList() {
           ? { activo: false }
           : {}),
       ...(buscar ? { buscar } : {}),
-      page,
     };
-  }, [buscar, page, searchParams]);
+  }, [buscar, searchParams]);
 
   const usuariosQuery = useUsuarios(filters);
   const rolesQuery = useRoles();
   const unidadesQuery = useUnidades();
   const data = usuariosQuery.data;
-  const lastPage = Math.max(data?.last_page ?? 1, 1);
-  const currentPage = Math.min(
-    Math.max(data?.current_page ?? page, 1),
-    lastPage,
-  );
+  const paginatedData = paginateItems(data ?? [], page);
+  const { currentPage, lastPage } = paginatedData;
   const rolId = parsePositiveInteger(searchParams.get("id_rol"));
   const unidadId = parsePositiveInteger(searchParams.get("id_unidad"));
   const activo = searchParams.get("activo");
 
   useEffect(() => {
-    if (data && !usuariosQuery.isPlaceholderData && page > lastPage) {
+    if (
+      data &&
+      !usuariosQuery.isPlaceholderData &&
+      page > lastPage
+    ) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(lastPage));
       router.replace(withQuery(pathname, params), { scroll: false });
@@ -235,9 +236,9 @@ function UsuariosList() {
 
       <p aria-live="polite" aria-atomic="true" role="status">
         {usuariosQuery.isPlaceholderData
-          ? `Cargando página ${page}...`
+          ? "Actualizando resultados..."
           : data
-            ? `Se encontraron ${data.total} usuarios. Página ${currentPage} de ${lastPage}.`
+            ? `Se encontraron ${data.length} usuarios. Página ${currentPage} de ${lastPage}.`
             : usuariosQuery.isPending
               ? "Cargando usuarios..."
               : ""}
@@ -268,7 +269,7 @@ function UsuariosList() {
             </button>
           </div>
         ) : null}
-        {data && data.data.length === 0 ? (
+        {data && data.length === 0 ? (
           <div className="space-y-3 rounded-lg border border-ui-border bg-surface p-6 text-foreground">
             <p>No hay usuarios que coincidan con los filtros.</p>
             <button
@@ -280,14 +281,14 @@ function UsuariosList() {
             </button>
           </div>
         ) : null}
-        {data && data.data.length > 0 ? (
+        {data && data.length > 0 ? (
           <>
-            <UsuarioTable usuarios={data.data} />
+            <UsuarioTable usuarios={paginatedData.items} />
             <ConvenioPagination
               ariaLabel="Paginación de usuarios"
               currentPage={currentPage}
               lastPage={lastPage}
-              total={data.total}
+              total={data.length}
               onPageChange={changePage}
             />
           </>

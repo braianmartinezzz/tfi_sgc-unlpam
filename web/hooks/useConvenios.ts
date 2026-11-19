@@ -10,10 +10,12 @@ import * as convenios from "@/services/convenios";
 import type { ConvenioListFilters } from "@/types/convenio";
 import type { ResponderObservacionInput } from "@/types/observacion";
 
-export function useConvenios(filters: ConvenioListFilters = {}) {
+export function useConvenios(
+  filters: Omit<ConvenioListFilters, "page"> = {},
+) {
   return useQuery({
     queryKey: ["convenios", filters],
-    queryFn: () => convenios.list(filters),
+    queryFn: () => convenios.listAll(filters),
     placeholderData: keepPreviousData,
   });
 }

@@ -1,4 +1,5 @@
 import { apiRequest } from "@/services/api-client";
+import { fetchAllPages } from "@/lib/pagination";
 import type { ApiMessageResponse, Paginated } from "@/types/api";
 import type { Usuario, UsuarioResponse, UsuarioWrite } from "@/types/usuario";
 
@@ -23,6 +24,12 @@ export function list(
   filters: UsuarioFilters = {},
 ): Promise<Paginated<Usuario>> {
   return apiRequest<Paginated<Usuario>>(`/usuarios${buildQuery(filters)}`);
+}
+
+export function listAll(
+  filters: Omit<UsuarioFilters, "page"> = {},
+): Promise<Usuario[]> {
+  return fetchAllPages((page) => list({ ...filters, page }));
 }
 
 export async function get(id: number | string): Promise<Usuario> {

@@ -17,6 +17,7 @@ import {
   canEditInstitucion,
   canToggleCatalogo,
 } from "@/lib/permissions";
+import { paginateItems } from "@/lib/pagination";
 import { ApiError } from "@/services/api-client";
 import type { InstitucionFirmante } from "@/types/unidad";
 
@@ -125,16 +126,19 @@ function InstitucionesList() {
       : activeFilter === "false"
         ? { activo: false }
         : {}),
-    page,
-  }), [activeFilter, buscar, page]);
+  }), [activeFilter, buscar]);
   const institucionesQuery = useInstituciones(filters);
   const toggleMutation = useSetInstitucionActivo();
   const data = institucionesQuery.data;
-  const lastPage = Math.max(data?.last_page ?? 1, 1);
-  const currentPage = Math.min(Math.max(data?.current_page ?? page, 1), lastPage);
+  const paginatedData = paginateItems(data ?? [], page);
+  const { currentPage, lastPage } = paginatedData;
 
   useEffect(() => {
-    if (data && !institucionesQuery.isPlaceholderData && page > lastPage) {
+    if (
+      data &&
+      !institucionesQuery.isPlaceholderData &&
+      page > lastPage
+    ) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(lastPage));
       router.replace(withQuery(pathname, params), { scroll: false });
@@ -279,9 +283,9 @@ function InstitucionesList() {
 
       <p role="status" aria-live="polite" aria-atomic="true">
         {institucionesQuery.isPlaceholderData
-          ? `Cargando página ${page}...`
+          ? "Actualizando resultados..."
           : data
-            ? `Se encontraron ${data.total} instituciones. Página ${currentPage} de ${lastPage}.`
+            ? `Se encontraron ${data.length} instituciones. Página ${currentPage} de ${lastPage}.`
             : institucionesQuery.isPending
               ? "Cargando instituciones..."
               : ""}
@@ -307,7 +311,7 @@ function InstitucionesList() {
             </button>
           </div>
         ) : null}
-        {data && data.data.length === 0 ? (
+        {data && data.length === 0 ? (
           <div className="space-y-3 rounded-lg border border-ui-border bg-surface p-6 text-foreground">
             <p>No hay instituciones que coincidan con los filtros.</p>
             <button
@@ -319,10 +323,10 @@ function InstitucionesList() {
             </button>
           </div>
         ) : null}
-        {data && data.data.length > 0 ? (
+        {data && data.length > 0 ? (
           <>
             <InstitucionTable
-              instituciones={data.data}
+              instituciones={paginatedData.items}
               canEdit={(institucion) =>
                 canEditInstitucion(
                   role,
@@ -342,7 +346,7 @@ function InstitucionesList() {
               ariaLabel="Paginación de instituciones firmantes"
               currentPage={currentPage}
               lastPage={lastPage}
-              total={data.total}
+              total={data.length}
               onPageChange={changePage}
             />
           </>

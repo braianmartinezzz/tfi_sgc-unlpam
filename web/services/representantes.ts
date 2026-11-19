@@ -1,4 +1,5 @@
 import { apiRequest } from "@/services/api-client";
+import { fetchAllPages } from "@/lib/pagination";
 import type { CatalogoEstadoResponse, Paginated } from "@/types/api";
 import type {
   Representante,
@@ -28,6 +29,12 @@ export function list(
   return apiRequest<Paginated<Representante>>(
     `/representantes${buildQuery(filters)}`,
   );
+}
+
+export function listAll(
+  filters: Omit<RepresentanteFilters, "page"> = {},
+): Promise<Representante[]> {
+  return fetchAllPages((page) => list({ ...filters, page }));
 }
 
 export async function get(id: number | string): Promise<Representante> {

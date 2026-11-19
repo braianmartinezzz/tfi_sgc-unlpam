@@ -1,4 +1,5 @@
 import { apiDownload, apiRequest } from "@/services/api-client";
+import { fetchAllPages } from "@/lib/pagination";
 import type { ApiMessageResponse, Paginated } from "@/types/api";
 import type {
   Convenio,
@@ -44,18 +45,7 @@ export function list(
 export async function listAll(
   filters: Omit<ConvenioListFilters, "page"> = {},
 ): Promise<ConvenioListItem[]> {
-  const items: ConvenioListItem[] = [];
-  let page = 1;
-  let lastPage = 1;
-
-  do {
-    const response = await list({ ...filters, page });
-    items.push(...response.data);
-    lastPage = response.last_page;
-    page += 1;
-  } while (page <= lastPage);
-
-  return items;
+  return fetchAllPages((page) => list({ ...filters, page }));
 }
 
 export async function listMarcos(): Promise<ConvenioListItem[]> {

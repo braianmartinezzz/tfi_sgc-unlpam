@@ -10,10 +10,10 @@ import * as usuarios from "@/services/usuarios";
 import type { UsuarioFilters } from "@/services/usuarios";
 import type { UsuarioWrite } from "@/types/usuario";
 
-export function useUsuarios(filters: UsuarioFilters = {}) {
+export function useUsuarios(filters: Omit<UsuarioFilters, "page"> = {}) {
   return useQuery({
     queryKey: ["usuarios", filters],
-    queryFn: () => usuarios.list(filters),
+    queryFn: () => usuarios.listAll(filters),
     placeholderData: keepPreviousData,
   });
 }
