@@ -153,6 +153,7 @@ export default function UsuarioFilters({
                 value={opcion.id_unidad_academica}
               >
                 {opcion.sigla} — {opcion.nombre}
+                {!opcion.activo ? " (inactiva)" : ""}
               </option>
             ))}
           </Select>

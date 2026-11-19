@@ -143,7 +143,7 @@ function AccessDenied() {
 function UsuarioCreateForm() {
   const router = useRouter();
   const rolesQuery = useRoles();
-  const unidadesQuery = useUnidades();
+  const unidadesQuery = useUnidades({ activo: true });
   const createMutation = useCreateUsuario();
   const [formError, setFormError] = useState<string | null>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -194,6 +194,11 @@ function UsuarioCreateForm() {
               ? "Revisá los campos indicados."
               : "Los datos enviados no son válidos."),
         );
+        return;
+      }
+
+      if (error instanceof ApiError && error.status === 409) {
+        setFormError(error.message);
         return;
       }
 

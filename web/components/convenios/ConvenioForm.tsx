@@ -459,8 +459,8 @@ export default function ConvenioForm({
 
   const fetchOptions = useCallback(async (): Promise<FormOptions> => {
     const [unidades, instituciones, conveniosMarco] = await Promise.all([
-      unidadesAcademicas.list(),
-      institucionesFirmantes.listAll(),
+      unidadesAcademicas.list({ activo: true }),
+      institucionesFirmantes.listAll({ activo: true }),
       convenios.listMarcos(),
     ]);
     return { unidades, instituciones, conveniosMarco };
@@ -476,35 +476,27 @@ export default function ConvenioForm({
       const assignedUnit = loadedOptions.unidades.find(
         (unit) => unit.id_unidad_academica === user.id_unidad,
       );
-      if (isGestion && !assignedUnit) {
+      if (!isEditMode && isGestion && !assignedUnit) {
         setLoadError(
-          "La unidad académica del usuario no está disponible en la API.",
+          "La unidad académica del usuario no está activa o disponible.",
         );
         setOptionsInitialized(true);
         return;
       }
 
       const institutionId = assignedUnit?.id_institucion;
-      if (
-        isGestion &&
-        institutionId !== undefined &&
-        !loadedOptions.instituciones.some(
-          (institution) => institution.id_institucion === institutionId,
-        )
-      ) {
-        setLoadError(
-          "La institución firmante asociada a la unidad no está disponible en la API.",
-        );
-        setOptionsInitialized(true);
-        return;
-      }
 
       if (!isEditMode) {
         reset({
           ...defaultValues,
           idUnidadAcademica: unitId,
           institucionesFirmantes:
-            isGestion && institutionId !== undefined
+            isGestion &&
+            institutionId !== undefined &&
+            loadedOptions.instituciones.some(
+              (institution) =>
+                institution.id_institucion === institutionId,
+            )
               ? [String(institutionId)]
               : [],
         });
@@ -550,6 +542,36 @@ export default function ConvenioForm({
 
       const documents = await convenios.listDocuments(convenioId);
       const mapped = mapEditValues(convenio, documents);
+      setOptions((currentOptions) => {
+        if (!currentOptions) return currentOptions;
+
+        const institucionesActuales =
+          convenio.instituciones_firmantes ?? [];
+
+        return {
+          ...currentOptions,
+          unidades:
+            convenio.unidad_academica &&
+            !currentOptions.unidades.some(
+              (unit) =>
+                unit.id_unidad_academica ===
+                convenio.unidad_academica?.id_unidad_academica,
+            )
+              ? [...currentOptions.unidades, convenio.unidad_academica]
+              : currentOptions.unidades,
+          instituciones: [
+            ...currentOptions.instituciones,
+            ...institucionesActuales.filter(
+              (institution) =>
+                !currentOptions.instituciones.some(
+                  (currentInstitution) =>
+                    currentInstitution.id_institucion ===
+                    institution.id_institucion,
+                ),
+            ),
+          ],
+        };
+      });
       reset(mapped.values);
       setEditState(convenio.instrumento?.estado ?? null);
       uploadedDocumentsRef.current = mapped.uploadedDocuments;
@@ -579,6 +601,7 @@ export default function ConvenioForm({
       canManage &&
       Number.isSafeInteger(convenioId) &&
       convenioId > 0 &&
+      !editLoaded &&
       optionsInitialized &&
       !loadingOptions &&
       options
@@ -589,6 +612,7 @@ export default function ConvenioForm({
     authStatus,
     canManage,
     convenioId,
+    editLoaded,
     isEditMode,
     loadEditData,
     loadingOptions,

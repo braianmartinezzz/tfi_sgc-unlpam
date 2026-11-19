@@ -15,6 +15,7 @@ import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
+import type { UnidadAcademica } from "@/types/unidad";
 import type { Usuario, UsuarioWrite } from "@/types/usuario";
 
 const usuarioEditSchema = z.object({
@@ -167,7 +168,17 @@ function UsuarioEditCatalogs({
   usuario: Usuario;
 }) {
   const rolesQuery = useRoles();
-  const unidadesQuery = useUnidades();
+  const unidadesQuery = useUnidades({ activo: true });
+  const unidadesActivas = unidadesQuery.data ?? [];
+  const unidadActual = usuario.unidad_academica;
+  const unidades =
+    unidadActual &&
+    !unidadesActivas.some(
+      (unidad) =>
+        unidad.id_unidad_academica === unidadActual.id_unidad_academica,
+    )
+      ? [...unidadesActivas, unidadActual]
+      : unidadesActivas;
 
   if (rolesQuery.isPending || unidadesQuery.isPending) {
     return (
@@ -235,7 +246,7 @@ function UsuarioEditCatalogs({
     );
   }
 
-  if (!rolesQuery.data?.length || !unidadesQuery.data?.length) {
+  if (!rolesQuery.data?.length || !unidades.length) {
     return (
       <p role="alert" className="rounded-lg border border-ui-border bg-surface p-6">
         No hay roles o unidades académicas disponibles para editar el usuario.
@@ -248,7 +259,7 @@ function UsuarioEditCatalogs({
       id={id}
       usuario={usuario}
       roles={rolesQuery.data ?? []}
-      unidades={unidadesQuery.data ?? []}
+      unidades={unidades}
     />
   );
 }
@@ -262,14 +273,11 @@ function UsuarioEditFields({
   id: string;
   usuario: Usuario;
   roles: { id_rol: number; nombre: string }[];
-  unidades: {
-    id_unidad_academica: number;
-    sigla: string;
-    nombre: string;
-  }[];
+  unidades: UnidadAcademica[];
 }) {
   const router = useRouter();
   const updateMutation = useUpdateUsuario();
+  const unidadInactiva = usuario.unidad_academica?.activo === false;
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const {
@@ -303,7 +311,7 @@ function UsuarioEditFields({
       nombre: values.nombre,
       id_rol: Number(values.id_rol),
       id_unidad: Number(values.id_unidad),
-      activo: values.activo,
+      activo: unidadInactiva ? usuario.activo : values.activo,
       alcance_global: values.alcance_global,
     };
 
@@ -488,6 +496,7 @@ function UsuarioEditFields({
                   value={unidad.id_unidad_academica}
                 >
                   {unidad.sigla} — {unidad.nombre}
+                  {!unidad.activo ? " (inactiva)" : ""}
                 </option>
               ))}
             </Select>
@@ -502,14 +511,28 @@ function UsuarioEditFields({
           <legend className="mb-2 text-sm font-semibold">Estado y alcance</legend>
           <Checkbox
             label="Usuario activo"
-            className="cursor-pointer"
-            labelClassName="cursor-pointer"
             {...register("activo")}
+            disabled={unidadInactiva}
+            className={unidadInactiva ? undefined : "cursor-pointer"}
+            labelClassName={unidadInactiva ? undefined : "cursor-pointer"}
             aria-invalid={Boolean(errors.activo)}
             aria-describedby={
-              errors.activo ? "usuario-edit-activo-error" : undefined
+              [
+                errors.activo ? "usuario-edit-activo-error" : null,
+                unidadInactiva ? "usuario-edit-unidad-inactiva" : null,
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined
             }
           />
+          {unidadInactiva ? (
+            <p
+              id="usuario-edit-unidad-inactiva"
+              className="text-sm text-foreground/80"
+            >
+              La unidad académica está inactiva; reactivala primero.
+            </p>
+          ) : null}
           <FieldError
             id="usuario-edit-activo-error"
             message={errors.activo?.message}

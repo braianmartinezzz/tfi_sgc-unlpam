@@ -62,6 +62,7 @@ export default function StepDatosBasicos({
       : unidades;
   const institucionesFiltradas = instituciones.filter(
     (institucion) =>
+      institucion.activo &&
       !institucionesSeleccionadas.includes(String(institucion.id_institucion)) &&
       `${institucion.razon_social} ${institucion.cuit}`
         .toLowerCase()
@@ -91,7 +92,10 @@ export default function StepDatosBasicos({
     const unidad = unidades.find(
       (item) => String(item.id_unidad_academica) === id,
     );
-    if (unidad) {
+    const institucion = instituciones.find(
+      (item) => item.id_institucion === unidad?.id_institucion,
+    );
+    if (unidad && institucion?.activo) {
       agregarInstitucion(String(unidad.id_institucion));
     }
   }
@@ -223,6 +227,7 @@ export default function StepDatosBasicos({
                 value={unidad.id_unidad_academica}
               >
                 {unidad.sigla} — {unidad.nombre}
+                {!unidad.activo ? " (inactiva)" : ""}
               </option>
             ))}
           </Select>
@@ -317,7 +322,10 @@ export default function StepDatosBasicos({
                   }
                   className="flex min-h-12 w-full cursor-pointer flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
                 >
-                  <span>{institucion.razon_social}</span>
+                  <span>
+                    {institucion.razon_social}
+                    {!institucion.activo ? " (inactiva)" : ""}
+                  </span>
                   {institucion.cuit ? (
                     <span className="text-foreground/70">{institucion.cuit}</span>
                   ) : null}

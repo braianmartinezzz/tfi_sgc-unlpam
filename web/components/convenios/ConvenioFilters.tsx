@@ -153,6 +153,7 @@ export default function ConvenioFilters({
                   value={unidad.id_unidad_academica}
                 >
                   {unidad.sigla} — {unidad.nombre}
+                  {!unidad.activo ? " (inactiva)" : ""}
                 </option>
               ))}
             </select>
