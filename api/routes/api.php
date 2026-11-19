@@ -84,18 +84,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/instituciones-firmantes', [InstitucionFirmanteController::class, 'index']);
     Route::get('/instituciones-firmantes/{id}', [InstitucionFirmanteController::class, 'show'])
         ->whereNumber('id');
-    Route::post('/instituciones-firmantes', [InstitucionFirmanteController::class, 'store']);
+    Route::post('/instituciones-firmantes', [InstitucionFirmanteController::class, 'store'])
+        ->middleware('can:administrar-catalogos');
     Route::put('/instituciones-firmantes/{id}', [InstitucionFirmanteController::class, 'update'])
         ->whereNumber('id');
-    Route::delete('/instituciones-firmantes/{id}', [InstitucionFirmanteController::class, 'destroy'])
-        ->whereNumber('id');
+    Route::patch('/instituciones-firmantes/{id}/estado', [InstitucionFirmanteController::class, 'cambiarEstado'])
+        ->whereNumber('id')->middleware('can:administrar-catalogos');
 
     // Representantes
     Route::get('/representantes', [RepresentanteController::class, 'index']);
     Route::get('/representantes/{id}', [RepresentanteController::class, 'show'])->whereNumber('id');
     Route::post('/representantes', [RepresentanteController::class, 'store']);
     Route::put('/representantes/{id}', [RepresentanteController::class, 'update'])->whereNumber('id');
-    Route::delete('/representantes/{id}', [RepresentanteController::class, 'destroy'])->whereNumber('id');
+    Route::patch('/representantes/{id}/estado', [RepresentanteController::class, 'cambiarEstado'])
+        ->whereNumber('id')->middleware('can:administrar-catalogos');
 
     // Estudiantes
     Route::get('/estudiantes', [EstudianteController::class, 'index']);
@@ -113,13 +115,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Unidades académicas
     Route::get('/unidades-academicas', [UnidadAcademicaController::class, 'index']);
-    Route::post('/unidades-academicas', [UnidadAcademicaController::class, 'store']);
+    Route::post('/unidades-academicas', [UnidadAcademicaController::class, 'store'])
+        ->middleware('can:administrar-catalogos');
     Route::get('/unidades-academicas/{id}', [UnidadAcademicaController::class, 'show'])
         ->whereNumber('id');
     Route::put('/unidades-academicas/{id}', [UnidadAcademicaController::class, 'update'])
         ->whereNumber('id');
-    Route::delete('/unidades-academicas/{id}', [UnidadAcademicaController::class, 'destroy'])
-        ->whereNumber('id');
+    Route::patch('/unidades-academicas/{id}/estado', [UnidadAcademicaController::class, 'cambiarEstado'])
+        ->whereNumber('id')->middleware('can:administrar-catalogos');
 
     // Usuarios
     Route::middleware('can:gestionar-usuarios')->group(function () {
@@ -139,7 +142,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/configuracion/umbrales', [ConfiguracionController::class, 'actualizarUmbrales']);
 
     // Unificación de instituciones
-    Route::post('/instituciones-firmantes/unificar', [InstitucionUnificacionController::class, 'unificar']);
+    Route::post('/instituciones-firmantes/unificar', [InstitucionUnificacionController::class, 'unificar'])
+        ->middleware('can:administrar-catalogos');
 
     Route::get('/convenios/{id}/trazabilidad', [ObservacionTrazabilidadController::class, 'show'])
         ->whereNumber('id');

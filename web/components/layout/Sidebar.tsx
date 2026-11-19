@@ -26,6 +26,18 @@ const navigation: NavigationItem[] = [
     permission: "usuarios:write",
   },
   {
+    href: "/instituciones",
+    label: "Instituciones firmantes",
+    icon: "M4 20h16 M6 20V6h12v14 M9 9h6 M9 13h6 M9 17h6",
+    permission: "catalogos:write",
+  },
+  {
+    href: "/unidades",
+    label: "Unidades académicas",
+    icon: "M3 9 12 4l9 5-9 5-9-5 M5 11v6c4 3 10 3 14 0v-6 M21 9v7",
+    permission: "catalogos:write",
+  },
+  {
     href: "/dashboard",
     label: "Estadísticas",
     icon: "M4 19V5 M4 19h16 M8 15v-4 M12 15V7 M16 15V9",

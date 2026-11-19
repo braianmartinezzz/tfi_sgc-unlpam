@@ -27,6 +27,21 @@ class ConvenioDemoSeederTest extends TestCase
         $this->assertDatabaseCount('usuario', 6);
         $this->assertDatabaseCount('institucion_firmante', 6);
         $this->assertDatabaseCount('historial_estado', 66);
+        $institucionPropia = DB::table('institucion_firmante')
+            ->where('es_propia', true)
+            ->sole();
+        $this->assertSame(
+            2,
+            DB::table('unidad_academica')
+                ->where('id_institucion', $institucionPropia->id_institucion)
+                ->count()
+        );
+        $this->assertSame(
+            20,
+            DB::table('convenio_institucion')
+                ->where('id_institucion', $institucionPropia->id_institucion)
+                ->count()
+        );
         $this->assertSame(20, Instrumento::query()->distinct()->count('titulo'));
         $this->assertSame(2, DB::table('convenio')->where('confidencialidad', true)->count());
 

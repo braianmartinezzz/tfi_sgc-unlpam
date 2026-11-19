@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CambiarEstadoCatalogoRequest;
 use App\Http\Requests\StoreRepresentanteRequest;
 use App\Http\Requests\UpdateRepresentanteRequest;
 use App\Models\Representante;
@@ -10,6 +11,7 @@ use App\Services\RepresentanteService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -20,6 +22,7 @@ class RepresentanteController extends Controller
         $representantes = $service->paginate($request->only([
             'id_institucion',
             'buscar',
+            'activo',
         ]));
 
         $representantes->through(
@@ -48,8 +51,18 @@ class RepresentanteController extends Controller
         StoreRepresentanteRequest $request,
         RepresentanteService $service
     ): JsonResponse {
+        $datos = $request->validated();
+        if (! Gate::allows('editar-institucion', $datos['id_institucion'])) {
+            return response()->json([
+                'message' => 'No tenés permiso para crear representantes en esta institución.',
+            ], 403);
+        }
+
         try {
-            $representante = $service->store($request->validated());
+            $representante = $service->store(
+                $datos,
+                (int) $request->user()->id_usuario
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Institución firmante no encontrada.',
@@ -79,8 +92,38 @@ class RepresentanteController extends Controller
         string $id,
         RepresentanteService $service
     ): JsonResponse {
+        $representanteActual = Representante::query()->find($id);
+        if ($representanteActual === null) {
+            return response()->json([
+                'message' => 'Representante legal no encontrado.',
+            ], 404);
+        }
+
+        $datos = $request->validated();
+        $institucionActual = (int) $representanteActual->id_institucion;
+        $institucionNueva = (int) ($datos['id_institucion'] ?? $institucionActual);
+
+        if ($request->user()->rol?->nombre === 'Gestión'
+            && $institucionNueva !== $institucionActual) {
+            return response()->json([
+                'message' => 'No podés mover un representante a otra institución.',
+            ], 403);
+        }
+
+        if (! Gate::allows('editar-institucion', $institucionActual)
+            || ($institucionNueva !== $institucionActual
+                && ! Gate::allows('editar-institucion', $institucionNueva))) {
+            return response()->json([
+                'message' => 'No tenés permiso para editar este representante.',
+            ], 403);
+        }
+
         try {
-            $representante = $service->update($id, $request->validated());
+            $representante = $service->update(
+                $id,
+                $datos,
+                (int) $request->user()->id_usuario
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Representante legal no encontrado.',
@@ -105,10 +148,17 @@ class RepresentanteController extends Controller
         ]);
     }
 
-    public function destroy(string $id, RepresentanteService $service): JsonResponse
-    {
+    public function cambiarEstado(
+        CambiarEstadoCatalogoRequest $request,
+        string $id,
+        RepresentanteService $service
+    ): JsonResponse {
         try {
-            $service->destroy($id);
+            $resultado = $service->cambiarEstado(
+                $id,
+                $request->boolean('activo'),
+                (int) $request->user()->id_usuario
+            );
         } catch (ModelNotFoundException) {
             return response()->json([
                 'message' => 'Representante legal no encontrado.',
@@ -121,12 +171,16 @@ class RepresentanteController extends Controller
             report($exception);
 
             return response()->json([
-                'message' => 'Ocurrió un error inesperado al eliminar el representante legal.',
+                'message' => 'Ocurrió un error inesperado al cambiar el estado del representante legal.',
             ], 500);
         }
 
         return response()->json([
-            'message' => 'Representante legal eliminado correctamente.',
+            'message' => $request->boolean('activo')
+                ? 'Representante legal activado correctamente.'
+                : 'Representante legal desactivado correctamente.',
+            'data' => $this->representanteData($resultado['data']),
+            'resumen' => $resultado['resumen'],
         ]);
     }
 
@@ -136,6 +190,7 @@ class RepresentanteController extends Controller
             'id_persona' => $representante->id_persona,
             'cargo' => $representante->cargo,
             'id_institucion' => $representante->id_institucion,
+            'activo' => $representante->activo,
             'persona' => [
                 'id_persona' => $representante->persona->id_persona,
                 'nombre' => $representante->persona->nombre,
@@ -149,6 +204,8 @@ class RepresentanteController extends Controller
                 'cuit' => $representante->institucionFirmante->cuit,
                 'domicilio_legal' => $representante->institucionFirmante->domicilio_legal,
                 'tipo_institucion' => $representante->institucionFirmante->tipo_institucion,
+                'activo' => $representante->institucionFirmante->activo,
+                'es_propia' => $representante->institucionFirmante->es_propia,
             ],
         ];
     }

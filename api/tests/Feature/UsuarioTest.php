@@ -222,6 +222,53 @@ class UsuarioTest extends TestCase
         ])->assertOk();
     }
 
+    public function test_cannot_create_reactivate_or_move_a_usuario_to_an_inactive_unit(): void
+    {
+        $ctx = $this->authenticate();
+        $inactiva = DB::table('unidad_academica')->insertGetId([
+            'sigla' => 'UA-INACTIVA',
+            'nombre' => 'Unidad inactiva',
+            'id_institucion' => DB::table('unidad_academica')
+                ->where('id_unidad_academica', $ctx['unidad'])
+                ->value('id_institucion'),
+            'activo' => false,
+        ]);
+
+        $this->postJson('/api/usuarios', [
+            'mail' => 'usuario-unidad-inactiva@example.com',
+            'nombre' => 'Usuario en unidad inactiva',
+            'password' => 'clave-segura-1',
+            'id_rol' => $ctx['rol'],
+            'id_unidad' => $inactiva,
+        ])->assertStatus(409);
+
+        $inactivo = $this->crearUsuario($ctx['rol'], $ctx['unidad'], [
+            'mail' => 'reactivar-unidad-inactiva@example.com',
+            'activo' => false,
+        ]);
+        $this->putJson('/api/usuarios/'.$inactivo->id_usuario, [
+            'activo' => true,
+            'id_unidad' => $inactiva,
+        ])->assertStatus(409);
+
+        $activo = $this->crearUsuario($ctx['rol'], $ctx['unidad'], [
+            'mail' => 'mover-unidad-inactiva@example.com',
+        ]);
+        $this->putJson('/api/usuarios/'.$activo->id_usuario, [
+            'id_unidad' => $inactiva,
+        ])->assertStatus(409);
+
+        $this->assertDatabaseHas('usuario', [
+            'id_usuario' => $inactivo->id_usuario,
+            'activo' => false,
+            'id_unidad' => $ctx['unidad'],
+        ]);
+        $this->assertDatabaseHas('usuario', [
+            'id_usuario' => $activo->id_usuario,
+            'id_unidad' => $ctx['unidad'],
+        ]);
+    }
+
     public function test_admin_cannot_deactivate_or_change_the_role_of_their_own_account(): void
     {
         $ctx = $this->authenticate();

@@ -1,9 +1,15 @@
 import { apiRequest } from "@/services/api-client";
-import type { Paginated } from "@/types/api";
-import type { InstitucionFirmante } from "@/types/unidad";
+import type { CatalogoEstadoResponse, Paginated } from "@/types/api";
+import type {
+  InstitucionFirmante,
+  InstitucionFirmanteResponse,
+  InstitucionFirmanteWrite,
+} from "@/types/unidad";
 
 export interface InstitucionFirmanteFilters {
   buscar?: string;
+  tipo_institucion?: string;
+  activo?: boolean;
   page?: number;
 }
 
@@ -24,15 +30,60 @@ export function list(
   );
 }
 
+export async function get(
+  id: number | string,
+): Promise<InstitucionFirmante> {
+  const response = await apiRequest<InstitucionFirmanteResponse>(
+    `/instituciones-firmantes/${id}`,
+  );
+  return response.data;
+}
+
+export function create(
+  input: InstitucionFirmanteWrite,
+): Promise<InstitucionFirmanteResponse> {
+  return apiRequest<InstitucionFirmanteResponse>("/instituciones-firmantes", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function update(
+  id: number | string,
+  input: Partial<InstitucionFirmanteWrite>,
+): Promise<InstitucionFirmanteResponse> {
+  return apiRequest<InstitucionFirmanteResponse>(
+    `/instituciones-firmantes/${id}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function setActivo(
+  id: number | string,
+  activo: boolean,
+): Promise<CatalogoEstadoResponse<InstitucionFirmante>> {
+  return apiRequest<CatalogoEstadoResponse<InstitucionFirmante>>(
+    `/instituciones-firmantes/${id}/estado`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ activo }),
+    },
+  );
+}
+
 export async function listAll(
   buscar?: string,
+  activo?: boolean,
 ): Promise<InstitucionFirmante[]> {
   const institutions: InstitucionFirmante[] = [];
   let page = 1;
   let lastPage = 1;
 
   do {
-    const response = await list({ buscar, page });
+    const response = await list({ buscar, activo, page });
     institutions.push(...response.data);
     lastPage = response.last_page;
     page += 1;

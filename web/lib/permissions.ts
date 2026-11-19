@@ -2,16 +2,18 @@ export type Permission =
   | "convenios:read"
   | "convenios:write"
   | "usuarios:write"
-  | "unidades:write";
+  | "catalogos:write"
+  | "catalogos:toggle";
 
 const ROLE_PERMISSIONS: Readonly<Record<string, readonly Permission[]>> = {
   "Administración": [
     "convenios:read",
     "convenios:write",
     "usuarios:write",
-    "unidades:write",
+    "catalogos:write",
+    "catalogos:toggle",
   ],
-  Gestión: ["convenios:read", "convenios:write"],
+  Gestión: ["convenios:read", "convenios:write", "catalogos:write"],
   Revisión: ["convenios:read"],
   Consulta: ["convenios:read"],
 };
@@ -72,6 +74,61 @@ export function canEditConvenio(
     canCreateConvenio(role) &&
     (estado === "Borrador" || estado === "EnCorreccion")
   );
+}
+
+function idsMatch(
+  userId: number | null | undefined,
+  recordId: number | null | undefined,
+): boolean {
+  return userId !== null && userId !== undefined &&
+    recordId !== null && recordId !== undefined &&
+    userId === recordId;
+}
+
+export function canCreateInstitucion(role: string | null): boolean {
+  return role === "Administración";
+}
+
+export function canCreateUnidad(role: string | null): boolean {
+  return role === "Administración";
+}
+
+export function canEditInstitucion(
+  role: string | null,
+  userInstitucionId: number | null | undefined,
+  institucionId: number | null | undefined,
+): boolean {
+  return role === "Administración" ||
+    (role === "Gestión" && idsMatch(userInstitucionId, institucionId));
+}
+
+export function canEditUnidad(
+  role: string | null,
+  userUnidadId: number | null | undefined,
+  unidadId: number | null | undefined,
+): boolean {
+  return role === "Administración" ||
+    (role === "Gestión" && idsMatch(userUnidadId, unidadId));
+}
+
+export function canManageRepresentantes(
+  role: string | null,
+  userInstitucionId: number | null | undefined,
+  institucionId: number | null | undefined,
+): boolean {
+  return canEditInstitucion(role, userInstitucionId, institucionId);
+}
+
+export function canChangeInstitutionOfRecord(role: string | null): boolean {
+  return role === "Administración";
+}
+
+export function canChangeInstitucionOfRecord(role: string | null): boolean {
+  return canChangeInstitutionOfRecord(role);
+}
+
+export function canToggleCatalogo(role: string | null): boolean {
+  return role === "Administración";
 }
 
 export function canDeleteDraftConvenio(

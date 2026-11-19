@@ -10,6 +10,7 @@ import {
 export function usePermissions(): {
   role: string | null;
   unitId: number | null;
+  institutionId: number | null;
   can: (permission: Permission) => boolean;
 } {
   const { user } = useAuth();
@@ -22,6 +23,7 @@ export function usePermissions(): {
   return {
     role,
     unitId: user?.id_unidad ?? null,
+    institutionId: user?.unidad_academica?.id_institucion ?? null,
     can: (permission) => permissions.includes(permission),
   };
 }

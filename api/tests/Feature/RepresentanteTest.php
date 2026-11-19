@@ -13,6 +13,7 @@ use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class RepresentanteTest extends TestCase
@@ -27,7 +28,7 @@ class RepresentanteTest extends TestCase
         $this->getJson('/api/representantes/1')->assertUnauthorized();
         $this->postJson('/api/representantes', [])->assertUnauthorized();
         $this->putJson('/api/representantes/1', [])->assertUnauthorized();
-        $this->deleteJson('/api/representantes/1')->assertUnauthorized();
+        $this->deleteJson('/api/representantes/1')->assertMethodNotAllowed();
     }
 
     public function test_index_paginates_filters_and_searches_person_data(): void
@@ -117,7 +118,10 @@ class RepresentanteTest extends TestCase
             ->assertJsonPath('data.persona.dni', '123456789')
             ->assertJsonPath('data.persona.cuil', null)
             ->assertJsonPath('data.cargo', 'Directora')
-            ->assertJsonPath('data.institucion_firmante.razon_social', 'Institución de prueba');
+            ->assertJsonPath('data.activo', true)
+            ->assertJsonPath('data.institucion_firmante.razon_social', 'Institución de prueba')
+            ->assertJsonPath('data.institucion_firmante.activo', true)
+            ->assertJsonPath('data.institucion_firmante.es_propia', false);
 
         $this->getJson('/api/representantes/999999')
             ->assertNotFound()
@@ -319,11 +323,13 @@ class RepresentanteTest extends TestCase
 
         $this->putJson("/api/representantes/{$representante->id_persona}", [
             'cargo' => 'Cargo Parcial',
+            'activo' => false,
         ])
             ->assertOk()
             ->assertJsonPath('data.persona.nombre', 'Nombre Nuevo')
             ->assertJsonPath('data.persona.cuil', '20999888777')
-            ->assertJsonPath('data.cargo', 'Cargo Parcial');
+            ->assertJsonPath('data.cargo', 'Cargo Parcial')
+            ->assertJsonPath('data.activo', true);
 
         $this->putJson("/api/representantes/{$representante->id_persona}", [
             'cargo' => null,
@@ -427,103 +433,139 @@ class RepresentanteTest extends TestCase
         ]);
     }
 
-    public function test_destroy_deletes_only_representante_and_persona_without_other_profiles(): void
+    public function test_representante_state_is_soft_and_requires_active_parent_for_reactivation(): void
+    {
+        $this->authenticate();
+        $representante = $this->createRepresentative();
+        $institutionId = $representante->id_institucion;
+
+        $this->patchJson("/api/representantes/{$representante->id_persona}/estado", [
+            'activo' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.activo', false)
+            ->assertJsonPath('resumen.representantes_desactivados', 1);
+
+        $this->assertDatabaseHas('representante', [
+            'id_persona' => $representante->id_persona,
+            'activo' => false,
+        ]);
+        $this->assertDatabaseHas('persona', [
+            'id_persona' => $representante->id_persona,
+        ]);
+
+        $this->patchJson("/api/instituciones-firmantes/{$institutionId}/estado", [
+            'activo' => false,
+        ])->assertOk();
+
+        $this->patchJson("/api/representantes/{$representante->id_persona}/estado", [
+            'activo' => true,
+        ])->assertStatus(409);
+
+        $this->patchJson("/api/instituciones-firmantes/{$institutionId}/estado", [
+            'activo' => true,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('representante', [
+            'id_persona' => $representante->id_persona,
+            'activo' => false,
+        ]);
+        $this->patchJson("/api/representantes/{$representante->id_persona}/estado", [
+            'activo' => true,
+        ])->assertOk()->assertJsonPath('data.activo', true);
+    }
+
+    public function test_representative_cannot_be_created_under_an_inactive_institution_and_active_filter_works(): void
+    {
+        $this->authenticate();
+        $representante = $this->createRepresentative();
+        $representante->activo = false;
+        $representante->save();
+        $institution = InstitucionFirmante::query()->findOrFail($representante->id_institucion);
+        $institution->activo = false;
+        $institution->save();
+
+        $this->postJson('/api/representantes', [
+            'nombre' => 'Nuevo',
+            'apellido' => 'Representante',
+            'dni' => $this->nextDni(),
+            'id_institucion' => $institution->id_institucion,
+        ])->assertStatus(409);
+
+        $this->getJson('/api/representantes?activo=false')
+            ->assertOk()
+            ->assertJsonFragment(['id_persona' => $representante->id_persona])
+            ->assertJsonPath('data.0.activo', false);
+    }
+
+    public function test_management_can_edit_representatives_only_in_its_institution(): void
+    {
+        $this->authenticate();
+        $representante = $this->createRepresentative();
+        $otraInstitucion = $this->createInstitution();
+        $unitId = $this->createUnit($representante->institucionFirmante);
+        $roleId = DB::table('rol')->insertGetId(['nombre' => 'Gestión']);
+        $usuario = Usuario::query()->create([
+            'mail' => 'gestion-representante@example.com',
+            'nombre' => 'Gestión propia',
+            'password' => Hash::make('password-segura'),
+            'activo' => true,
+            'id_rol' => $roleId,
+            'id_unidad' => $unitId,
+        ]);
+        $this->withToken($usuario->createToken('gestion-representante')->plainTextToken);
+
+        $this->putJson("/api/representantes/{$representante->id_persona}", [
+            'cargo' => 'Cargo actualizado',
+        ])->assertOk();
+
+        $this->patchJson("/api/representantes/{$representante->id_persona}/estado", [
+            'activo' => false,
+        ])->assertForbidden();
+
+        $this->putJson("/api/representantes/{$representante->id_persona}", [
+            'id_institucion' => $otraInstitucion->id_institucion,
+        ])->assertForbidden();
+
+        $this->postJson('/api/representantes', [
+            'nombre' => 'Representante',
+            'apellido' => 'Propio',
+            'dni' => $this->nextDni(),
+            'id_institucion' => $otraInstitucion->id_institucion,
+        ])->assertForbidden();
+
+        foreach (['Revisión', 'Consulta'] as $rolNombre) {
+            $rolId = DB::table('rol')->insertGetId(['nombre' => $rolNombre]);
+            $lector = Usuario::query()->create([
+                'mail' => strtolower($rolNombre).'-representante@example.com',
+                'nombre' => $rolNombre,
+                'password' => Hash::make('password-segura'),
+                'activo' => true,
+                'id_rol' => $rolId,
+                'id_unidad' => $unitId,
+            ]);
+            Sanctum::actingAs($lector);
+
+            $this->getJson('/api/representantes')->assertOk();
+            $this->putJson("/api/representantes/{$representante->id_persona}", [
+                'cargo' => 'No autorizado',
+            ])->assertForbidden();
+            $this->postJson('/api/representantes', [
+                'nombre' => 'No autorizado',
+                'apellido' => 'Representante',
+                'dni' => $this->nextDni(),
+                'id_institucion' => $representante->id_institucion,
+            ])->assertForbidden();
+        }
+    }
+
+    public function test_delete_route_is_removed(): void
     {
         $this->authenticate();
         $representante = $this->createRepresentative();
 
         $this->deleteJson("/api/representantes/{$representante->id_persona}")
-            ->assertOk()
-            ->assertExactJson([
-                'message' => 'Representante legal eliminado correctamente.',
-            ]);
-
-        $this->assertDatabaseMissing('representante', [
-            'id_persona' => $representante->id_persona,
-        ]);
-        $this->assertDatabaseMissing('persona', [
-            'id_persona' => $representante->id_persona,
-        ]);
-
-        $this->deleteJson('/api/representantes/999999')
-            ->assertNotFound()
-            ->assertJsonPath('message', 'Representante legal no encontrado.');
-    }
-
-    public function test_destroy_preserves_persona_and_other_profiles(): void
-    {
-        $this->authenticate();
-
-        foreach (['docente', 'estudiante', 'ambos'] as $profile) {
-            $representante = $this->createRepresentative();
-
-            if ($profile !== 'estudiante') {
-                Docente::query()->create(['id_persona' => $representante->id_persona]);
-            }
-
-            if ($profile !== 'docente') {
-                Estudiante::query()->create([
-                    'id_persona' => $representante->id_persona,
-                    'carrera' => 'Medicina',
-                ]);
-            }
-
-            $this->deleteJson("/api/representantes/{$representante->id_persona}")
-                ->assertOk();
-
-            $this->assertDatabaseMissing('representante', [
-                'id_persona' => $representante->id_persona,
-            ]);
-            $this->assertDatabaseHas('persona', [
-                'id_persona' => $representante->id_persona,
-            ]);
-            $this->assertDatabaseHas($profile === 'estudiante' ? 'estudiante' : 'docente', [
-                'id_persona' => $representante->id_persona,
-            ]);
-
-            if ($profile === 'ambos') {
-                $this->assertDatabaseHas('estudiante', [
-                    'id_persona' => $representante->id_persona,
-                ]);
-            }
-        }
-    }
-
-    public function test_destroy_rejects_signatures_and_pasantias_without_deleting_records(): void
-    {
-        $this->authenticate();
-        $signatureRepresentative = $this->createRepresentative();
-        $this->createSignature($signatureRepresentative);
-
-        $this->deleteJson("/api/representantes/{$signatureRepresentative->id_persona}")
-            ->assertStatus(409);
-
-        $this->assertDatabaseHas('persona', [
-            'id_persona' => $signatureRepresentative->id_persona,
-        ]);
-        $this->assertDatabaseHas('representante', [
-            'id_persona' => $signatureRepresentative->id_persona,
-        ]);
-        $this->assertDatabaseHas('firma', [
-            'id_persona' => $signatureRepresentative->id_persona,
-        ]);
-
-        $internshipRepresentative = $this->createRepresentative();
-        $pasantiaId = $this->createPasantia($internshipRepresentative);
-
-        $this->deleteJson("/api/representantes/{$internshipRepresentative->id_persona}")
-            ->assertStatus(409);
-
-        $this->assertDatabaseHas('persona', [
-            'id_persona' => $internshipRepresentative->id_persona,
-        ]);
-        $this->assertDatabaseHas('representante', [
-            'id_persona' => $internshipRepresentative->id_persona,
-        ]);
-        $this->assertDatabaseHas('pasantia', [
-            'id_pasantia' => $pasantiaId,
-            'id_tutor_laboral' => $internshipRepresentative->id_persona,
-        ]);
+            ->assertMethodNotAllowed();
     }
 
     private function authenticate(): Usuario
@@ -531,7 +573,7 @@ class RepresentanteTest extends TestCase
         $institution = $this->createInstitution();
         $unitId = $this->createUnit($institution);
         $roleId = DB::table('rol')->insertGetId([
-            'nombre' => 'Representantes',
+            'nombre' => 'Administración',
         ]);
         $usuario = Usuario::query()->create([
             'mail' => uniqid('representante-', true).'@example.com',

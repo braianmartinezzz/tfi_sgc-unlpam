@@ -19,7 +19,14 @@ class UpdateInstitucionFirmanteRequest extends FormRequest
         $id = $this->route('id');
 
         return [
-            'razon_social' => ['sometimes', 'required', 'string', 'max:255'],
+            'razon_social' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('institucion_firmante', 'razon_social')
+                    ->ignore($id, 'id_institucion'),
+            ],
             'cuit' => [
                 'sometimes',
                 'nullable',

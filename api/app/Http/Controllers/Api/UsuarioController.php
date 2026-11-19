@@ -41,7 +41,13 @@ class UsuarioController extends Controller
 
     public function store(UsuarioRequest $request, UsuarioService $service): JsonResponse
     {
-        $usuario = $service->store($request->validated());
+        try {
+            $usuario = $service->store($request->validated());
+        } catch (DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 409);
+        }
 
         return response()->json([
             'message' => 'Usuario creado correctamente.',

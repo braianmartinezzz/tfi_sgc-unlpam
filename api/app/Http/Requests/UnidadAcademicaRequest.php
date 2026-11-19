@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\UnidadAcademica;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -18,6 +19,13 @@ class UnidadAcademicaRequest extends FormRequest
     {
         // En POST todos los campos son obligatorios; en PUT, solo se validan los que lleguen.
         $presencia = $this->isMethod('post') ? 'required' : 'sometimes';
+        $idInstitucion = $this->input('id_institucion');
+
+        if ($idInstitucion === null && $this->route('id') !== null) {
+            $idInstitucion = UnidadAcademica::query()
+                ->whereKey($this->route('id'))
+                ->value('id_institucion');
+        }
 
         return [
             'sigla' => [
@@ -27,7 +35,14 @@ class UnidadAcademicaRequest extends FormRequest
                 Rule::unique('unidad_academica', 'sigla')
                     ->ignore($this->route('id'), 'id_unidad_academica'),
             ],
-            'nombre' => [$presencia, 'string', 'max:150'],
+            'nombre' => [
+                $presencia,
+                'string',
+                'max:150',
+                Rule::unique('unidad_academica', 'nombre')
+                    ->where(fn ($query) => $query->where('id_institucion', $idInstitucion))
+                    ->ignore($this->route('id'), 'id_unidad_academica'),
+            ],
             'id_institucion' => [
                 $presencia,
                 'integer',

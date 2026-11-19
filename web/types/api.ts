@@ -28,3 +28,15 @@ export interface Paginated<T> {
 export interface ApiMessageResponse {
   message: string;
 }
+
+export interface CatalogoEstadoResumen {
+  unidades_desactivadas: number;
+  usuarios_desactivados: number;
+  representantes_desactivados: number;
+}
+
+export interface CatalogoEstadoResponse<T> {
+  message: string;
+  data: T;
+  resumen: CatalogoEstadoResumen;
+}

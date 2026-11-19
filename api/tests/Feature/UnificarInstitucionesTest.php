@@ -9,6 +9,7 @@ use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class UnificarInstitucionesTest extends TestCase
@@ -21,6 +22,30 @@ class UnificarInstitucionesTest extends TestCase
             'id_principal' => 1,
             'ids_duplicadas' => [2],
         ])->assertUnauthorized();
+    }
+
+    public function test_only_administration_can_unify_institutions(): void
+    {
+        $ctx = $this->authenticate();
+        foreach ([
+            'Gestión' => 'gestion',
+            'Revisión' => 'revision',
+            'Consulta' => 'consulta',
+        ] as $roleName => $mailPrefix) {
+            $roleId = DB::table('rol')->insertGetId(['nombre' => $roleName]);
+            $reader = Usuario::query()->create([
+                'mail' => $mailPrefix.'-unificacion@example.com',
+                'nombre' => $roleName,
+                'password' => Hash::make('password-segura'),
+                'activo' => true,
+                'id_rol' => $roleId,
+                'id_unidad' => $ctx['unidad'],
+            ]);
+            Sanctum::actingAs($reader);
+
+            $this->postJson('/api/instituciones-firmantes/unificar', [])
+                ->assertForbidden();
+        }
     }
 
     public function test_unifies_duplicated_instituciones_moving_everything_to_the_principal(): void

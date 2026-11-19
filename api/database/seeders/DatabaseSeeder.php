@@ -26,9 +26,10 @@ class DatabaseSeeder extends Seeder
             'nombre' => 'Consulta',
         ]);
 
-        $institucion = InstitucionFirmante::firstOrCreate([
-            'razon_social' => 'Institución de prueba para convenios',
-        ]);
+        $this->call(InstitucionUnlpamSeeder::class);
+        $institucion = InstitucionFirmante::query()
+            ->where('es_propia', true)
+            ->firstOrFail();
 
         $unidadGestion = UnidadAcademica::updateOrCreate(
             ['sigla' => 'UA-TEST-01'],
@@ -37,6 +38,9 @@ class DatabaseSeeder extends Seeder
                 'id_institucion' => $institucion->id_institucion,
             ]
         );
+        $unidadGestion->activo = true;
+        $unidadGestion->save();
+
         $unidadAdministracion = UnidadAcademica::updateOrCreate(
             ['sigla' => 'UA-TEST-02'],
             [
@@ -44,6 +48,8 @@ class DatabaseSeeder extends Seeder
                 'id_institucion' => $institucion->id_institucion,
             ]
         );
+        $unidadAdministracion->activo = true;
+        $unidadAdministracion->save();
 
         Usuario::updateOrCreate(
             ['mail' => 'gestion@unlpam.edu.ar'],

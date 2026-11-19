@@ -21,6 +21,11 @@ class InstitucionFirmante extends Model
         'tipo_institucion',
     ];
 
+    protected $casts = [
+        'activo' => 'boolean',
+        'es_propia' => 'boolean',
+    ];
+
     public function unidadesAcademicas(): HasMany
     {
         return $this->hasMany(UnidadAcademica::class, 'id_institucion', 'id_institucion');

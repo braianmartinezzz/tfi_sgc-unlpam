@@ -20,6 +20,10 @@ class UnidadAcademica extends Model
         'id_institucion',
     ];
 
+    protected $casts = [
+        'activo' => 'boolean',
+    ];
+
     public function institucionFirmante(): BelongsTo
     {
         return $this->belongsTo(InstitucionFirmante::class, 'id_institucion', 'id_institucion');

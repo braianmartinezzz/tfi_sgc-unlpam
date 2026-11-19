@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -26,6 +26,7 @@ export default function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const id = useId();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -42,8 +43,8 @@ export default function ConfirmDialog({
   return (
     <dialog
       ref={dialogRef}
-      aria-labelledby="confirm-dialog-title"
-      aria-describedby="confirm-dialog-description"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-description`}
       onCancel={(event) => {
         event.preventDefault();
         if (!loading) onCancel();
@@ -51,10 +52,10 @@ export default function ConfirmDialog({
       className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-lg border border-ui-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/60"
     >
       <div className="space-y-4 p-5 sm:p-6">
-        <h2 id="confirm-dialog-title" className="text-xl font-bold">
+        <h2 id={`${id}-title`} className="text-xl font-bold">
           {title}
         </h2>
-        <p id="confirm-dialog-description">{description}</p>
+        <p id={`${id}-description`}>{description}</p>
         {errorMessage ? (
           <p
             role="alert"
@@ -68,7 +69,7 @@ export default function ConfirmDialog({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-11 rounded-md border border-ui-border px-4 py-2 font-semibold hover:bg-row-alternate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
           >
             Cancelar
           </button>
@@ -77,9 +78,9 @@ export default function ConfirmDialog({
             disabled={loading}
             aria-busy={loading}
             onClick={onConfirm}
-            className="rounded-md bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-11 rounded-md bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Eliminando..." : confirmLabel}
+            {loading ? "Procesando..." : confirmLabel}
           </button>
         </div>
       </div>

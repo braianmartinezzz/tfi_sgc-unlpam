@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\InstitucionFirmante;
 use App\Models\Usuario;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,5 +37,13 @@ class DatabaseSeederTest extends TestCase
             $gestion->unidadAcademica->id_institucion,
             $administracion->unidadAcademica->id_institucion
         );
+        $this->assertSame(
+            'Universidad Nacional de La Pampa',
+            $gestion->unidadAcademica->institucionFirmante->razon_social
+        );
+        $this->assertTrue(
+            InstitucionFirmante::query()->where('es_propia', true)->sole()->es_propia
+        );
+        $this->assertNull($gestion->unidadAcademica->institucionFirmante->tipo_institucion);
     }
 }

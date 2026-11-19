@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\UnidadAcademica;
 use App\Models\Usuario;
 use DomainException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class UsuarioService
@@ -52,40 +54,69 @@ class UsuarioService
 
     public function store(array $data): Usuario
     {
-        $data['password'] = Hash::make($data['password']);
-        $data['activo'] ??= true;
-        $data['alcance_global'] ??= false;
+        return DB::transaction(function () use ($data) {
+            $data['password'] = Hash::make($data['password']);
+            $data['activo'] ??= true;
+            $data['alcance_global'] ??= false;
 
-        $usuario = Usuario::query()->create($data);
+            $unidad = UnidadAcademica::query()
+                ->lockForUpdate()
+                ->findOrFail($data['id_unidad']);
 
-        return $usuario->load(self::RELACIONES);
+            if (! $unidad->activo) {
+                throw new DomainException('No podés crear un usuario en una unidad académica inactiva.');
+            }
+
+            $usuario = Usuario::query()->create($data);
+
+            return $usuario->load(self::RELACIONES);
+        });
     }
 
     public function update(string $id, array $data, int $actorId): Usuario
     {
-        $usuario = Usuario::query()->findOrFail($id);
+        return DB::transaction(function () use ($id, $data, $actorId) {
+            $usuario = Usuario::query()->lockForUpdate()->findOrFail($id);
 
-        if ((int) $usuario->id_usuario === $actorId) {
-            if (array_key_exists('activo', $data) && ! $data['activo']) {
-                throw new DomainException('No podés desactivar tu propia cuenta.');
+            if ((int) $usuario->id_usuario === $actorId) {
+                if (array_key_exists('activo', $data) && ! $data['activo']) {
+                    throw new DomainException('No podés desactivar tu propia cuenta.');
+                }
+
+                if (isset($data['id_rol']) && (int) $data['id_rol'] !== (int) $usuario->id_rol) {
+                    throw new DomainException('No podés cambiar tu propio rol.');
+                }
             }
 
-            if (isset($data['id_rol']) && (int) $data['id_rol'] !== (int) $usuario->id_rol) {
-                throw new DomainException('No podés cambiar tu propio rol.');
+            $unidadId = $data['id_unidad'] ?? $usuario->id_unidad;
+            $moviendoUnidad = isset($data['id_unidad'])
+                && (int) $data['id_unidad'] !== (int) $usuario->id_unidad;
+            $reactivando = ! $usuario->activo
+                && isset($data['activo'])
+                && (bool) $data['activo'];
+
+            if ($moviendoUnidad || $reactivando) {
+                $unidad = UnidadAcademica::query()->lockForUpdate()->findOrFail($unidadId);
+
+                if (! $unidad->activo) {
+                    throw new DomainException(
+                        'No podés reactivar ni mover un usuario a una unidad académica inactiva.'
+                    );
+                }
             }
-        }
 
-        if (array_key_exists('password', $data)) {
-            $data['password'] = Hash::make($data['password']);
-        }
+            if (array_key_exists('password', $data)) {
+                $data['password'] = Hash::make($data['password']);
+            }
 
-        $usuario->update($data);
+            $usuario->update($data);
 
-        if (! $usuario->activo) {
-            $usuario->tokens()->delete();
-        }
+            if (! $usuario->activo) {
+                $usuario->tokens()->delete();
+            }
 
-        return $usuario->load(self::RELACIONES);
+            return $usuario->load(self::RELACIONES);
+        });
     }
 
     /**

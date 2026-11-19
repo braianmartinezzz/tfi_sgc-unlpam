@@ -1,11 +1,29 @@
+import type { Paginated } from "@/types/api";
+
 export interface InstitucionFirmante {
   id_institucion: number;
   razon_social: string;
   cuit: string | null;
   domicilio_legal: string | null;
   tipo_institucion: string | null;
+  activo: boolean;
+  es_propia: boolean;
   representantes?: RepresentanteInstitucion[];
 }
+
+export interface InstitucionFirmanteWrite {
+  razon_social: string;
+  cuit?: string | null;
+  domicilio_legal?: string | null;
+  tipo_institucion?: string | null;
+}
+
+export interface InstitucionFirmanteResponse {
+  data: InstitucionFirmante;
+  message?: string;
+}
+
+export type InstitucionFirmanteListResponse = Paginated<InstitucionFirmante>;
 
 export interface RepresentanteInstitucion {
   id_persona: number;
@@ -23,6 +41,7 @@ export interface UnidadAcademica {
   sigla: string;
   nombre: string;
   id_institucion: number;
+  activo: boolean;
   institucion_firmante?: InstitucionFirmante | null;
 }
 

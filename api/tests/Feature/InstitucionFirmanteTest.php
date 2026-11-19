@@ -9,6 +9,7 @@ use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class InstitucionFirmanteTest extends TestCase
@@ -243,95 +244,52 @@ class InstitucionFirmanteTest extends TestCase
         ]);
     }
 
-    public function test_destroy_deletes_only_an_unlinked_institution(): void
+    public function test_put_cannot_change_active_and_razon_social_must_be_unique(): void
     {
         $this->authenticate();
-        $institution = $this->createInstitution([
-            'razon_social' => 'Institución eliminable',
-        ]);
-        $unrelatedInstitution = $this->createInstitution([
-            'razon_social' => 'Institución relacionada no afectada',
-        ]);
-        $unrelatedUnit = $this->createUnit($unrelatedInstitution);
-        $unrelatedConvenio = $this->createConvenioLinkedTo($unrelatedInstitution, $unrelatedUnit);
+        $institution = $this->createInstitution(['razon_social' => 'Institución A']);
+        $other = $this->createInstitution(['razon_social' => 'Institución B']);
 
-        $this->deleteJson("/api/instituciones-firmantes/{$institution->id_institucion}")
+        $this->putJson("/api/instituciones-firmantes/{$institution->id_institucion}", [
+            'razon_social' => 'Institución B',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['razon_social']);
+
+        $this->putJson("/api/instituciones-firmantes/{$institution->id_institucion}", [
+            'razon_social' => 'Institución A editada',
+            'activo' => false,
+            'es_propia' => true,
+        ])
             ->assertOk()
-            ->assertExactJson([
-                'message' => 'Institución firmante eliminada correctamente.',
-            ]);
-
-        $this->assertDatabaseMissing('institucion_firmante', [
-            'id_institucion' => $institution->id_institucion,
-        ]);
-        $this->assertDatabaseHas('institucion_firmante', [
-            'id_institucion' => $unrelatedInstitution->id_institucion,
-        ]);
-        $this->assertDatabaseHas('unidad_academica', [
-            'id_unidad_academica' => $unrelatedUnit,
-        ]);
-        $this->assertDatabaseHas('convenio', [
-            'id_instrumento' => $unrelatedConvenio->id_instrumento,
-        ]);
-        $this->assertDatabaseHas('convenio_institucion', [
-            'id_institucion' => $unrelatedInstitution->id_institucion,
-            'id_instrumento' => $unrelatedConvenio->id_instrumento,
-        ]);
-    }
-
-    public function test_destroy_rejects_institutions_linked_to_convenios_without_changing_records(): void
-    {
-        $this->authenticate();
-        $institution = $this->createInstitution();
-        $otherInstitution = $this->createInstitution();
-        $otherUnit = $this->createUnit($otherInstitution);
-        $convenio = $this->createConvenioLinkedTo($institution, $otherUnit);
-
-        $this->deleteJson("/api/instituciones-firmantes/{$institution->id_institucion}")
-            ->assertStatus(409)
-            ->assertJsonPath(
-                'message',
-                'No se puede eliminar una institución firmante que se encuentra vinculada a convenios o unidades académicas.'
-            );
+            ->assertJsonPath('data.activo', true)
+            ->assertJsonPath('data.es_propia', false);
 
         $this->assertDatabaseHas('institucion_firmante', [
             'id_institucion' => $institution->id_institucion,
+            'activo' => true,
+            'es_propia' => false,
         ]);
-        $this->assertDatabaseHas('convenio', [
-            'id_instrumento' => $convenio->id_instrumento,
-        ]);
-        $this->assertDatabaseHas('convenio_institucion', [
-            'id_institucion' => $institution->id_institucion,
-            'id_instrumento' => $convenio->id_instrumento,
+
+        $this->assertDatabaseHas('institucion_firmante', [
+            'id_institucion' => $other->id_institucion,
+            'razon_social' => 'Institución B',
         ]);
     }
 
-    public function test_destroy_rejects_institutions_linked_to_academic_units_without_changing_records(): void
+    public function test_deactivation_cascades_and_revokes_user_tokens(): void
     {
-        $this->authenticate();
+        $actor = $this->authenticate();
         $institution = $this->createInstitution();
         $unitId = $this->createUnit($institution);
-
-        $this->deleteJson("/api/instituciones-firmantes/{$institution->id_institucion}")
-            ->assertStatus(409)
-            ->assertJsonPath(
-                'message',
-                'No se puede eliminar una institución firmante que se encuentra vinculada a convenios o unidades académicas.'
-            );
-
-        $this->assertDatabaseHas('institucion_firmante', [
-            'id_institucion' => $institution->id_institucion,
+        $roleId = DB::table('rol')->insertGetId(['nombre' => 'Gestión']);
+        $usuario = Usuario::query()->create([
+            'mail' => uniqid('gestion-', true).'@example.com',
+            'nombre' => 'Usuario de Gestión',
+            'password' => Hash::make('password-segura'),
+            'activo' => true,
+            'id_rol' => $roleId,
+            'id_unidad' => $unitId,
         ]);
-        $this->assertDatabaseHas('unidad_academica', [
-            'id_unidad_academica' => $unitId,
-            'id_institucion' => $institution->id_institucion,
-        ]);
-    }
-
-    public function test_destroy_checks_the_additional_representante_foreign_key(): void
-    {
-        $this->authenticate();
-        $institution = $this->createInstitution();
+        $usuario->createToken('cascade-token');
         $personaId = DB::table('persona')->insertGetId([
             'nombre' => 'Representante',
             'apellido' => 'Prueba',
@@ -342,29 +300,170 @@ class InstitucionFirmanteTest extends TestCase
             'id_institucion' => $institution->id_institucion,
         ]);
 
-        $this->deleteJson("/api/instituciones-firmantes/{$institution->id_institucion}")
-            ->assertStatus(409)
-            ->assertJsonPath(
-                'message',
-                'No se puede eliminar una institución firmante que tiene representantes asociados.'
-            );
+        $this->patchJson("/api/instituciones-firmantes/{$institution->id_institucion}/estado", [
+            'activo' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.activo', false)
+            ->assertJsonPath('resumen.unidades_desactivadas', 1)
+            ->assertJsonPath('resumen.usuarios_desactivados', 1)
+            ->assertJsonPath('resumen.representantes_desactivados', 1);
 
-        $this->assertDatabaseHas('institucion_firmante', [
-            'id_institucion' => $institution->id_institucion,
+        $this->assertDatabaseHas('unidad_academica', [
+            'id_unidad_academica' => $unitId,
+            'activo' => false,
+        ]);
+        $this->assertDatabaseHas('usuario', [
+            'id_usuario' => $usuario->id_usuario,
+            'activo' => false,
+        ]);
+        $this->assertDatabaseMissing('personal_access_tokens', [
+            'tokenable_id' => $usuario->id_usuario,
+            'tokenable_type' => Usuario::class,
         ]);
         $this->assertDatabaseHas('representante', [
             'id_persona' => $personaId,
-            'id_institucion' => $institution->id_institucion,
+            'activo' => false,
         ]);
+
+        $this->patchJson("/api/instituciones-firmantes/{$institution->id_institucion}/estado", [
+            'activo' => true,
+        ])->assertOk()->assertJsonPath('data.activo', true);
+
+        $this->assertDatabaseHas('unidad_academica', [
+            'id_unidad_academica' => $unitId,
+            'activo' => false,
+        ]);
+        $this->assertDatabaseHas('usuario', [
+            'id_usuario' => $usuario->id_usuario,
+            'activo' => false,
+        ]);
+        $this->assertDatabaseHas('representante', [
+            'id_persona' => $personaId,
+            'activo' => false,
+        ]);
+        $this->assertSame('Administración', $actor->rol->nombre);
     }
 
-    public function test_destroy_returns_not_found_for_missing_institutions(): void
+    public function test_protects_unlpam_and_prevents_admin_self_lockout(): void
+    {
+        $actor = $this->authenticate();
+        $unidadPropia = $actor->unidadAcademica;
+        $institucionPropia = $unidadPropia->institucionFirmante;
+
+        $this->patchJson("/api/unidades-academicas/{$unidadPropia->id_unidad_academica}/estado", [
+            'activo' => false,
+        ])->assertStatus(409);
+
+        $this->patchJson("/api/instituciones-firmantes/{$institucionPropia->id_institucion}/estado", [
+            'activo' => false,
+        ])->assertStatus(409);
+
+        $unlpam = $this->createInstitution([
+            'razon_social' => 'Universidad Nacional de La Pampa',
+        ]);
+        $unlpam->es_propia = true;
+        $unlpam->save();
+
+        $this->patchJson("/api/instituciones-firmantes/{$unlpam->id_institucion}/estado", [
+            'activo' => false,
+        ])->assertStatus(409);
+    }
+
+    public function test_filters_institutions_by_active_state_and_delete_route_is_removed(): void
     {
         $this->authenticate();
+        $active = $this->createInstitution(['razon_social' => 'Activa']);
+        $inactive = $this->createInstitution(['razon_social' => 'Inactiva']);
+        $inactive->activo = false;
+        $inactive->save();
 
-        $this->deleteJson('/api/instituciones-firmantes/999999')
-            ->assertNotFound()
-            ->assertJsonPath('message', 'Institución firmante no encontrada.');
+        $this->getJson('/api/instituciones-firmantes?activo=true')
+            ->assertOk()
+            ->assertJsonFragment(['id_institucion' => $active->id_institucion])
+            ->assertJsonMissing(['id_institucion' => $inactive->id_institucion]);
+
+        $this->getJson('/api/instituciones-firmantes?activo=false')
+            ->assertOk()
+            ->assertJsonFragment(['id_institucion' => $inactive->id_institucion])
+            ->assertJsonMissing(['id_institucion' => $active->id_institucion]);
+
+        $this->deleteJson("/api/instituciones-firmantes/{$active->id_institucion}")
+            ->assertMethodNotAllowed();
+    }
+
+    public function test_status_request_requires_boolean_value(): void
+    {
+        $this->authenticate();
+        $institution = $this->createInstitution();
+
+        $this->patchJson("/api/instituciones-firmantes/{$institution->id_institucion}/estado", [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['activo']);
+    }
+
+    public function test_institution_request_does_not_allow_duplicate_razon_social_on_create(): void
+    {
+        $this->authenticate();
+        $this->createInstitution(['razon_social' => 'Duplicada']);
+
+        $this->postJson('/api/instituciones-firmantes', [
+            'razon_social' => 'Duplicada',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['razon_social']);
+    }
+
+    public function test_management_edits_only_its_institution_and_other_roles_are_read_only(): void
+    {
+        $admin = $this->authenticate();
+        $propia = $admin->unidadAcademica->institucionFirmante;
+        $ajena = $this->createInstitution(['razon_social' => 'Institución ajena']);
+        $rolGestion = DB::table('rol')->insertGetId(['nombre' => 'Gestión']);
+        $gestion = Usuario::query()->create([
+            'mail' => 'gestion-catalogo@example.com',
+            'nombre' => 'Gestión',
+            'password' => Hash::make('password-segura'),
+            'activo' => true,
+            'id_rol' => $rolGestion,
+            'id_unidad' => $admin->id_unidad,
+        ]);
+        Sanctum::actingAs($gestion);
+
+        $this->getJson('/api/instituciones-firmantes')->assertOk();
+        $this->putJson("/api/instituciones-firmantes/{$propia->id_institucion}", [
+            'domicilio_legal' => 'Domicilio actualizado',
+        ])->assertOk();
+        $this->putJson("/api/instituciones-firmantes/{$ajena->id_institucion}", [
+            'domicilio_legal' => 'No autorizado',
+        ])->assertForbidden();
+        $this->postJson('/api/instituciones-firmantes', [
+            'razon_social' => 'No autorizada',
+        ])->assertForbidden();
+        $this->patchJson("/api/instituciones-firmantes/{$propia->id_institucion}/estado", [
+            'activo' => false,
+        ])->assertForbidden();
+
+        foreach (['Revisión', 'Consulta'] as $rolNombre) {
+            $rolId = DB::table('rol')->insertGetId(['nombre' => $rolNombre]);
+            $lector = Usuario::query()->create([
+                'mail' => strtolower($rolNombre).'-catalogo@example.com',
+                'nombre' => $rolNombre,
+                'password' => Hash::make('password-segura'),
+                'activo' => true,
+                'id_rol' => $rolId,
+                'id_unidad' => $admin->id_unidad,
+            ]);
+            Sanctum::actingAs($lector);
+
+            $this->getJson('/api/instituciones-firmantes')->assertOk();
+            $this->getJson('/api/me')
+                ->assertOk()
+                ->assertJsonPath('user.rol.nombre', $rolNombre);
+            $this->putJson("/api/instituciones-firmantes/{$propia->id_institucion}", [
+                'domicilio_legal' => 'No autorizado',
+            ])->assertForbidden();
+        }
     }
 
     public function test_all_institution_endpoints_require_authentication(): void
@@ -373,7 +472,7 @@ class InstitucionFirmanteTest extends TestCase
         $this->getJson('/api/instituciones-firmantes/1')->assertUnauthorized();
         $this->postJson('/api/instituciones-firmantes', [])->assertUnauthorized();
         $this->putJson('/api/instituciones-firmantes/1', [])->assertUnauthorized();
-        $this->deleteJson('/api/instituciones-firmantes/1')->assertUnauthorized();
+        $this->deleteJson('/api/instituciones-firmantes/1')->assertMethodNotAllowed();
     }
 
     private function authenticate(): Usuario
@@ -383,7 +482,7 @@ class InstitucionFirmanteTest extends TestCase
         ]);
         $unitId = $this->createUnit($institution);
         $roleId = DB::table('rol')->insertGetId([
-            'nombre' => 'Prueba',
+            'nombre' => 'Administración',
         ]);
         $usuario = Usuario::query()->create([
             'mail' => uniqid('institucion-', true).'@example.com',

@@ -1,5 +1,5 @@
 import { apiRequest } from "@/services/api-client";
-import type { ApiMessageResponse } from "@/types/api";
+import type { CatalogoEstadoResponse } from "@/types/api";
 import type {
   UnidadAcademica,
   UnidadAcademicaListResponse,
@@ -10,6 +10,7 @@ import type {
 export interface UnidadFilters {
   id_institucion?: number;
   buscar?: string;
+  activo?: boolean;
 }
 
 function buildQuery(filters: UnidadFilters): string {
@@ -58,10 +59,15 @@ export function update(
   });
 }
 
-export function remove(
+export function setActivo(
   id: number | string,
-): Promise<ApiMessageResponse> {
-  return apiRequest<ApiMessageResponse>(`/unidades-academicas/${id}`, {
-    method: "DELETE",
-  });
+  activo: boolean,
+): Promise<CatalogoEstadoResponse<UnidadAcademica>> {
+  return apiRequest<CatalogoEstadoResponse<UnidadAcademica>>(
+    `/unidades-academicas/${id}/estado`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ activo }),
+    },
+  );
 }

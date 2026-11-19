@@ -22,6 +22,10 @@ class Representante extends Model
         'id_institucion',
     ];
 
+    protected $casts = [
+        'activo' => 'boolean',
+    ];
+
     public function persona(): BelongsTo
     {
         return $this->belongsTo(Persona::class, 'id_persona', 'id_persona');

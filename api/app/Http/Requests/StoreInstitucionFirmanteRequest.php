@@ -17,7 +17,12 @@ class StoreInstitucionFirmanteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'razon_social' => ['required', 'string', 'max:255'],
+            'razon_social' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('institucion_firmante', 'razon_social'),
+            ],
             'cuit' => [
                 'nullable',
                 'string',

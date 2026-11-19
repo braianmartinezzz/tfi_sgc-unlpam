@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\InstitucionFirmante;
 use App\Models\Persona;
 use App\Models\Representante;
+use DomainException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -13,15 +14,21 @@ use RuntimeException;
 
 class RepresentanteService
 {
+    public function __construct(private AuditoriaService $auditoria) {}
+
     public function paginate(array $filters): LengthAwarePaginator
     {
         $query = Representante::query()->with([
             'persona:id_persona,nombre,apellido,dni,cuil',
-            'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion',
+            'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion,activo,es_propia',
         ]);
 
         if (isset($filters['id_institucion']) && $filters['id_institucion'] !== '') {
             $query->where('id_institucion', $filters['id_institucion']);
+        }
+
+        if (isset($filters['activo']) && $filters['activo'] !== '') {
+            $query->where('activo', filter_var($filters['activo'], FILTER_VALIDATE_BOOLEAN));
         }
 
         if (isset($filters['buscar']) && trim($filters['buscar']) !== '') {
@@ -46,17 +53,23 @@ class RepresentanteService
         return Representante::query()
             ->with([
                 'persona:id_persona,nombre,apellido,dni,cuil',
-                'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion',
+                'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion,activo,es_propia',
             ])
             ->findOrFail($id);
     }
 
-    public function store(array $data): Representante
+    public function store(array $data, int $actorId): Representante
     {
         for ($attempt = 0; $attempt < 2; $attempt++) {
             try {
-                return DB::transaction(function () use ($data) {
-                    InstitucionFirmante::query()->findOrFail($data['id_institucion']);
+                return DB::transaction(function () use ($data, $actorId) {
+                    $institucion = InstitucionFirmante::query()
+                        ->lockForUpdate()
+                        ->findOrFail($data['id_institucion']);
+
+                    if (! $institucion->activo) {
+                        throw new DomainException('No podés crear un representante bajo una institución inactiva.');
+                    }
 
                     $persona = Persona::query()
                         ->where('dni', $data['dni'])
@@ -73,7 +86,7 @@ class RepresentanteService
                         ]);
                     } else {
                         if ($persona->representante()->exists()) {
-                            throw new \DomainException(
+                            throw new DomainException(
                                 'La persona ya posee un perfil de representante legal registrado'
                             );
                         }
@@ -81,7 +94,7 @@ class RepresentanteService
                         $cuil = $data['cuil'] ?? null;
 
                         if ($persona->cuil !== null && $cuil !== null && $persona->cuil !== $cuil) {
-                            throw new \DomainException(
+                            throw new DomainException(
                                 'El CUIL enviado no coincide con los datos registrados para este DNI'
                             );
                         }
@@ -93,13 +106,16 @@ class RepresentanteService
                         }
                     }
 
-                    return $persona->representante()->create([
+                    $representante = $persona->representante()->create([
                         'cargo' => $data['cargo'] ?? null,
                         'id_institucion' => $data['id_institucion'],
                     ])->load([
                         'persona:id_persona,nombre,apellido,dni,cuil',
-                        'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion',
+                        'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion,activo,es_propia',
                     ]);
+                    $this->registrarAuditoria('Alta de representante legal', $actorId, $representante);
+
+                    return $representante;
                 });
             } catch (QueryException $exception) {
                 if (! $this->isUniqueConstraintViolation($exception)) {
@@ -112,7 +128,7 @@ class RepresentanteService
 
                 if ($persona !== null) {
                     if ($persona->representante()->exists()) {
-                        throw new \DomainException(
+                        throw new DomainException(
                             'La persona ya posee un perfil de representante legal registrado'
                         );
                     }
@@ -120,7 +136,7 @@ class RepresentanteService
                     $cuil = $data['cuil'] ?? null;
 
                     if ($persona->cuil !== null && $cuil !== null && $persona->cuil !== $cuil) {
-                        throw new \DomainException(
+                        throw new DomainException(
                             'El CUIL enviado no coincide con los datos registrados para este DNI'
                         );
                     }
@@ -143,10 +159,10 @@ class RepresentanteService
         throw new RuntimeException('No se pudo registrar el representante.');
     }
 
-    public function update(string $id, array $data): Representante
+    public function update(string $id, array $data, int $actorId): Representante
     {
         try {
-            return DB::transaction(function () use ($id, $data) {
+            return DB::transaction(function () use ($id, $data, $actorId) {
                 $persona = Persona::query()->lockForUpdate()->findOrFail($id);
                 $representante = Representante::query()->lockForUpdate()->findOrFail($id);
 
@@ -161,12 +177,18 @@ class RepresentanteService
                 );
 
                 if (array_key_exists('id_institucion', $representanteFields)) {
-                    InstitucionFirmante::query()->findOrFail(
-                        $representanteFields['id_institucion']
-                    );
-
                     $institutionChanged = (int) $representanteFields['id_institucion']
                         !== (int) $representante->id_institucion;
+
+                    if ($institutionChanged) {
+                        $institucion = InstitucionFirmante::query()
+                            ->lockForUpdate()
+                            ->findOrFail($representanteFields['id_institucion']);
+
+                        if (! $institucion->activo) {
+                            throw new DomainException('No podés mover un representante a una institución inactiva.');
+                        }
+                    }
 
                     if ($institutionChanged && (
                         $persona->conveniosFirmados()->lockForUpdate()->exists()
@@ -174,7 +196,7 @@ class RepresentanteService
                             ->lockForUpdate()
                             ->exists()
                     )) {
-                        throw new \DomainException(
+                        throw new DomainException(
                             'No se puede cambiar la institución porque el representante tiene relaciones históricas asociadas.'
                         );
                     }
@@ -188,10 +210,13 @@ class RepresentanteService
                     $representante->fill($representanteFields)->save();
                 }
 
-                return $representante->load([
+                $representante->load([
                     'persona:id_persona,nombre,apellido,dni,cuil',
-                    'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion',
+                    'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion,activo,es_propia',
                 ]);
+                $this->registrarAuditoria('Edición de representante legal', $actorId, $representante);
+
+                return $representante;
             });
         } catch (QueryException $exception) {
             if (! $this->isUniqueConstraintViolation($exception)) {
@@ -203,43 +228,77 @@ class RepresentanteService
         }
     }
 
-    public function destroy(string $id): void
+    public function cambiarEstado(string $id, bool $activo, int $actorId): array
     {
-        try {
-            DB::transaction(function () use ($id) {
-                $persona = Persona::query()->lockForUpdate()->findOrFail($id);
-                $representante = Representante::query()->lockForUpdate()->findOrFail($id);
+        return DB::transaction(function () use ($id, $activo, $actorId) {
+            $representante = Representante::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $resumen = [
+                'unidades_desactivadas' => 0,
+                'usuarios_desactivados' => 0,
+                'representantes_desactivados' => 0,
+            ];
 
-                if (
-                    $persona->conveniosFirmados()->lockForUpdate()->exists()
-                    || $representante->pasantiasComoTutorLaboral()
-                        ->lockForUpdate()
-                        ->exists()
-                ) {
-                    throw new \DomainException(
-                        'No se puede eliminar el representante porque tiene firmas o pasantías asociadas.'
-                    );
-                }
-
-                if (! $representante->delete()) {
-                    throw new RuntimeException('No se pudo eliminar el representante.');
-                }
-
-                if (! $persona->docente()->exists() && ! $persona->estudiante()->exists()) {
-                    if (! $persona->delete()) {
-                        throw new RuntimeException('No se pudo eliminar la persona.');
-                    }
-                }
-            });
-        } catch (QueryException $exception) {
-            if ($this->isForeignKeyViolation($exception)) {
-                throw new \DomainException(
-                    'No se puede eliminar el representante porque tiene relaciones históricas asociadas.'
-                );
+            if ($representante->activo === $activo) {
+                return [
+                    'data' => $representante->load([
+                        'persona:id_persona,nombre,apellido,dni,cuil',
+                        'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion,activo,es_propia',
+                    ]),
+                    'resumen' => $resumen,
+                ];
             }
 
-            throw $exception;
-        }
+            if ($activo) {
+                $institucion = InstitucionFirmante::query()
+                    ->lockForUpdate()
+                    ->findOrFail($representante->id_institucion);
+
+                if (! $institucion->activo) {
+                    throw new DomainException('No podés reactivar un representante de una institución inactiva.');
+                }
+            }
+
+            $representante->activo = $activo;
+            $representante->save();
+            if (! $activo) {
+                $resumen['representantes_desactivados'] = 1;
+            }
+
+            $representante->load([
+                'persona:id_persona,nombre,apellido,dni,cuil',
+                'institucionFirmante:id_institucion,razon_social,cuit,domicilio_legal,tipo_institucion,activo,es_propia',
+            ]);
+            $this->auditoria->registrar(
+                'Cambio de estado de representante legal',
+                $actorId,
+                null,
+                json_encode([
+                    'id_persona' => $representante->id_persona,
+                    'activo' => $activo,
+                    'resumen' => $resumen,
+                ], JSON_UNESCAPED_UNICODE)
+            );
+
+            return ['data' => $representante, 'resumen' => $resumen];
+        });
+    }
+
+    private function registrarAuditoria(
+        string $accion,
+        int $actorId,
+        Representante $representante
+    ): void {
+        $this->auditoria->registrar(
+            $accion,
+            $actorId,
+            null,
+            json_encode([
+                'id_persona' => $representante->id_persona,
+                'id_institucion' => $representante->id_institucion,
+            ], JSON_UNESCAPED_UNICODE)
+        );
     }
 
     private function ensureCuilAvailable(?string $cuil, ?int $exceptPersonaId = null): void
@@ -294,14 +353,5 @@ class RepresentanteService
         return $driverCode === 1062
             || str_contains($message, 'unique constraint failed')
             || str_contains($message, 'duplicate entry');
-    }
-
-    private function isForeignKeyViolation(QueryException $exception): bool
-    {
-        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
-        $message = strtolower($exception->getMessage());
-
-        return $driverCode === 1451
-            || str_contains($message, 'foreign key constraint failed');
     }
 }
