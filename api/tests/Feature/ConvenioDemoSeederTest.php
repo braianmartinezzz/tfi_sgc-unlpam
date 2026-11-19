@@ -31,7 +31,7 @@ class ConvenioDemoSeederTest extends TestCase
             ->where('es_propia', true)
             ->sole();
         $this->assertSame(
-            2,
+            9,
             DB::table('unidad_academica')
                 ->where('id_institucion', $institucionPropia->id_institucion)
                 ->count()

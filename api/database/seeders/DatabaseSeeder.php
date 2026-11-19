@@ -27,6 +27,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call(InstitucionUnlpamSeeder::class);
+        $this->call(UnidadesAcademicasUnlpamSeeder::class);
         $institucion = InstitucionFirmante::query()
             ->where('es_propia', true)
             ->firstOrFail();
