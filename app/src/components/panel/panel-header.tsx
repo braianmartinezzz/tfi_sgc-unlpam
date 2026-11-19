@@ -2,36 +2,11 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ThemeToggle } from '@/components/panel/theme-toggle';
 import { Txt } from '@/components/panel/txt';
 import { SgcFont, SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { iniciales } from '@/lib/format';
-
-function SunIcon({ color }: { color: string }) {
-  return (
-    <View style={styles.iconoSol}>
-      <View style={[styles.solNucleo, { borderColor: color }]} />
-      {[0, 45, 90, 135].map((rotacion) => (
-        <View
-          key={rotacion}
-          style={[
-            styles.solRayo,
-            { backgroundColor: color, transform: [{ rotate: `${rotacion}deg` }] },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
-function MoonIcon({ color, cutoutColor }: { color: string; cutoutColor: string }) {
-  return (
-    <View style={styles.iconoLuna}>
-      <View style={[styles.lunaCuerpo, { borderColor: color }]} />
-      <View style={[styles.lunaCorte, { backgroundColor: cutoutColor }]} />
-    </View>
-  );
-}
 
 type PanelHeaderProps = {
   nombreUsuario: string | null;
@@ -78,27 +53,7 @@ export function PanelHeader({
           </View>
         </View>
 
-        <View style={styles.temaControles}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={tema.scheme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
-            accessibilityState={{ selected: tema.scheme === 'dark' }}
-            onPress={() => tema.setPreference(tema.scheme === 'light' ? 'dark' : 'light')}
-            style={({ pressed }) => [
-              styles.botonTema,
-              {
-                borderColor: tema.fieldPlaceholder,
-                backgroundColor: tema.field,
-              },
-              pressed && { opacity: 0.7 },
-            ]}>
-            {tema.scheme === 'light' ? (
-              <SunIcon color={tema.onTopbar} />
-            ) : (
-              <MoonIcon color={tema.onTopbar} cutoutColor={tema.field} />
-            )}
-          </Pressable>
-        </View>
+        <ThemeToggle />
 
         <Pressable
           accessibilityRole="button"
@@ -210,57 +165,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: SgcSpacing.md,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  temaControles: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SgcSpacing.xs,
-  },
-  botonTema: {
-    width: 32,
-    height: 32,
-    borderWidth: 1,
-    borderRadius: SgcRadius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 0,
-  },
-  iconoSol: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  solNucleo: {
-    width: 8,
-    height: 8,
-    borderWidth: 1.5,
-    borderRadius: SgcRadius.pill,
-  },
-  solRayo: {
-    position: 'absolute',
-    width: 2,
-    height: 20,
-  },
-  iconoLuna: {
-    width: 20,
-    height: 20,
-  },
-  lunaCuerpo: {
-    position: 'absolute',
-    width: 18,
-    height: 18,
-    left: 1,
-    top: 1,
-    borderWidth: 2,
-    borderRadius: SgcRadius.pill,
-  },
-  lunaCorte: {
-    position: 'absolute',
-    width: 13,
-    height: 13,
-    left: 7,
-    top: -2,
-    borderRadius: SgcRadius.pill,
   },
 });

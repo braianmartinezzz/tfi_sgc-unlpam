@@ -7,10 +7,10 @@ import type { Href } from 'expo-router';
  */
 export const Disponible = {
   escanearQr: false,
-  notificaciones: false,
-  miPerfil: false,
+  notificaciones: true,
+  miPerfil: true,
   registrarIdentidad: false,
-  ayuda: false,
+  ayuda: true,
 } as const;
 
 function proximamente(titulo: string, detalle?: string): Href {
@@ -37,9 +37,9 @@ export const Destinos = {
     params: { id: String(idInstrumento) },
   }),
   escanearQr: (): Href => proximamente('Lector de código QR'),
-  notificaciones: (): Href => proximamente('Notificaciones'),
+  notificaciones: (): Href => '/notificaciones',
   movimientos: (): Href => proximamente('Movimientos recientes'),
-  miPerfil: (): Href => proximamente('Mi perfil'),
+  miPerfil: (): Href => '/perfil',
   registrarIdentidad: (): Href => proximamente('Registrar mi identidad'),
-  ayuda: (): Href => proximamente('Ayuda y manual de usuario'),
+  ayuda: (): Href => '/ayuda',
 } as const;

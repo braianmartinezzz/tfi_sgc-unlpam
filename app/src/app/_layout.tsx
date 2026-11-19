@@ -1,11 +1,13 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import { useColorScheme } from 'react-native';
+
+import { useSgcTheme } from '@/hooks/use-sgc-theme';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  // La preferencia guardada en la app (no el tema del sistema) decide el tema de navegación.
+  const { scheme } = useSgcTheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       {/* Pila de navegación: gesto/botón de volver nativo, y las pantallas anteriores
           (con sus filtros y scroll) quedan montadas. Cada pantalla dibuja su propio header. */}
       <Stack screenOptions={{ headerShown: false }} />

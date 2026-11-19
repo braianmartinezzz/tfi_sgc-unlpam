@@ -1,0 +1,199 @@
+diff --git a/app/src/app/_layout.tsx b/app/src/app/_layout.tsx
+index e1b4b61..9ff3833 100644
+--- a/app/src/app/_layout.tsx
++++ b/app/src/app/_layout.tsx
+@@ -1,11 +1,13 @@
+ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+-import { useColorScheme } from 'react-native';
++
++import { useSgcTheme } from '@/hooks/use-sgc-theme';
+ 
+ export default function RootLayout() {
+-  const colorScheme = useColorScheme();
++  // La preferencia guardada en la app (no el tema del sistema) decide el tema de navegación.
++  const { scheme } = useSgcTheme();
+ 
+   return (
+-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
++    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+       {/* Pila de navegación: gesto/botón de volver nativo, y las pantallas anteriores
+           (con sus filtros y scroll) quedan montadas. Cada pantalla dibuja su propio header. */}
+       <Stack screenOptions={{ headerShown: false }} />
+diff --git a/app/src/app/index.tsx b/app/src/app/index.tsx
+index b4956e0..4414e62 100644
+--- a/app/src/app/index.tsx
++++ b/app/src/app/index.tsx
+@@ -11,14 +11,13 @@ import {
+ } from 'react-native';
+ import { SafeAreaView } from 'react-native-safe-area-context';
+ 
+-import { ThemedText } from '@/components/themed-text';
+-import { ThemedView } from '@/components/themed-view';
++import { Txt } from '@/components/panel/txt';
+ import { API_URL } from '@/constants/api';
+-import { useTheme } from '@/hooks/use-theme';
++import { useSgcTheme } from '@/hooks/use-sgc-theme';
+ import { getToken, setToken } from '@/lib/auth-storage';
+ 
+ export default function LoginScreen() {
+-  const theme = useTheme();
++  const tema = useSgcTheme();
+   const router = useRouter();
+ 
+   const [mail, setMail] = useState('');
+@@ -85,30 +84,26 @@ export default function LoginScreen() {
+     }
+   }
+ 
+-  const isDark = theme.background === '#000000';
+-  const surface = isDark ? '#1c1d22' : '#ffffff';
+-  const border = isDark ? '#454751' : '#d3d5de';
+-  const page = isDark ? '#17181e' : '#f1f0f5';
+-  const brandText = isDark ? '#FF8A8A' : '#C52D34';
+-  const brand = '#D13B3B';
++  // Paleta de la app (misma que el resto de las pantallas), según la preferencia claro/oscuro.
++  const { surface, border, page, brandText, brand } = tema;
+ 
+   const inputStyle = [
+     styles.input,
+-    { backgroundColor: surface, borderColor: border, color: theme.text },
++    { backgroundColor: surface, borderColor: border, color: tema.text },
+   ];
+ 
+   if (checkingSession) {
+     return (
+-      <ThemedView style={[styles.container, { backgroundColor: page }]}>
++      <View style={[styles.container, { backgroundColor: page }]}>
+         <SafeAreaView style={styles.safeAreaCentered}>
+           <ActivityIndicator size="large" color={brand} />
+         </SafeAreaView>
+-      </ThemedView>
++      </View>
+     );
+   }
+ 
+   return (
+-    <ThemedView style={[styles.container, { backgroundColor: page }]}>
++    <View style={[styles.container, { backgroundColor: page }]}>
+       <SafeAreaView style={styles.safeArea}>
+         <KeyboardAvoidingView
+           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+@@ -118,28 +113,28 @@ export default function LoginScreen() {
+ 
+             <View style={styles.cardContent}>
+               <View style={styles.header}>
+-                <ThemedText style={[styles.brandText, { color: brandText }]}>UNLPam</ThemedText>
+-                <ThemedText type="small" themeColor="textSecondary" style={styles.brandSubtext}>
++                <Txt style={[styles.brandText, { color: brandText }]}>UNLPam</Txt>
++                <Txt variante="detalle" color="textSecondary" style={styles.brandSubtext}>
+                   Sistema de Gestión de Convenios
+-                </ThemedText>
++                </Txt>
+ 
+-                <ThemedText style={[styles.systemTitle, { color: theme.text }]}>
++                <Txt style={[styles.systemTitle, { color: tema.text }]}>
+                   Sistema de Gestión de Convenios
+-                </ThemedText>
+-                <ThemedText style={[styles.loginTitle, { color: theme.text }]}>
++                </Txt>
++                <Txt style={[styles.loginTitle, { color: tema.text }]}>
+                   Iniciar Sesión
+-                </ThemedText>
++                </Txt>
+               </View>
+ 
+               <View style={styles.formFields}>
+                 <View style={styles.field}>
+-                  <ThemedText type="smallBold" style={styles.label}>Correo Electrónico</ThemedText>
++                  <Txt variante="detalle" negrita style={styles.label}>Correo Electrónico</Txt>
+                   <TextInput
+                     style={inputStyle}
+                     value={mail}
+                     onChangeText={setMail}
+                     placeholder="nombre@unlpam.edu.ar"
+-                    placeholderTextColor={theme.textSecondary}
++                    placeholderTextColor={tema.textSecondary}
+                     autoCapitalize="none"
+                     autoCorrect={false}
+                     keyboardType="email-address"
+@@ -150,14 +145,14 @@ export default function LoginScreen() {
+                 </View>
+ 
+                 <View style={styles.field}>
+-                  <ThemedText type="smallBold" style={styles.label}>Contraseña</ThemedText>
++                  <Txt variante="detalle" negrita style={styles.label}>Contraseña</Txt>
+                   <View>
+                     <TextInput
+                       style={[inputStyle, styles.passwordInput]}
+                       value={password}
+                       onChangeText={setPassword}
+                       placeholder="••••••••"
+-                      placeholderTextColor={theme.textSecondary}
++                      placeholderTextColor={tema.textSecondary}
+                       secureTextEntry={!showPassword}
+                       autoCapitalize="none"
+                       autoCorrect={false}
+@@ -172,17 +167,17 @@ export default function LoginScreen() {
+                       accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                       style={styles.toggle}
+                       onPress={() => setShowPassword((visible) => !visible)}>
+-                      <ThemedText type="small" themeColor="textSecondary">
++                      <Txt variante="detalle" color="textSecondary">
+                         {showPassword ? 'Ocultar' : 'Mostrar'}
+-                      </ThemedText>
++                      </Txt>
+                     </Pressable>
+                   </View>
+                 </View>
+ 
+                 {error && (
+-                  <ThemedText type="small" style={styles.error}>
++                  <Txt variante="detalle" style={styles.error}>
+                     {error}
+-                  </ThemedText>
++                  </Txt>
+                 )}
+ 
+                 <Pressable
+@@ -197,7 +192,7 @@ export default function LoginScreen() {
+                   {loading ? (
+                     <ActivityIndicator color="#ffffff" />
+                   ) : (
+-                    <ThemedText style={styles.buttonText}>Iniciar Sesión</ThemedText>
++                    <Txt style={styles.buttonText}>Iniciar Sesión</Txt>
+                   )}
+                 </Pressable>
+ 
+@@ -205,25 +200,25 @@ export default function LoginScreen() {
+                   accessibilityRole="button"
+                   style={styles.forgotButton}
+                   onPress={() => setError('La recuperación de contraseña estará disponible próximamente.') }>
+-                  <ThemedText style={[styles.forgotText, { color: brandText }]}>
++                  <Txt style={[styles.forgotText, { color: brandText }]}>
+                     Olvidé mi contraseña
+-                  </ThemedText>
++                  </Txt>
+                 </Pressable>
+               </View>
+             </View>
+           </View>
+ 
+           <View style={styles.footer}>
+-            <ThemedText type="small" themeColor="textSecondary" style={styles.footerText}>
++            <Txt variante="detalle" color="textSecondary" style={styles.footerText}>
+               Acceso exclusivo para personal autorizado.
+-            </ThemedText>
+-            <ThemedText type="small" themeColor="textSecondary" style={styles.footerText}>
++            </Txt>
++            <Txt variante="detalle" color="textSecondary" style={styles.footerText}>
+               UNLPam - Facultad de Ingeniería, 2026.
+-            </ThemedText>
++            </Txt>
+           </View>
+         </KeyboardAvoidingView>
+       </SafeAreaView>
+-    </ThemedView>
++    </View>
+   );
+ }
+ 
