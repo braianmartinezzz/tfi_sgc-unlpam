@@ -24,14 +24,14 @@ class ConvenioDemoSeederTest extends TestCase
         $this->assertDatabaseCount('convenio', 20);
         $this->assertDatabaseCount('marco', 9);
         $this->assertDatabaseCount('especifico', 11);
-        $this->assertDatabaseCount('usuario', 6);
+        $this->assertDatabaseCount('usuario', 26);
         $this->assertDatabaseCount('institucion_firmante', 6);
         $this->assertDatabaseCount('historial_estado', 66);
         $institucionPropia = DB::table('institucion_firmante')
             ->where('es_propia', true)
             ->sole();
         $this->assertSame(
-            9,
+            7,
             DB::table('unidad_academica')
                 ->where('id_institucion', $institucionPropia->id_institucion)
                 ->count()
@@ -89,7 +89,7 @@ class ConvenioDemoSeederTest extends TestCase
 
         $totalesEsperados = [
             'admin@unlpam.edu.ar' => 20,
-            'gestion@unlpam.edu.ar' => 10,
+            'gestion@unlpam.edu.ar' => 7,
             'revision.global@unlpam.edu.ar' => 11,
             'revision.unidad@unlpam.edu.ar' => 6,
             'consulta.global@unlpam.edu.ar' => 10,

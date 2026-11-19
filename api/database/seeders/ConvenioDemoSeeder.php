@@ -33,10 +33,10 @@ class ConvenioDemoSeeder extends Seeder
         $this->call(DatabaseSeeder::class);
 
         $unidadUno = UnidadAcademica::query()
-            ->where('sigla', 'UA-TEST-01')
+            ->where('sigla', 'FCH')
             ->firstOrFail();
         $unidadDos = UnidadAcademica::query()
-            ->where('sigla', 'UA-TEST-02')
+            ->where('sigla', 'FI')
             ->firstOrFail();
         $rolRevision = Rol::query()->where('nombre', 'Revisión')->firstOrFail();
         $rolConsulta = Rol::query()->where('nombre', 'Consulta')->firstOrFail();
@@ -120,26 +120,26 @@ class ConvenioDemoSeeder extends Seeder
             ->firstOrFail();
 
         $casos = [
-            ['UA-TEST-01', 'marco', null, 'Firmado', 400, false],
-            ['UA-TEST-01', 'marco', null, 'Firmado', 25, true],
-            ['UA-TEST-01', 'especifico', 1, 'Firmado', 300, false],
-            ['UA-TEST-01', 'especifico', 1, 'Aprobado', 365, false],
-            ['UA-TEST-01', 'especifico', 2, 'Revisión', null, false],
-            ['UA-TEST-01', 'marco', null, 'Borrador', null, false],
-            ['UA-TEST-01', 'especifico', 1, 'Borrador', null, false],
-            ['UA-TEST-01', 'especifico', 2, 'EnCorreccion', null, false],
-            ['UA-TEST-01', 'marco', null, 'Rescindido', 90, false],
-            ['UA-TEST-01', 'especifico', 2, 'Archivado', -60, false],
-            ['UA-TEST-01', 'marco', null, 'Rechazado', null, false],
-            ['UA-TEST-01', 'especifico', 1, 'Firmado', null, false],
-            ['UA-TEST-02', 'marco', null, 'Firmado', 200, false],
-            ['UA-TEST-02', 'especifico', 13, 'Firmado', 10, true],
-            ['UA-TEST-02', 'marco', null, 'Aprobado', 365, false],
-            ['UA-TEST-02', 'especifico', 13, 'Revisión', null, false],
-            ['UA-TEST-02', 'marco', null, 'Borrador', null, false],
-            ['UA-TEST-02', 'especifico', 13, 'Rescindido', 120, false],
-            ['UA-TEST-02', 'marco', null, 'Archivado', -30, false],
-            ['UA-TEST-02', 'especifico', 13, 'EnCorreccion', null, false],
+            ['FCH', 'marco', null, 'Firmado', 400, false],
+            ['FCH', 'marco', null, 'Firmado', 25, true],
+            ['FCH', 'especifico', 1, 'Firmado', 300, false],
+            ['FCH', 'especifico', 1, 'Aprobado', 365, false],
+            ['FCH', 'especifico', 2, 'Revisión', null, false],
+            ['FCH', 'marco', null, 'Borrador', null, false],
+            ['FCH', 'especifico', 1, 'Borrador', null, false],
+            ['FCH', 'especifico', 2, 'EnCorreccion', null, false],
+            ['FCH', 'marco', null, 'Rescindido', 90, false],
+            ['FCH', 'especifico', 2, 'Archivado', -60, false],
+            ['FCH', 'marco', null, 'Rechazado', null, false],
+            ['FCH', 'especifico', 1, 'Firmado', null, false],
+            ['FI', 'marco', null, 'Firmado', 200, false],
+            ['FI', 'especifico', 13, 'Firmado', 10, true],
+            ['FI', 'marco', null, 'Aprobado', 365, false],
+            ['FI', 'especifico', 13, 'Revisión', null, false],
+            ['FI', 'marco', null, 'Borrador', null, false],
+            ['FI', 'especifico', 13, 'Rescindido', 120, false],
+            ['FI', 'marco', null, 'Archivado', -30, false],
+            ['FI', 'especifico', 13, 'EnCorreccion', null, false],
         ];
 
         $marcosPorNumero = [];
@@ -148,7 +148,7 @@ class ConvenioDemoSeeder extends Seeder
         foreach ($casos as $indice => [$siglaUnidad, $clase, $marcoNumero, $estado, $diasVencimiento, $confidencialidad]) {
             $numero = $indice + 1;
             $numeroExpediente = sprintf('%03d', $numero);
-            $unidad = $siglaUnidad === 'UA-TEST-01' ? $unidadUno : $unidadDos;
+            $unidad = $siglaUnidad === 'FCH' ? $unidadUno : $unidadDos;
             $institucionExterna = $institucionesExternas[$indice % count($institucionesExternas)];
             $fechaVencimiento = $diasVencimiento === null
                 ? null
@@ -217,7 +217,7 @@ class ConvenioDemoSeeder extends Seeder
             $this->recrearHistorial(
                 $instrumento->id_instrumento,
                 $estado,
-                $siglaUnidad === 'UA-TEST-01' ? $gestion : $administracion,
+                $siglaUnidad === 'FCH' ? $gestion : $administracion,
                 $revisionGlobal,
                 $administracion,
                 $hoy

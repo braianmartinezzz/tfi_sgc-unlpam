@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\InstitucionFirmante;
+use App\Models\Rol;
 use App\Models\Usuario;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\InstitucionUnlpamSeeder;
@@ -17,56 +18,89 @@ class DatabaseSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_database_seeder_creates_repeatable_login_fixtures(): void
+    public function test_database_seeder_creates_repeatable_unlpam_initial_data(): void
     {
         $this->seed(DatabaseSeeder::class);
-        $unidadGestionId = DB::table('unidad_academica')
-            ->where('sigla', 'UA-TEST-01')
-            ->value('id_unidad_academica');
-        $unidadAdministracionId = DB::table('unidad_academica')
-            ->where('sigla', 'UA-TEST-02')
-            ->value('id_unidad_academica');
+        $usuariosIniciales = Usuario::query()
+            ->orderBy('mail')
+            ->pluck('id_usuario', 'mail')
+            ->all();
 
         $this->seed(DatabaseSeeder::class);
 
         $this->assertDatabaseCount('rol', 4);
         $this->assertDatabaseCount('institucion_firmante', 1);
-        $this->assertDatabaseCount('unidad_academica', 9);
-        $this->assertDatabaseCount('usuario', 2);
+        $this->assertDatabaseCount('unidad_academica', 7);
+        $this->assertDatabaseCount('usuario', 22);
+        $this->assertSame(
+            $usuariosIniciales,
+            Usuario::query()->orderBy('mail')->pluck('id_usuario', 'mail')->all()
+        );
 
-        $this->assertDatabaseHas('unidad_academica', [
-            'id_unidad_academica' => $unidadGestionId,
-            'sigla' => 'UA-TEST-01',
-        ]);
-        $this->assertDatabaseHas('unidad_academica', [
-            'id_unidad_academica' => $unidadAdministracionId,
-            'sigla' => 'UA-TEST-02',
-        ]);
-
-        $gestion = Usuario::query()
-            ->where('mail', 'gestion@unlpam.edu.ar')
+        $institucion = InstitucionFirmante::query()
+            ->where('es_propia', true)
             ->firstOrFail();
+        $facultades = [
+            'FA' => 'Facultad de Agronomía',
+            'FCS' => 'Facultad de Ciencias de la Salud',
+            'FCEyJ' => 'Facultad de Ciencias Económicas y Jurídicas',
+            'FCEyN' => 'Facultad de Ciencias Exactas y Naturales',
+            'FCH' => 'Facultad de Ciencias Humanas',
+            'FCV' => 'Facultad de Ciencias Veterinarias',
+            'FI' => 'Facultad de Ingeniería',
+        ];
+        $roles = [
+            'Gestión' => 'gestion',
+            'Consulta' => 'consulta',
+            'Revisión' => 'revision',
+        ];
+        $correosEsperados = ['admin@unlpam.edu.ar'];
+
+        foreach ($facultades as $sigla => $nombreFacultad) {
+            $unidad = DB::table('unidad_academica')->where('sigla', $sigla)->first();
+            $this->assertNotNull($unidad);
+            $this->assertSame($nombreFacultad, $unidad->nombre);
+            $this->assertSame($institucion->id_institucion, $unidad->id_institucion);
+
+            foreach ($roles as $nombreRol => $prefijoCorreo) {
+                $correo = $sigla === 'FI' && $nombreRol === 'Gestión'
+                    ? 'gestion@unlpam.edu.ar'
+                    : sprintf('%s.%s@unlpam.edu.ar', $prefijoCorreo, strtolower($sigla));
+                $correosEsperados[] = $correo;
+
+                $usuario = Usuario::query()->where('mail', $correo)->firstOrFail();
+                $this->assertSame($nombreRol, $usuario->rol->nombre);
+                $this->assertSame($sigla, $usuario->unidadAcademica->sigla);
+                $this->assertTrue($usuario->activo);
+                $this->assertFalse($usuario->alcance_global);
+                $this->assertTrue(Hash::check('password123', $usuario->password));
+            }
+
+            foreach (array_keys($roles) as $nombreRol) {
+                $this->assertSame(
+                    1,
+                    Usuario::query()
+                        ->where('id_unidad', $unidad->id_unidad_academica)
+                        ->whereHas('rol', fn ($query) => $query->where('nombre', $nombreRol))
+                        ->count()
+                );
+            }
+        }
+
         $administracion = Usuario::query()
             ->where('mail', 'admin@unlpam.edu.ar')
             ->firstOrFail();
-
-        $this->assertTrue(Hash::check('password123', $gestion->password));
-        $this->assertSame('Gestión', $gestion->rol->nombre);
         $this->assertSame('Administración', $administracion->rol->nombre);
-        $this->assertSame(
-            $gestion->unidadAcademica->id_institucion,
-            $administracion->unidadAcademica->id_institucion
-        );
-        $this->assertSame('UA-TEST-01', $gestion->unidadAcademica->sigla);
-        $this->assertSame('UA-TEST-02', $administracion->unidadAcademica->sigla);
-        $this->assertSame(
-            'Universidad Nacional de La Pampa',
-            $gestion->unidadAcademica->institucionFirmante->razon_social
-        );
+        $this->assertSame('FI', $administracion->unidadAcademica->sigla);
+        $this->assertTrue(Hash::check('password123', $administracion->password));
+
+        sort($correosEsperados);
+        $correosReales = Usuario::query()->orderBy('mail')->pluck('mail')->all();
+        $this->assertSame($correosEsperados, $correosReales);
+        $this->assertSame(1, Rol::query()->where('nombre', 'Administración')->count());
         $this->assertTrue(
             InstitucionFirmante::query()->where('es_propia', true)->sole()->es_propia
         );
-        $this->assertNull($gestion->unidadAcademica->institucionFirmante->tipo_institucion);
     }
 
     public function test_unidades_academicas_seeder_is_idempotent_and_preserves_unrelated_units(): void
