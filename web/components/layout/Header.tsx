@@ -22,7 +22,7 @@ export default function Header() {
   }
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 bg-topbar px-4 py-3 text-white sm:px-6">
+    <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 bg-topbar px-4 py-3 text-white sm:px-6">
       <p className="shrink-0 text-2xl font-bold tracking-tight text-white">
         UNLPam
       </p>

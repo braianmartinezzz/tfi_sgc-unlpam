@@ -582,14 +582,14 @@ export default function UsuarioEditForm({ id }: { id: string }) {
 
   return (
     <section aria-labelledby="usuario-edit-title" className="mx-auto w-full max-w-4xl space-y-5">
-      <div>
+      <div className="w-fit">
         <h1
           id="usuario-edit-title"
           className="font-condensed text-3xl font-bold tracking-tight sm:text-4xl"
         >
           Editar usuario
         </h1>
-        <div aria-hidden="true" className="mt-2 h-1 w-16 rounded-full bg-brand" />
+        <div aria-hidden="true" className="mt-2 h-1 w-full rounded-full bg-brand" />
       </div>
       {can("usuarios:write") ? (
         <UsuarioEditContent id={id} />

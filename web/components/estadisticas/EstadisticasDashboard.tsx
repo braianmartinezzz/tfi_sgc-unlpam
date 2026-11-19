@@ -238,7 +238,10 @@ export default function EstadisticasDashboard() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold sm:text-3xl">Estadísticas</h1>
+        <div className="w-fit">
+          <h1 className="text-3xl font-bold sm:text-4xl">Estadísticas</h1>
+          <div aria-hidden="true" className="mt-2 h-1 w-full rounded-full bg-brand" />
+        </div>
         <p className="mt-1 text-foreground/70">
           Visualización y análisis de los convenios gestionados en el sistema.
         </p>

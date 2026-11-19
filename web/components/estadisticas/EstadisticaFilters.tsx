@@ -1,6 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
+import { filterControlInteractionClassName } from "@/components/ui/filter-control-styles";
 import type { UnidadAcademica } from "@/types/unidad";
 
 export interface EstadisticaFilterDraft {
@@ -26,7 +27,7 @@ interface EstadisticaFiltersProps {
 }
 
 const controlClassName =
-  "mt-1 min-h-11 w-full rounded-md border border-ui-border bg-surface px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70";
+  `mt-1 min-h-11 w-full rounded-md border border-ui-border bg-surface px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 ${filterControlInteractionClassName}`;
 
 export default function EstadisticaFilters({
   draft,

@@ -53,7 +53,7 @@ export default function Sidebar() {
   );
 
   return (
-    <aside className="w-full shrink-0 bg-sidebar text-white md:min-h-full md:w-60">
+    <aside className="w-full shrink-0 bg-sidebar text-white md:h-full md:min-h-0 md:w-60">
       <button
         type="button"
         className="flex w-full items-center justify-between px-4 py-3 text-left font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white md:hidden"
