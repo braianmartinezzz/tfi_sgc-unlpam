@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             InstitucionUnlpamSeeder::class,
             UnidadesAcademicasUnlpamSeeder::class,
             UsuariosUnlpamSeeder::class,
+            ConvenioDemoSeeder::class
         ]);
     }
 }

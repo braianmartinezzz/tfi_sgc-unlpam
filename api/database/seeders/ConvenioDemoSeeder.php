@@ -35,8 +35,6 @@ class ConvenioDemoSeeder extends Seeder
             return;
         }
 
-        $this->call(DatabaseSeeder::class);
-
         $unidades = UnidadAcademica::query()
             ->whereIn('sigla', self::SIGLAS_UNIDADES)
             ->get()
