@@ -68,7 +68,13 @@ export default function InstitucionTable({
                 </td>
                 <td className="px-4 py-3">
                   {showEdit || canToggle ? (
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div
+                      className={
+                        canToggle && institucion.es_propia
+                          ? "flex w-max items-center gap-1"
+                          : "flex flex-wrap items-center gap-1"
+                      }
+                    >
                       {showEdit ? (
                         <button
                           type="button"
@@ -81,7 +87,7 @@ export default function InstitucionTable({
                         </button>
                       ) : null}
                       {canToggle ? (
-                        <div>
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             className={rowActionClassName}
@@ -100,7 +106,7 @@ export default function InstitucionTable({
                           {institucion.es_propia ? (
                             <p
                               id={`institucion-propia-reason-${institucion.id_institucion}`}
-                              className="max-w-64 text-xs text-foreground/80"
+                              className="max-w-64 break-words text-xs text-foreground/80"
                             >
                               La institución propia no se puede desactivar.
                             </p>

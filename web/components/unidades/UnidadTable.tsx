@@ -70,7 +70,13 @@ export default function UnidadTable({
                 </td>
                 <td className="px-4 py-3">
                   {canShowEdit || canShowToggle ? (
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div
+                      className={
+                        canShowToggle && toggleDisabledReason
+                          ? "flex w-max items-center gap-1"
+                          : "flex flex-wrap items-center gap-1"
+                      }
+                    >
                       {canShowEdit ? (
                         <button
                           type="button"
@@ -81,7 +87,7 @@ export default function UnidadTable({
                         </button>
                       ) : null}
                       {canShowToggle ? (
-                        <div>
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             className={rowActionClassName}
@@ -98,7 +104,7 @@ export default function UnidadTable({
                           {toggleDisabledReason ? (
                             <p
                               id={`unidad-toggle-reason-${unidad.id_unidad_academica}`}
-                              className="max-w-64 text-xs text-foreground/80"
+                              className="max-w-64 break-words text-xs text-foreground/80"
                             >
                               {toggleDisabledReason}
                             </p>
