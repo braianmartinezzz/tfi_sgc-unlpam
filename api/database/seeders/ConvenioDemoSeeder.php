@@ -18,10 +18,15 @@ use Illuminate\Support\Facades\Hash;
 /**
  * Carga convenios ficticios para demostración.
  *
+ * Usa las 7 unidades académicas reales de la UNLPam cargadas por
+ * UnidadesAcademicasUnlpamSeeder (FA, FCS, FCEyJ, FCEyN, FCH, FCV, FI).
+ *
  * Ejecutar con: php artisan db:seed --class=ConvenioDemoSeeder
  */
 class ConvenioDemoSeeder extends Seeder
 {
+    private const SIGLAS_UNIDADES = ['FA', 'FCS', 'FCEyJ', 'FCEyN', 'FCH', 'FCV', 'FI'];
+
     public function run(): void
     {
         if (app()->environment('production')) {
@@ -32,12 +37,19 @@ class ConvenioDemoSeeder extends Seeder
 
         $this->call(DatabaseSeeder::class);
 
-        $unidadUno = UnidadAcademica::query()
-            ->where('sigla', 'FCH')
-            ->firstOrFail();
-        $unidadDos = UnidadAcademica::query()
-            ->where('sigla', 'FI')
-            ->firstOrFail();
+        $unidades = UnidadAcademica::query()
+            ->whereIn('sigla', self::SIGLAS_UNIDADES)
+            ->get()
+            ->keyBy('sigla');
+
+        foreach (self::SIGLAS_UNIDADES as $sigla) {
+            if (! $unidades->has($sigla)) {
+                throw new \RuntimeException("Falta la unidad académica {$sigla}. Ejecutá UnidadesAcademicasUnlpamSeeder.");
+            }
+        }
+
+        $unidadUno = $unidades['FCH'];
+        $unidadDos = $unidades['FI'];
         $rolRevision = Rol::query()->where('nombre', 'Revisión')->firstOrFail();
         $rolConsulta = Rol::query()->where('nombre', 'Consulta')->firstOrFail();
 
@@ -112,34 +124,51 @@ class ConvenioDemoSeeder extends Seeder
         $revisionGlobal = Usuario::query()
             ->where('mail', 'revision.global@unlpam.edu.ar')
             ->firstOrFail();
-        $gestion = Usuario::query()
-            ->where('mail', 'gestion@unlpam.edu.ar')
-            ->firstOrFail();
         $administracion = Usuario::query()
             ->where('mail', 'admin@unlpam.edu.ar')
             ->firstOrFail();
 
+        // Usuario de Gestión de cada unidad (los crea UsuariosUnlpamSeeder).
+        $gestionPorUnidad = [];
+        foreach (self::SIGLAS_UNIDADES as $sigla) {
+            $correoGestion = $sigla === 'FI'
+                ? 'gestion@unlpam.edu.ar'
+                : sprintf('gestion.%s@unlpam.edu.ar', strtolower($sigla));
+
+            $gestionPorUnidad[$sigla] = Usuario::query()
+                ->where('mail', $correoGestion)
+                ->firstOrFail();
+        }
+
+        /*
+         * [unidad, clase, N° de marco (solo específicos), estado, días a vencimiento, confidencialidad]
+         *
+         * Cada específico pertenece a la misma unidad que su marco.
+         * Distribución por unidad:
+         *   FI: 1, 3, 4, 7, 12   | FCH: 2, 5, 8, 10  | FCEyJ: 13, 14, 16, 18, 20
+         *   FA: 6, 15            | FCV: 9, 19        | FCS: 11 | FCEyN: 17
+         */
         $casos = [
-            ['FCH', 'marco', null, 'Firmado', 400, false],
+            ['FI', 'marco', null, 'Firmado', 400, false],
             ['FCH', 'marco', null, 'Firmado', 25, true],
-            ['FCH', 'especifico', 1, 'Firmado', 300, false],
-            ['FCH', 'especifico', 1, 'Aprobado', 365, false],
+            ['FI', 'especifico', 1, 'Firmado', 300, false],
+            ['FI', 'especifico', 1, 'Aprobado', 365, false],
             ['FCH', 'especifico', 2, 'Revisión', null, false],
-            ['FCH', 'marco', null, 'Borrador', null, false],
-            ['FCH', 'especifico', 1, 'Borrador', null, false],
+            ['FA', 'marco', null, 'Borrador', null, false],
+            ['FI', 'especifico', 1, 'Borrador', null, false],
             ['FCH', 'especifico', 2, 'EnCorreccion', null, false],
-            ['FCH', 'marco', null, 'Rescindido', 90, false],
+            ['FCV', 'marco', null, 'Rescindido', 90, false],
             ['FCH', 'especifico', 2, 'Archivado', -60, false],
-            ['FCH', 'marco', null, 'Rechazado', null, false],
-            ['FCH', 'especifico', 1, 'Firmado', null, false],
-            ['FI', 'marco', null, 'Firmado', 200, false],
-            ['FI', 'especifico', 13, 'Firmado', 10, true],
-            ['FI', 'marco', null, 'Aprobado', 365, false],
-            ['FI', 'especifico', 13, 'Revisión', null, false],
-            ['FI', 'marco', null, 'Borrador', null, false],
-            ['FI', 'especifico', 13, 'Rescindido', 120, false],
-            ['FI', 'marco', null, 'Archivado', -30, false],
-            ['FI', 'especifico', 13, 'EnCorreccion', null, false],
+            ['FCS', 'marco', null, 'Rechazado', null, false],
+            ['FI', 'especifico', 1, 'Firmado', null, false],
+            ['FCEyJ', 'marco', null, 'Firmado', 200, false],
+            ['FCEyJ', 'especifico', 13, 'Firmado', 10, true],
+            ['FA', 'marco', null, 'Aprobado', 365, false],
+            ['FCEyJ', 'especifico', 13, 'Revisión', null, false],
+            ['FCEyN', 'marco', null, 'Borrador', null, false],
+            ['FCEyJ', 'especifico', 13, 'Rescindido', 120, false],
+            ['FCV', 'marco', null, 'Archivado', -30, false],
+            ['FCEyJ', 'especifico', 13, 'EnCorreccion', null, false],
         ];
 
         $marcosPorNumero = [];
@@ -148,7 +177,7 @@ class ConvenioDemoSeeder extends Seeder
         foreach ($casos as $indice => [$siglaUnidad, $clase, $marcoNumero, $estado, $diasVencimiento, $confidencialidad]) {
             $numero = $indice + 1;
             $numeroExpediente = sprintf('%03d', $numero);
-            $unidad = $siglaUnidad === 'FCH' ? $unidadUno : $unidadDos;
+            $unidad = $unidades[$siglaUnidad];
             $institucionExterna = $institucionesExternas[$indice % count($institucionesExternas)];
             $fechaVencimiento = $diasVencimiento === null
                 ? null
@@ -181,7 +210,7 @@ class ConvenioDemoSeeder extends Seeder
                 ['id_instrumento' => $instrumento->id_instrumento],
                 [
                     'tipo' => 'Colaboración',
-                    'alcance' => "Colaboración entre la unidad y {$institucionExterna->razon_social}.",
+                    'alcance' => "Colaboración entre {$unidad->nombre} y {$institucionExterna->razon_social}.",
                     'obligaciones' => 'Las partes designarán referentes y compartirán los avances acordados.',
                     'condiciones_recision' => 'Cualquiera de las partes podrá solicitar la rescisión con aviso previo.',
                     'marco_legal' => 'Conforme a la normativa institucional vigente.',
@@ -217,7 +246,7 @@ class ConvenioDemoSeeder extends Seeder
             $this->recrearHistorial(
                 $instrumento->id_instrumento,
                 $estado,
-                $siglaUnidad === 'FCH' ? $gestion : $administracion,
+                $gestionPorUnidad[$siglaUnidad],
                 $revisionGlobal,
                 $administracion,
                 $hoy
