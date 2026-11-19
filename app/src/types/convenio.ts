@@ -20,6 +20,9 @@ export type ConvenioLista = {
   especifico: { id_instrumento: number } | null;
 };
 
+/** Ficha de un convenio (GET /convenios/{id}); por ahora comparte la forma de la lista. */
+export type ConvenioDetalle = ConvenioLista;
+
 /** Respuesta paginada de Laravel (15 por página). */
 export type PaginaConvenios = {
   data: ConvenioLista[];

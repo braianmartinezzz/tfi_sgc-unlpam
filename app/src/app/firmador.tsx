@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
@@ -19,6 +19,7 @@ import SignatureCanvas, {
 } from 'react-native-signature-canvas';
 
 import { Card, EstadoVacio } from '@/components/panel/card';
+import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
 import { Txt } from '@/components/panel/txt';
 import { API_URL } from '@/constants/api';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
@@ -30,7 +31,10 @@ import type { PendienteFirmaCompleto } from '@/types/firma';
 export default function FirmadorScreen() {
   const tema = useSgcTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  // Si se llega desde la ficha de un convenio (/firmador?id=7) se abre directo sobre ese convenio.
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const idInicial = id && Number.isInteger(Number(id)) ? Number(id) : null;
+  const vinoDeFicha = idInicial !== null;
   const firmaRef = useRef<SignatureViewRef>(null);
 
   const [pendientes, setPendientes] = useState<PendienteFirmaCompleto[]>([]);
@@ -66,6 +70,9 @@ export default function FirmadorScreen() {
         const lista = await listarPendientesFirma();
         if (activo) {
           setPendientes(lista);
+          if (idInicial !== null) {
+            setSeleccionado(lista.find((item) => item.id_instrumento === idInicial) ?? null);
+          }
           setEstado('listo');
         }
       } catch (exception) {
@@ -79,13 +86,36 @@ export default function FirmadorScreen() {
     return () => {
       activo = false;
     };
-  }, []);
+  }, [idInicial]);
 
   const actualizar = async () => {
     setActualizando(true);
     await cargar(false);
     setActualizando(false);
   };
+
+  // Desde la lista se vuelve a la lista; desde la ficha, a la ficha.
+  const salirDeSeleccion = useCallback(() => {
+    if (vinoDeFicha) {
+      router.back();
+    } else {
+      setSeleccionado(null);
+      setTrazo(null);
+    }
+  }, [router, vinoDeFicha]);
+
+  // Botón atrás de Android: con un convenio abierto desde la lista, vuelve a la lista
+  // en vez de salir de todo el firmador.
+  useEffect(() => {
+    if (!seleccionado || vinoDeFicha) return;
+
+    const suscripcion = BackHandler.addEventListener('hardwareBackPress', () => {
+      salirDeSeleccion();
+      return true;
+    });
+
+    return () => suscripcion.remove();
+  }, [seleccionado, vinoDeFicha, salirDeSeleccion]);
 
   const seleccionar = (pendiente: PendienteFirmaCompleto) => {
     setSeleccionado(pendiente);
@@ -174,6 +204,7 @@ export default function FirmadorScreen() {
       setTrazo(null);
       setSeleccionado(null);
       await cargar(false);
+      if (vinoDeFicha) router.back();
     } catch (exception) {
       Alert.alert('No se pudo registrar la firma', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
     } finally {
@@ -183,23 +214,7 @@ export default function FirmadorScreen() {
 
   return (
     <View style={[styles.pantalla, { backgroundColor: tema.page }]}>
-      <View
-        style={[
-          styles.encabezado,
-          { backgroundColor: tema.topbar, paddingTop: insets.top + SgcSpacing.sm },
-        ]}>
-        <View style={styles.headerFila}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Volver"
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/dashboard'))}
-            hitSlop={8}
-            style={({ pressed }) => pressed && { opacity: 0.6 }}>
-            <Txt variante="subtitulo" color="onTopbar">‹ Volver</Txt>
-          </Pressable>
-          <Txt variante="subtitulo" color="onTopbar">Firmador de convenios</Txt>
-        </View>
-      </View>
+      <EncabezadoPantalla titulo="Firmador de convenios" />
 
       <ScrollView
         contentContainerStyle={styles.contenido}
@@ -258,8 +273,10 @@ export default function FirmadorScreen() {
 
         {seleccionado ? (
           <View style={styles.seccion}>
-            <Pressable accessibilityRole="button" onPress={() => setSeleccionado(null)} hitSlop={8}>
-              <Txt variante="detalle" negrita style={{ color: tema.brandText }}>‹ Volver a pendientes</Txt>
+            <Pressable accessibilityRole="button" onPress={salirDeSeleccion} hitSlop={8}>
+              <Txt variante="detalle" negrita style={{ color: tema.brandText }}>
+                {vinoDeFicha ? '‹ Volver al convenio' : '‹ Volver a pendientes'}
+              </Txt>
             </Pressable>
 
             <Card titulo={seleccionado.titulo} bordeSuperior={tema.brand}>
@@ -335,8 +352,6 @@ export default function FirmadorScreen() {
 
 const styles = StyleSheet.create({
   pantalla: { flex: 1 },
-  encabezado: { paddingHorizontal: SgcSpacing.md, paddingBottom: SgcSpacing.sm },
-  headerFila: { flexDirection: 'row', alignItems: 'center', gap: SgcSpacing.md },
   contenido: { padding: SgcSpacing.md, gap: SgcSpacing.md, paddingBottom: SgcSpacing.xl },
   centrado: { alignItems: 'center', gap: SgcSpacing.sm, paddingVertical: SgcSpacing.xl },
   lista: { gap: SgcSpacing.sm },

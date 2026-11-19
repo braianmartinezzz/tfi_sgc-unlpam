@@ -1,5 +1,10 @@
 import { apiRequest } from '@/services/api-client';
-import type { FiltrosConvenios, PaginaConvenios, UnidadAcademica } from '@/types/convenio';
+import type {
+  ConvenioDetalle,
+  FiltrosConvenios,
+  PaginaConvenios,
+  UnidadAcademica,
+} from '@/types/convenio';
 
 export async function listarConvenios(filtros: FiltrosConvenios = {}): Promise<PaginaConvenios> {
   const params = new URLSearchParams();
@@ -19,4 +24,13 @@ export async function listarConvenios(filtros: FiltrosConvenios = {}): Promise<P
 export async function listarUnidades(): Promise<UnidadAcademica[]> {
   const respuesta = await apiRequest<{ data: UnidadAcademica[] }>('/unidades-academicas');
   return respuesta.data;
+}
+
+/** Acepta tanto `{ data: {...} }` (API Resource) como el objeto directo. */
+export async function obtenerConvenio(idInstrumento: number): Promise<ConvenioDetalle> {
+  const respuesta = await apiRequest<ConvenioDetalle | { data: ConvenioDetalle }>(
+    `/convenios/${idInstrumento}`,
+  );
+
+  return 'data' in respuesta ? respuesta.data : respuesta;
 }

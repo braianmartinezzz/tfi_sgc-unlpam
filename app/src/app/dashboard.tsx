@@ -13,7 +13,7 @@ import { PendientesCard } from '@/components/panel/pendientes-card';
 import { ProfileMenu } from '@/components/panel/profile-menu';
 import { StatBox } from '@/components/panel/stat-box';
 import { Txt } from '@/components/panel/txt';
-import { Destinos } from '@/constants/navigation';
+import { Destinos, Disponible } from '@/constants/navigation';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { usePanel } from '@/hooks/use-panel';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
@@ -49,6 +49,10 @@ export default function PanelScreen() {
     setMenuAbierto(false);
     router.push(destino);
   };
+
+  /** Devuelve el handler solo si el destino existe; si no, la UI lo muestra como "Próximamente". */
+  const siDisponible = (disponible: boolean, destino: Href) =>
+    disponible ? () => irA(destino) : undefined;
 
   const salir = async () => {
     setMenuAbierto(false);
@@ -160,7 +164,7 @@ export default function PanelScreen() {
                     notificaciones={panel.notificaciones.items}
                     noLeidas={panel.notificaciones.no_leidas}
                     onAbrirConvenio={(id) => irA(Destinos.convenio(id))}
-                    onVerTodas={() => irA(Destinos.notificaciones())}
+                    onVerTodas={siDisponible(Disponible.notificaciones, Destinos.notificaciones())}
                   />
 
                   <MovimientosCard
@@ -171,10 +175,10 @@ export default function PanelScreen() {
                   <AccesosRapidos
                     sinConexion={sinConexion}
                     puedeFirmar={puedeFirmar}
-                    onEscanearQr={() => irA(Destinos.escanearQr())}
+                    onEscanearQr={siDisponible(Disponible.escanearQr, Destinos.escanearQr())}
                     onFirmador={() => irA(Destinos.firmador())}
                     onBusquedaAvanzada={() => irA(Destinos.busquedaAvanzada())}
-                    onAyuda={() => irA(Destinos.ayuda())}
+                    onAyuda={siDisponible(Disponible.ayuda, Destinos.ayuda())}
                   />
 
                   <PorEstadoCard porEstado={panel.resumen.por_estado} />
@@ -204,9 +208,9 @@ export default function PanelScreen() {
         visible={menuAbierto}
         usuario={me}
         onCerrar={() => setMenuAbierto(false)}
-        onMiPerfil={() => irA(Destinos.miPerfil())}
-        onRegistrarIdentidad={() => irA(Destinos.registrarIdentidad())}
-        onAyuda={() => irA(Destinos.ayuda())}
+        onMiPerfil={siDisponible(Disponible.miPerfil, Destinos.miPerfil())}
+        onRegistrarIdentidad={siDisponible(Disponible.registrarIdentidad, Destinos.registrarIdentidad())}
+        onAyuda={siDisponible(Disponible.ayuda, Destinos.ayuda())}
         onCerrarSesion={salir}
       />
     </View>

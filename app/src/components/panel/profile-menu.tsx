@@ -9,7 +9,8 @@ import type { UsuarioAutenticado } from '@/types/auth';
 type Opcion = {
   clave: string;
   texto: string;
-  onPress: () => void;
+  /** Sin handler la opción se muestra deshabilitada como "Próximamente". */
+  onPress?: () => void;
   peligrosa?: boolean;
 };
 
@@ -17,9 +18,9 @@ type ProfileMenuProps = {
   visible: boolean;
   usuario: UsuarioAutenticado | null;
   onCerrar: () => void;
-  onMiPerfil: () => void;
-  onRegistrarIdentidad: () => void;
-  onAyuda: () => void;
+  onMiPerfil?: () => void;
+  onRegistrarIdentidad?: () => void;
+  onAyuda?: () => void;
   onCerrarSesion: () => void;
 };
 
@@ -70,14 +71,22 @@ export function ProfileMenu({
             <Pressable
               key={opcion.clave}
               accessibilityRole="button"
+              accessibilityState={{ disabled: !opcion.onPress }}
+              disabled={!opcion.onPress}
               onPress={opcion.onPress}
               style={({ pressed }) => [
                 styles.opcion,
                 pressed && { backgroundColor: tema.rowAlternate },
+                !opcion.onPress && { opacity: 0.5 },
               ]}>
               <Txt negrita style={opcion.peligrosa ? { color: tema.danger } : undefined}>
                 {opcion.texto}
               </Txt>
+              {!opcion.onPress ? (
+                <Txt variante="etiqueta" color="textSecondary">
+                  Próximamente
+                </Txt>
+              ) : null}
             </Pressable>
           ))}
         </Pressable>

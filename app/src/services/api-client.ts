@@ -1,5 +1,7 @@
+import { router } from 'expo-router';
+
 import { API_URL } from '@/constants/api';
-import { getToken } from '@/lib/auth-storage';
+import { clearToken, getToken } from '@/lib/auth-storage';
 
 const TIMEOUT_MS = 15000;
 
@@ -19,6 +21,25 @@ export class NetworkError extends Error {
   constructor(message = 'No se pudo conectar con el servidor.') {
     super(message);
     this.name = 'NetworkError';
+  }
+}
+
+let cerrandoSesion = false;
+
+/** Token vencido o revocado: se limpia la sesión y se vuelve al login, una sola vez. */
+async function sesionExpirada(): Promise<void> {
+  if (cerrandoSesion) return;
+  cerrandoSesion = true;
+
+  try {
+    await clearToken();
+    router.replace('/');
+  } catch {
+    // Si el router todavía no está listo no hay a dónde redirigir; el error igual se propaga.
+  } finally {
+    setTimeout(() => {
+      cerrandoSesion = false;
+    }, 1000);
   }
 }
 
@@ -55,6 +76,9 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     } catch {
       // La respuesta no era JSON: se conserva el mensaje genérico.
     }
+
+    // Se ignora el 401 del propio cierre de sesión (el token ya no importa).
+    if (response.status === 401 && token && path !== '/logout') void sesionExpirada();
 
     throw new ApiError(response.status, message);
   }

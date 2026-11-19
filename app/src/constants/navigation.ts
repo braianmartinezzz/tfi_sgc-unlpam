@@ -1,9 +1,18 @@
 import type { Href } from 'expo-router';
 
 /**
- * Destinos del panel. Las pantallas que todavía no existen apuntan a /proximamente;
- * cuando se implementen, solo hay que cambiar la ruta acá.
+ * Qué destinos ya tienen pantalla. Los que están en `false` se muestran deshabilitados
+ * ("Próximamente") en vez de abrir una pantalla vacía. Al implementar uno: pasarlo a `true`
+ * y cambiar su ruta en `Destinos`.
  */
+export const Disponible = {
+  escanearQr: false,
+  notificaciones: false,
+  miPerfil: false,
+  registrarIdentidad: false,
+  ayuda: false,
+} as const;
+
 function proximamente(titulo: string, detalle?: string): Href {
   return {
     pathname: '/proximamente',
@@ -16,10 +25,18 @@ export const Destinos = {
     pathname: '/convenios',
     params: texto ? { buscar: texto } : {},
   }),
-  busquedaAvanzada: (): Href => '/convenios',
-  firmador: (): Href => '/firmador',
+  /** Abre la lista con el panel de filtros desplegado. */
+  busquedaAvanzada: (): Href => ({ pathname: '/convenios', params: { filtros: '1' } }),
+  /** Con `idInstrumento` abre el firmador directamente sobre ese convenio. */
+  firmador: (idInstrumento?: number): Href =>
+    idInstrumento === undefined
+      ? '/firmador'
+      : { pathname: '/firmador', params: { id: String(idInstrumento) } },
+  convenio: (idInstrumento: number): Href => ({
+    pathname: '/convenio/[id]',
+    params: { id: String(idInstrumento) },
+  }),
   escanearQr: (): Href => proximamente('Lector de código QR'),
-  convenio: (idInstrumento: number): Href => proximamente('Ficha del convenio', `Convenio #${idInstrumento}`),
   notificaciones: (): Href => proximamente('Notificaciones'),
   movimientos: (): Href => proximamente('Movimientos recientes'),
   miPerfil: (): Href => proximamente('Mi perfil'),

@@ -61,13 +61,17 @@ export default function ConveniosScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // Si se llega desde el buscador del panel, viene como /convenios?buscar=texto
-  const { buscar: buscarInicial } = useLocalSearchParams<{ buscar?: string }>();
+  // /convenios?filtros=1 abre la lista con el panel de filtros desplegado (búsqueda avanzada).
+  const { buscar: buscarInicial, filtros: filtrosInicial } = useLocalSearchParams<{
+    buscar?: string;
+    filtros?: string;
+  }>();
 
   const [texto, setTexto] = useState(buscarInicial ?? '');
   const [estadoSel, setEstadoSel] = useState<string | null>(null);
   const [subtipo, setSubtipo] = useState<Subtipo>('todos');
   const [facultadSel, setFacultadSel] = useState<number | null>(null);
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(filtrosInicial === '1');
 
   const [rol, setRol] = useState<string | null>(null);
   const [puedeFiltrarFacultad, setPuedeFiltrarFacultad] = useState(false);

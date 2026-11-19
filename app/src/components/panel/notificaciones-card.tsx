@@ -19,7 +19,8 @@ type NotificacionesCardProps = {
   notificaciones: NotificacionPanel[];
   noLeidas: number;
   onAbrirConvenio: (idInstrumento: number) => void;
-  onVerTodas: () => void;
+  /** Sin handler no se muestra el enlace "Ver todas". */
+  onVerTodas?: () => void;
 };
 
 export function NotificacionesCard({
@@ -97,7 +98,7 @@ export function NotificacionesCard({
         </Pressable>
       ))}
 
-      {notificaciones.length > MAXIMO_NOTIFICACIONES ? (
+      {onVerTodas && notificaciones.length > MAXIMO_NOTIFICACIONES ? (
         <Enlace texto="Ver todas las notificaciones" onPress={onVerTodas} />
       ) : null}
     </Card>

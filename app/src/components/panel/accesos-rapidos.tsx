@@ -11,16 +11,18 @@ type Acceso = {
   detalle: string;
   /** Requiere conexión: se deshabilita en modo offline. */
   requiereConexion: boolean;
-  onPress: () => void;
+  /** Sin handler el acceso se muestra deshabilitado como "Próximamente". */
+  onPress?: () => void;
 };
 
 type AccesosRapidosProps = {
   sinConexion: boolean;
   puedeFirmar: boolean;
-  onEscanearQr: () => void;
+  /** Los opcionales sin implementar se pasan como `undefined`. */
+  onEscanearQr?: () => void;
   onFirmador: () => void;
   onBusquedaAvanzada: () => void;
-  onAyuda: () => void;
+  onAyuda?: () => void;
 };
 
 export function AccesosRapidos({
@@ -72,7 +74,8 @@ export function AccesosRapidos({
     <Card titulo="Accesos rápidos">
       <View style={styles.grilla}>
         {accesos.map((acceso) => {
-          const deshabilitado = sinConexion && acceso.requiereConexion;
+          const proximamente = !acceso.onPress;
+          const deshabilitado = proximamente || (sinConexion && acceso.requiereConexion);
 
           return (
             <Pressable
@@ -89,7 +92,7 @@ export function AccesosRapidos({
               ]}>
               <Txt negrita>{acceso.titulo}</Txt>
               <Txt variante="detalle" color="textSecondary">
-                {acceso.detalle}
+                {proximamente ? 'Próximamente' : acceso.detalle}
               </Txt>
             </Pressable>
           );
