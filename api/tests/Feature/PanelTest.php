@@ -12,6 +12,7 @@ use App\Models\UnidadAcademica;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -140,6 +141,31 @@ class PanelTest extends TestCase
         $tipos = collect($response->json('data.alertas'))->pluck('tipo')->all();
         $this->assertContains('FIRMA_DEMORADA', $tipos);
         $this->assertContains('PREAVISO', $tipos);
+    }
+
+    public function test_pending_signatures_are_the_ones_assigned_to_the_persona_linked_to_the_user(): void
+    {
+        $ctx = $this->createScenario();
+        $propio = $this->createConvenio($ctx['unitA'], 'Para firmar por mí', 'Aprobado');
+        $ajeno = $this->createConvenio($ctx['unitA'], 'Aprobado sin asignar', 'Aprobado');
+
+        $yo = DB::table('persona')->insertGetId(['nombre' => 'Decano', 'apellido' => 'Demo', 'dni' => '30000001']);
+        $otro = DB::table('persona')->insertGetId(['nombre' => 'Rector', 'apellido' => 'Demo', 'dni' => '30000002']);
+
+        DB::table('firma')->insert([
+            ['id_instrumento' => $propio->id_instrumento, 'id_persona' => $yo, 'fecha_hora_firma' => null],
+            ['id_instrumento' => $propio->id_instrumento, 'id_persona' => $otro, 'fecha_hora_firma' => null],
+            ['id_instrumento' => $ajeno->id_instrumento, 'id_persona' => $otro, 'fecha_hora_firma' => null],
+        ]);
+
+        $ctx['gestion']->update(['id_persona' => $yo]);
+        $this->authenticate($ctx['gestion']);
+
+        $this->getJson('/api/panel')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.pendientes_firma')
+            ->assertJsonPath('data.pendientes_firma.0.titulo', 'Para firmar por mí')
+            ->assertJsonPath('data.pendientes_firma.0.firmantes', ['Rector Demo', 'Decano Demo']);
     }
 
     public function test_returns_only_own_notifications_newest_first(): void

@@ -37,7 +37,20 @@
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "La aplicación usa tu ubicación para registrar la ubicación de las firmas de convenios."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "La aplicación usa Face ID para confirmar tu identidad antes de firmar un convenio."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

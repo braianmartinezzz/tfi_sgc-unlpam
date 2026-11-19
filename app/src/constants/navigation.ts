@@ -17,7 +17,7 @@ export const Destinos = {
     params: texto ? { buscar: texto } : {},
   }),
   busquedaAvanzada: (): Href => '/convenios',
-  firmador: (): Href => proximamente('Firmador de convenios'),
+  firmador: (): Href => '/firmador',
   escanearQr: (): Href => proximamente('Lector de código QR'),
   convenio: (idInstrumento: number): Href => proximamente('Ficha del convenio', `Convenio #${idInstrumento}`),
   notificaciones: (): Href => proximamente('Notificaciones'),

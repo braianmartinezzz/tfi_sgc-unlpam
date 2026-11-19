@@ -25,6 +25,7 @@ class Usuario extends Authenticatable
         'id_rol',
         'id_unidad',
         'alcance_global',
+        'id_persona',
     ];
 
     protected $hidden = [
@@ -48,6 +49,12 @@ class Usuario extends Authenticatable
             'id_unidad',
             'id_unidad_academica'
         );
+    }
+
+    /** Persona firmante vinculada a este usuario (Rector/a, Decano/a, representantes). */
+    public function persona(): BelongsTo
+    {
+        return $this->belongsTo(Persona::class, 'id_persona', 'id_persona');
     }
 
     public function versiones(): HasMany

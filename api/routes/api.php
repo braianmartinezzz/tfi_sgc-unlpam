@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\ArchivarConvenioController;
 use App\Http\Controllers\Api\RechazarConvenioController;
 use App\Http\Controllers\Api\AprobarConvenioController;
 use App\Http\Controllers\Api\PanelController;
+use App\Http\Controllers\Api\FirmaController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -149,6 +150,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/convenios/{id}/aprobar', [AprobarConvenioController::class, 'aprobar'])
         ->whereNumber('id');
+
+    Route::get('/firmas/pendientes', [FirmaController::class, 'pendientes']);
+    Route::get('/firmas/{id}/documento', [FirmaController::class, 'documento'])->whereNumber('id');
+    Route::post('/convenios/{id}/firmar', [FirmaController::class, 'firmar'])->whereNumber('id');
+    Route::get('/convenios/{id}/firmas', [FirmaController::class, 'index'])->whereNumber('id');
+    Route::put('/convenios/{id}/firmantes', [FirmaController::class, 'definirFirmantes'])->whereNumber('id');
+    Route::get('/convenios/{id}/firmas/{idPersona}/trazo', [FirmaController::class, 'trazo'])
+        ->whereNumber(['id', 'idPersona']);
 
     Route::get('/panel', [PanelController::class, 'index']);
 });

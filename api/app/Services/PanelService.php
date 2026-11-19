@@ -195,6 +195,12 @@ class PanelService
             return [];
         }
 
+        // Si el usuario representa a una persona firmante, "mis pendientes" son los convenios
+        // que él mismo tiene que firmar (los del firmador), no todos los de su unidad.
+        if ($usuario->id_persona !== null) {
+            return $this->pendientesAsignados($usuario);
+        }
+
         $aprobados = $visibles()
             ->where('estado', 'Aprobado')
             ->with(['convenio.unidadAcademica:id_unidad_academica,sigla,nombre', 'convenio.institucionesFirmantes'])
@@ -239,6 +245,25 @@ class PanelService
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Convenios aprobados que la persona vinculada al usuario todavía tiene que firmar.
+     */
+    private function pendientesAsignados(Usuario $usuario): array
+    {
+        return array_map(fn (array $pendiente) => [
+            'id_instrumento' => $pendiente['id_instrumento'],
+            'titulo' => $pendiente['titulo'],
+            'unidad_academica' => $pendiente['unidad_academica'],
+            'firmantes' => array_map(
+                fn (array $firmante) => trim($firmante['nombre'].' '.$firmante['apellido']),
+                $pendiente['firmantes']
+            ),
+            'aprobado_el' => $pendiente['aprobado_el'],
+            'horas_pendiente' => $pendiente['horas_pendiente'],
+            'demorado' => $pendiente['demorado'],
+        ], app(FirmaService::class)->pendientes($usuario));
     }
 
     private function notificaciones(Usuario $usuario): array

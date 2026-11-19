@@ -269,6 +269,69 @@ class UsuarioTest extends TestCase
             ->assertJsonValidationErrors(['alcance_global']);
     }
 
+    public function test_links_a_usuario_with_a_persona_and_rejects_reusing_the_persona(): void
+    {
+        $ctx = $this->authenticate();
+        $personaId = DB::table('persona')->insertGetId([
+            'nombre' => 'Rita',
+            'apellido' => 'Rectora',
+            'dni' => '20123456',
+        ]);
+
+        $this->postJson('/api/usuarios', [
+            'mail' => 'rectora@example.com',
+            'nombre' => 'Rita Rectora',
+            'password' => 'clave-segura-1',
+            'id_rol' => $ctx['rol'],
+            'id_unidad' => $ctx['unidad'],
+            'id_persona' => $personaId,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.id_persona', $personaId)
+            ->assertJsonPath('data.persona.apellido', 'Rectora');
+
+        $this->postJson('/api/usuarios', [
+            'mail' => 'otra@example.com',
+            'nombre' => 'Otra persona',
+            'password' => 'clave-segura-1',
+            'id_rol' => $ctx['rol'],
+            'id_unidad' => $ctx['unidad'],
+            'id_persona' => $personaId,
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['id_persona']);
+
+        $this->postJson('/api/usuarios', [
+            'mail' => 'inexistente@example.com',
+            'nombre' => 'Persona inexistente',
+            'password' => 'clave-segura-1',
+            'id_rol' => $ctx['rol'],
+            'id_unidad' => $ctx['unidad'],
+            'id_persona' => 99999,
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['id_persona']);
+    }
+
+    public function test_updates_and_clears_the_persona_of_an_existing_usuario(): void
+    {
+        $ctx = $this->authenticate();
+        $usuario = $this->crearUsuario($ctx['rol'], $ctx['unidad'], ['mail' => 'vinculo@example.com']);
+        $personaId = DB::table('persona')->insertGetId([
+            'nombre' => 'Dario',
+            'apellido' => 'Decano',
+            'dni' => '20654321',
+        ]);
+
+        $this->putJson('/api/usuarios/'.$usuario->id_usuario, ['id_persona' => $personaId])
+            ->assertOk()
+            ->assertJsonPath('data.id_persona', $personaId);
+
+        $this->putJson('/api/usuarios/'.$usuario->id_usuario, ['id_persona' => null])
+            ->assertOk()
+            ->assertJsonPath('data.id_persona', null);
+    }
+
     private function crearUsuario(int $rolId, int $unidadId, array $atributos = []): Usuario
     {
         static $contador = 0;
