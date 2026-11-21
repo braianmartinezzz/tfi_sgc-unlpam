@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@layer base {
+  a[href]:not([aria-disabled="true"]),
+  button:not(:disabled):not([aria-disabled="true"]),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="image"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  input[type="color"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  select:not(:disabled):not([aria-disabled="true"]),
+  summary:not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --surface: #ffffff;
+  --brand-text: #C52D34;
+  --brand-on-brand: #ffffff;
+  --topbar: #25262c;
+  --sidebar: #354052;
+  --page: #f1f0f5;
+  --row-alternate: #eceef4;
+  --ui-border: #d3d5de;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --background: #111217;
+  --foreground: #ededed;
+  --surface: #1c1d22;
+  --brand-text: #FF8A8A;
+  --brand-on-brand: #ffffff;
+  --topbar: #1c1d22;
+  --sidebar: #252d3b;
+  --page: #17181e;
+  --row-alternate: #24262e;
+  --ui-border: #454751;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand: #D13B3B;
+  --color-brand-hover: #B52F35;
+  --color-brand-text: var(--brand-text);
+  --color-brand-on-brand: var(--brand-on-brand);
+  --color-surface: var(--surface);
+  --color-topbar: var(--topbar);
+  --color-sidebar: var(--sidebar);
+  --color-page: var(--page);
+  --color-table-head: var(--color-brand);
+  --color-row-alternate: var(--row-alternate);
+  --color-ui-border: var(--ui-border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-condensed: var(--font-roboto-condensed);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-roboto-condensed), Arial, Helvetica, sans-serif;
+}
+
+.theme-toggle-sun {
+  display: block;
+}
+
+.theme-toggle-moon,
+.theme-toggle-label-light {
+  display: none;
+}
+
+[data-theme="dark"] .theme-toggle-sun,
+[data-theme="dark"] .theme-toggle-label-dark {
+  display: none;
+}
+
+[data-theme="dark"] .theme-toggle-moon {
+  display: block;
+}
+
+[data-theme="dark"] .theme-toggle-label-light {
+  display: inline;
+}
