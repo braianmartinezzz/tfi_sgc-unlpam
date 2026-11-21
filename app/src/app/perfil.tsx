@@ -82,6 +82,24 @@ export default function PerfilScreen() {
             </Card>
           ) : null}
 
+          <Card titulo="Mi identidad">
+            <Txt variante="detalle" color="textSecondary">
+              Registrá tu firma, tu reconocimiento facial y tu huella digital en este dispositivo.
+            </Txt>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/identidad')}
+              style={({ pressed }) => [
+                styles.opcion,
+                { borderColor: tema.brand },
+                pressed && { opacity: 0.8 },
+              ]}>
+              <Txt negrita style={{ color: tema.brandText }}>
+                Registrar mi identidad
+              </Txt>
+            </Pressable>
+          </Card>
+
           <Card titulo="Apariencia">
             <View style={styles.opciones}>
               <Opcion

@@ -9,7 +9,7 @@ export const Disponible = {
   escanearQr: false,
   notificaciones: true,
   miPerfil: true,
-  registrarIdentidad: false,
+  registrarIdentidad: true,
   ayuda: true,
 } as const;
 
@@ -40,6 +40,6 @@ export const Destinos = {
   notificaciones: (): Href => '/notificaciones',
   movimientos: (): Href => proximamente('Movimientos recientes'),
   miPerfil: (): Href => '/perfil',
-  registrarIdentidad: (): Href => proximamente('Registrar mi identidad'),
+  registrarIdentidad: (): Href => '/identidad',
   ayuda: (): Href => '/ayuda',
 } as const;
