@@ -12,6 +12,7 @@ use App\Models\UnidadAcademica;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -120,31 +121,140 @@ class PanelTest extends TestCase
             ->assertJsonPath('data.ultimos_movimientos.0.titulo', 'Convenio 12');
     }
 
-    public function test_pending_signatures_are_ordered_from_oldest_and_flag_delayed_ones(): void
+    public function test_pending_signatures_follow_individual_assignments_and_firmador_order(): void
     {
         $ctx = $this->createScenario();
+        $persona = $this->vincularPersona($ctx['gestion']);
         $reciente = $this->createConvenio($ctx['unitA'], 'Aprobado reciente', 'Aprobado');
         $viejo = $this->createConvenio($ctx['unitA'], 'Aprobado viejo', 'Aprobado');
         $otraUnidad = $this->createConvenio($ctx['unitB'], 'Aprobado de otra unidad', 'Aprobado');
+        $base = Convenio::query()
+            ->whereHas('instrumento', fn ($query) => $query->where('titulo', 'Convenio Aprobado'))
+            ->firstOrFail();
 
         $this->createMovimiento($reciente, 'Revisión', 'Aprobado', now()->subHours(5)->toDateTimeString(), $ctx['gestion']);
         $this->createMovimiento($viejo, 'Revisión', 'Aprobado', now()->subHours(100)->toDateTimeString(), $ctx['gestion']);
         $this->createMovimiento($otraUnidad, 'Revisión', 'Aprobado', now()->subHours(200)->toDateTimeString(), $ctx['gestion']);
+        foreach ([$base, $reciente, $viejo, $otraUnidad] as $convenio) {
+            $this->asignarFirmaPendiente($convenio, $persona);
+        }
 
         $this->authenticate($ctx['gestion']);
-
         $response = $this->getJson('/api/panel')->assertOk();
         $titulos = collect($response->json('data.pendientes_firma'))->pluck('titulo')->all();
 
-        // El aprobado base no tiene historial y debe quedar al final; la otra unidad no es visible.
-        $this->assertSame(['Aprobado viejo', 'Aprobado reciente', 'Convenio Aprobado'], $titulos);
+        $this->assertSame([
+            'Aprobado reciente',
+            'Aprobado viejo',
+            'Aprobado de otra unidad',
+            'Convenio Aprobado',
+        ], $titulos);
         $response
-            ->assertJsonPath('data.pendientes_firma.0.demorado', true)
-            ->assertJsonPath('data.pendientes_firma.1.demorado', false);
+            ->assertJsonPath('data.pendientes_firma.0.demorado', false)
+            ->assertJsonPath('data.pendientes_firma.1.demorado', true);
+
+        $firmador = $this->getJson('/api/firmas/pendientes')->assertOk();
+        $this->assertSame(
+            collect($firmador->json('data'))->pluck('id_instrumento')->all(),
+            collect($response->json('data.pendientes_firma'))->pluck('id_instrumento')->all()
+        );
 
         $tipos = collect($response->json('data.alertas'))->pluck('tipo')->all();
         $this->assertContains('FIRMA_DEMORADA', $tipos);
         $this->assertContains('PREAVISO', $tipos);
+    }
+
+    public function test_consulta_with_persona_sees_its_two_pending_signatures_in_panel(): void
+    {
+        $ctx = $this->createScenario();
+        $persona = $this->vincularPersona($ctx['consulta']);
+        $convenios = [
+            $this->createConvenio($ctx['unitA'], 'Firma individual A', 'Aprobado'),
+            $this->createConvenio($ctx['unitB'], 'Firma individual B', 'Aprobado'),
+        ];
+
+        foreach ($convenios as $convenio) {
+            $this->asignarFirmaPendiente($convenio, $persona);
+        }
+
+        $this->authenticate($ctx['consulta']);
+        $panel = $this->getJson('/api/panel')->assertOk()->assertJsonCount(2, 'data.pendientes_firma');
+        $firmador = $this->getJson('/api/firmas/pendientes')->assertOk()->assertJsonCount(2, 'data');
+
+        $this->assertSame(
+            collect($firmador->json('data'))->pluck('id_instrumento')->all(),
+            collect($panel->json('data.pendientes_firma'))->pluck('id_instrumento')->all()
+        );
+        $panel->assertJsonPath('data.pendientes_firma.0.firmantes.0', 'Persona Firmante');
+
+        // El alcance de Consulta para los resúmenes generales sigue limitado a su unidad y estado.
+        $panel->assertJsonMissingPath('data.resumen.por_estado.Borrador');
+        $panel->assertJsonPath('data.resumen.en_tramite', 0);
+    }
+
+    public function test_linked_user_without_signature_assignments_gets_an_empty_list(): void
+    {
+        $ctx = $this->createScenario();
+        $this->vincularPersona($ctx['consulta']);
+        $this->authenticate($ctx['consulta']);
+
+        $this->getJson('/api/panel')
+            ->assertOk()
+            ->assertJsonPath('data.pendientes_firma', []);
+    }
+
+    public function test_user_without_linked_persona_gets_no_personal_pending_signatures(): void
+    {
+        $ctx = $this->createScenario();
+        $personaAjena = $this->vincularPersona($ctx['gestion']);
+        $convenio = Convenio::query()
+            ->whereHas('instrumento', fn ($query) => $query->where('titulo', 'Convenio Aprobado'))
+            ->firstOrFail();
+        $this->asignarFirmaPendiente($convenio, $personaAjena);
+
+        $this->authenticate($ctx['consulta']);
+        $this->getJson('/api/panel')
+            ->assertOk()
+            ->assertJsonPath('data.pendientes_firma', []);
+        $this->getJson('/api/firmas/pendientes')
+            ->assertOk()
+            ->assertJsonPath('data', []);
+    }
+
+    public function test_signed_assignments_are_not_returned_as_pending(): void
+    {
+        $ctx = $this->createScenario();
+        $persona = $this->vincularPersona($ctx['consulta']);
+        $pendiente = $this->createConvenio($ctx['unitA'], 'Firma aun pendiente', 'Aprobado');
+        $firmado = $this->createConvenio($ctx['unitA'], 'Firma ya registrada', 'Aprobado');
+        $this->asignarFirmaPendiente($pendiente, $persona);
+        DB::table('firma')->insert([
+            'id_instrumento' => $firmado->id_instrumento,
+            'id_persona' => $persona,
+            'fecha_hora_firma' => now(),
+        ]);
+
+        $this->authenticate($ctx['consulta']);
+        $panel = $this->getJson('/api/panel')->assertOk()->assertJsonCount(1, 'data.pendientes_firma');
+        $panel->assertJsonPath('data.pendientes_firma.0.titulo', 'Firma aun pendiente');
+        $this->getJson('/api/firmas/pendientes')->assertOk()->assertJsonCount(1, 'data');
+    }
+
+    public function test_revision_and_administracion_users_with_persona_also_see_their_pending_assignments(): void
+    {
+        foreach (["Revisi\u{00F3}n", "Administraci\u{00F3}n"] as $rol) {
+            $ctx = $this->createScenario();
+            $usuario = $this->createUser($rol, $ctx['unitA']->id_unidad_academica);
+            $persona = $this->vincularPersona($usuario);
+            $convenio = $this->createConvenio($ctx['unitB'], 'Pendiente '.$rol, 'Aprobado');
+            $this->asignarFirmaPendiente($convenio, $persona);
+            $this->authenticate($usuario);
+
+            $this->getJson('/api/panel')
+                ->assertOk()
+                ->assertJsonCount(1, 'data.pendientes_firma')
+                ->assertJsonPath('data.pendientes_firma.0.id_instrumento', $convenio->id_instrumento);
+        }
     }
 
     public function test_returns_only_own_notifications_newest_first(): void
@@ -250,6 +360,31 @@ class PanelTest extends TestCase
             'leida' => $leida,
             'id_instrumento' => $convenio->id_instrumento,
             'id_usuario' => $usuario->id_usuario,
+        ]);
+    }
+
+    private function vincularPersona(Usuario $usuario): int
+    {
+        $idPersona = DB::table('persona')->insertGetId([
+            'nombre' => 'Persona',
+            'apellido' => 'Firmante',
+            'dni' => (string) (40000000 + $this->number++),
+        ]);
+
+        $usuario->id_persona = $idPersona;
+        $usuario->save();
+
+        return $idPersona;
+    }
+
+    private function asignarFirmaPendiente(Convenio $convenio, int $idPersona): void
+    {
+        DB::table('firma')->insert([
+            'id_instrumento' => $convenio->id_instrumento,
+            'id_persona' => $idPersona,
+            'fecha_hora_firma' => null,
+            'latitud' => null,
+            'longitud' => null,
         ]);
     }
 

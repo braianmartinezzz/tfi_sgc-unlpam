@@ -15,19 +15,16 @@ class PanelService
 {
     public const MOVIMIENTOS_MAX = 10;
 
-    public const PENDIENTES_MAX = 10;
-
     public const NOTIFICACIONES_MAX = 10;
 
     public const ALERTAS_MAX = 5;
 
-    /** Horas sin firmar a partir de las cuales un convenio aprobado se considera demorado. */
-    public const HORAS_FIRMA_DEMORADA = 72;
-
     private const ESTADOS_EN_TRAMITE = ['Borrador', 'EnCorreccion', 'Revisión', 'Aprobado'];
 
-    public function __construct(private ConvenioService $convenios)
-    {
+    public function __construct(
+        private ConvenioService $convenios,
+        private FirmaService $firmas
+    ) {
     }
 
     /**
@@ -60,7 +57,7 @@ class PanelService
             ->sortBy('vencimiento')
             ->values();
 
-        $pendientes = $this->pendientesDeFirma($usuario, $visibles, $hoy);
+        $pendientes = $this->pendientesDeFirma($usuario);
 
         return [
             'resumen' => [
@@ -171,61 +168,25 @@ class PanelService
     }
 
     /**
-     * Convenios aprobados a la espera de firma, del más antiguo al más reciente.
-     * Solo para quienes pueden registrar la firma (Gestión de la unidad y Administración).
+     * Asignaciones individuales del usuario, con el formato resumido que consume el panel.
+     * Los criterios de inclusión y orden son los mismos que en el firmador.
      */
-    private function pendientesDeFirma(Usuario $usuario, callable $visibles, Carbon $hoy): array
+    private function pendientesDeFirma(Usuario $usuario): array
     {
-        if (! in_array($usuario->rol?->nombre, ['Gestión', 'Administración'], true)) {
-            return [];
-        }
-
-        $aprobados = $visibles()
-            ->where('estado', 'Aprobado')
-            ->with(['convenio.unidadAcademica:id_unidad_academica,sigla,nombre', 'convenio.institucionesFirmantes'])
-            ->get();
-
-        $aprobadoEl = HistorialEstado::query()
-            ->where('estado_nuevo', 'Aprobado')
-            ->whereIn('id_instrumento', $aprobados->pluck('id_instrumento'))
-            ->selectRaw('id_instrumento, MAX(fecha_hora) as aprobado_el')
-            ->groupBy('id_instrumento')
-            ->pluck('aprobado_el', 'id_instrumento');
-
-        return $aprobados
-            ->map(function (Instrumento $instrumento) use ($aprobadoEl) {
-                $fecha = $aprobadoEl->has($instrumento->id_instrumento)
-                    ? Carbon::parse($aprobadoEl[$instrumento->id_instrumento])
-                    : null;
-
-                return ['instrumento' => $instrumento, 'aprobado_el' => $fecha];
-            })
-            ->sortBy([
-                fn ($a, $b) => ($a['aprobado_el']?->timestamp ?? PHP_INT_MAX)
-                    <=> ($b['aprobado_el']?->timestamp ?? PHP_INT_MAX),
-                fn ($a, $b) => $a['instrumento']->id_instrumento <=> $b['instrumento']->id_instrumento,
+        return collect($this->firmas->pendientes($usuario))
+            ->map(fn (array $pendiente) => [
+                'id_instrumento' => $pendiente['id_instrumento'],
+                'titulo' => $pendiente['titulo'],
+                'unidad_academica' => $pendiente['unidad_academica'],
+                'firmantes' => collect($pendiente['firmantes'])
+                    ->map(fn (array $firmante) => trim($firmante['nombre'].' '.$firmante['apellido']))
+                    ->all(),
+                'aprobado_el' => $pendiente['aprobado_el'],
+                'horas_pendiente' => $pendiente['horas_pendiente'],
+                'demorado' => $pendiente['demorado'],
             ])
-            ->take(self::PENDIENTES_MAX)
-            ->map(function (array $fila) {
-                /** @var Instrumento $instrumento */
-                $instrumento = $fila['instrumento'];
-                $horas = $fila['aprobado_el'] ? (int) $fila['aprobado_el']->diffInHours(now()) : null;
-
-                return [
-                    'id_instrumento' => $instrumento->id_instrumento,
-                    'titulo' => $instrumento->titulo,
-                    'unidad_academica' => $instrumento->convenio?->unidadAcademica?->sigla,
-                    'firmantes' => $instrumento->convenio?->institucionesFirmantes
-                        ->pluck('razon_social')->values()->all() ?? [],
-                    'aprobado_el' => $fila['aprobado_el']?->toIso8601String(),
-                    'horas_pendiente' => $horas,
-                    'demorado' => $horas !== null && $horas >= self::HORAS_FIRMA_DEMORADA,
-                ];
-            })
-            ->values()
             ->all();
     }
-
     private function notificaciones(Usuario $usuario): array
     {
         $propias = fn (): Builder => Notificacion::query()->where('id_usuario', $usuario->id_usuario);
