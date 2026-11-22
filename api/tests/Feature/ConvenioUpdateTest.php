@@ -87,6 +87,59 @@ class ConvenioUpdateTest extends TestCase
         $this->assertDatabaseCount('historial_estado', 0);
     }
 
+    public function test_it_updates_other_fields_without_revalidating_unchanged_institutions_or_losing_signature_evidence(): void
+    {
+        $context = $this->authenticate();
+        $convenio = $this->createConvenio($context, true);
+        $idPersona = $this->addInactiveSignerWithEvidence($convenio, $context['institucion']);
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Título actualizado sin tocar las instituciones',
+            'instituciones_ids' => [$context['institucion']],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'titulo' => 'Título actualizado sin tocar las instituciones',
+        ]);
+        $this->assertDatabaseHas('convenio_institucion', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'id_institucion' => $context['institucion'],
+        ]);
+        $this->assertSignatureEvidencePreserved($convenio->id_instrumento, $idPersona);
+    }
+
+    public function test_it_rejects_institution_changes_that_orphan_an_inactive_assigned_signer_without_losing_evidence(): void
+    {
+        $context = $this->authenticate();
+        $convenio = $this->createConvenio($context, true);
+        $idPersona = $this->addInactiveSignerWithEvidence($convenio, $context['institucion']);
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Este cambio debe revertirse',
+            'instituciones_ids' => [$context['otraInstitucion']],
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath(
+                'message',
+                'No se pueden quitar instituciones que justifican firmantes individuales habilitados.'
+            );
+
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'titulo' => 'Convenio de prueba',
+        ]);
+        $this->assertDatabaseHas('convenio_institucion', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'id_institucion' => $context['institucion'],
+        ]);
+        $this->assertDatabaseMissing('convenio_institucion', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'id_institucion' => $context['otraInstitucion'],
+        ]);
+        $this->assertSignatureEvidencePreserved($convenio->id_instrumento, $idPersona);
+    }
+
     public function test_it_reassigns_an_especifico_and_preserves_or_clears_omitted_and_nullable_fields(): void
     {
         $context = $this->authenticate();
@@ -402,6 +455,48 @@ class ConvenioUpdateTest extends TestCase
                 'id_institucion' => $context['otraInstitucion'],
             ]);
         }
+    }
+
+    private function addInactiveSignerWithEvidence(Convenio $convenio, int $idInstitucion): int
+    {
+        $idPersona = DB::table('persona')->insertGetId([
+            'nombre' => 'Representante',
+            'apellido' => 'Desactivado',
+            'dni' => '30999111',
+            'cuil' => '20309991119',
+        ]);
+
+        DB::table('representante')->insert([
+            'id_persona' => $idPersona,
+            'cargo' => 'Representante legal',
+            'id_institucion' => $idInstitucion,
+            'activo' => false,
+        ]);
+
+        DB::table('firma')->insert([
+            'id_instrumento' => $convenio->id_instrumento,
+            'id_persona' => $idPersona,
+            'fecha_hora_firma' => '2026-02-03 12:34:56',
+            'latitud' => -36.62,
+            'longitud' => -64.29,
+            'trazo_ruta' => 'firmas/1/1-20260203123456.png',
+            'biometria_confirmada' => true,
+        ]);
+
+        return $idPersona;
+    }
+
+    private function assertSignatureEvidencePreserved(int $idInstrumento, int $idPersona): void
+    {
+        $this->assertDatabaseHas('firma', [
+            'id_instrumento' => $idInstrumento,
+            'id_persona' => $idPersona,
+            'fecha_hora_firma' => '2026-02-03 12:34:56',
+            'latitud' => -36.62,
+            'longitud' => -64.29,
+            'trazo_ruta' => 'firmas/1/1-20260203123456.png',
+            'biometria_confirmada' => true,
+        ]);
     }
 
     private function createConvenio(

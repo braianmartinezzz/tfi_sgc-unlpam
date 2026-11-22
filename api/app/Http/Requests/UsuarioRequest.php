@@ -42,6 +42,14 @@ class UsuarioRequest extends FormRequest
                 'integer',
                 'exists:unidad_academica,id_unidad_academica',
             ],
+            'id_persona' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                'exists:persona,id_persona',
+                Rule::unique('usuario', 'id_persona')
+                    ->ignore($this->route('id'), 'id_usuario'),
+            ],
         ];
     }
 

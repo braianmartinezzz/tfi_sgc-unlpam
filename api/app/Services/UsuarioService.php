@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Hash;
 
 class UsuarioService
 {
-    private const RELACIONES = ['rol', 'unidadAcademica'];
+    private const RELACIONES = ['rol', 'unidadAcademica', 'persona'];
 
     public function paginate(array $filters): LengthAwarePaginator
     {

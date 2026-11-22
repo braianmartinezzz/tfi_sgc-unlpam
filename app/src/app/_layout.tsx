@@ -1,18 +1,16 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { useSgcTheme } from '@/hooks/use-sgc-theme';
 
-SplashScreen.preventAutoHideAsync();
+export default function RootLayout() {
+  // La preferencia guardada en la app (no el tema del sistema) decide el tema de navegación.
+  const { scheme } = useSgcTheme();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+      {/* Pila de navegación: gesto/botón de volver nativo, y las pantallas anteriores
+          (con sus filtros y scroll) quedan montadas. Cada pantalla dibuja su propio header. */}
+      <Stack screenOptions={{ headerShown: false }} />
     </ThemeProvider>
   );
 }

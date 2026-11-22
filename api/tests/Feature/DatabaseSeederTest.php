@@ -29,9 +29,9 @@ class DatabaseSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $this->assertDatabaseCount('rol', 4);
-        $this->assertDatabaseCount('institucion_firmante', 1);
+        $this->assertDatabaseCount('institucion_firmante', 6);
         $this->assertDatabaseCount('unidad_academica', 7);
-        $this->assertDatabaseCount('usuario', 22);
+        $this->assertDatabaseCount('usuario', 26);
         $this->assertSame(
             $usuariosIniciales,
             Usuario::query()->orderBy('mail')->pluck('id_usuario', 'mail')->all()
@@ -54,7 +54,13 @@ class DatabaseSeederTest extends TestCase
             'Consulta' => 'consulta',
             'Revisión' => 'revision',
         ];
-        $correosEsperados = ['admin@unlpam.edu.ar'];
+        $correosEsperados = [
+            'admin@unlpam.edu.ar',
+            'revision.global@unlpam.edu.ar',
+            'revision.unidad@unlpam.edu.ar',
+            'consulta.global@unlpam.edu.ar',
+            'consulta.unidad@unlpam.edu.ar',
+        ];
 
         foreach ($facultades as $sigla => $nombreFacultad) {
             $unidad = DB::table('unidad_academica')->where('sigla', $sigla)->first();
@@ -77,8 +83,16 @@ class DatabaseSeederTest extends TestCase
             }
 
             foreach (array_keys($roles) as $nombreRol) {
+                $cantidadEsperada = 1;
+                if ($sigla === 'FCH' && $roles[$nombreRol] === 'revision') {
+                    $cantidadEsperada += 2;
+                }
+                if ($sigla === 'FI' && $roles[$nombreRol] === 'consulta') {
+                    $cantidadEsperada += 2;
+                }
+
                 $this->assertSame(
-                    1,
+                    $cantidadEsperada,
                     Usuario::query()
                         ->where('id_unidad', $unidad->id_unidad_academica)
                         ->whereHas('rol', fn ($query) => $query->where('nombre', $nombreRol))

@@ -257,6 +257,19 @@ class ConvenioService
         }
     }
 
+    public function assertCanViewWithinVisibilityScope(
+        Convenio $convenio,
+        Usuario $usuario
+    ): void {
+        $query = Convenio::query()->whereKey($convenio->id_instrumento);
+
+        if (! $this->applyVisibilityScope($query, $this->visibilityScope($usuario))->exists()) {
+            throw new AuthorizationException(
+                'No tiene permisos para consultar este convenio.'
+            );
+        }
+    }
+
     public function assertCanViewWithinRevisionUnitScope(
         Convenio $convenio,
         Usuario $usuario
@@ -809,7 +822,41 @@ class ConvenioService
             }
 
             if (array_key_exists('instituciones_ids', $data)) {
-                $convenio->institucionesFirmantes()->sync($data['instituciones_ids']);
+                $institucionesActuales = DB::table('convenio_institucion')
+                    ->where('id_instrumento', $convenio->id_instrumento)
+                    ->pluck('id_institucion')
+                    ->map(fn ($idInstitucion) => (int) $idInstitucion)
+                    ->sort()
+                    ->values()
+                    ->all();
+                $institucionesSolicitadas = collect($data['instituciones_ids'])
+                    ->map(fn ($idInstitucion) => (int) $idInstitucion)
+                    ->sort()
+                    ->values()
+                    ->all();
+
+                if ($institucionesActuales !== $institucionesSolicitadas) {
+                    $personasHabilitadas = DB::table('firma')
+                        ->where('id_instrumento', $convenio->id_instrumento)
+                        ->pluck('id_persona');
+
+                    if ($personasHabilitadas->isNotEmpty()) {
+                        $representantesVigentes = DB::table('representante')
+                            ->whereIn('id_institucion', $data['instituciones_ids'])
+                            ->where('activo', true)
+                            ->whereIn('id_persona', $personasHabilitadas)
+                            ->pluck('id_persona')
+                            ->map(fn ($idPersona) => (int) $idPersona);
+
+                        if ($personasHabilitadas->diff($representantesVigentes)->isNotEmpty()) {
+                            throw new \DomainException(
+                                'No se pueden quitar instituciones que justifican firmantes individuales habilitados.'
+                            );
+                        }
+                    }
+
+                    $convenio->institucionesFirmantes()->sync($data['instituciones_ids']);
+                }
             }
 
             return $convenio->load([

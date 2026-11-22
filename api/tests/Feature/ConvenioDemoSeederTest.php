@@ -6,6 +6,10 @@ use App\Models\Especifico;
 use App\Models\Instrumento;
 use App\Models\Usuario;
 use Database\Seeders\ConvenioDemoSeeder;
+use Database\Seeders\InstitucionUnlpamSeeder;
+use Database\Seeders\RolesUnlpamSeeder;
+use Database\Seeders\UnidadesAcademicasUnlpamSeeder;
+use Database\Seeders\UsuariosUnlpamSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
@@ -17,6 +21,7 @@ class ConvenioDemoSeederTest extends TestCase
 
     public function test_seeder_creates_repeatable_demo_convenios_and_relations(): void
     {
+        $this->seedDemoDependencies();
         $this->seed(ConvenioDemoSeeder::class);
         $this->seed(ConvenioDemoSeeder::class);
 
@@ -85,15 +90,16 @@ class ConvenioDemoSeederTest extends TestCase
 
     public function test_index_returns_the_expected_total_for_each_demo_role_and_scope(): void
     {
+        $this->seedDemoDependencies();
         $this->seed(ConvenioDemoSeeder::class);
 
         $totalesEsperados = [
             'admin@unlpam.edu.ar' => 20,
-            'gestion@unlpam.edu.ar' => 7,
+            'gestion@unlpam.edu.ar' => 5,
             'revision.global@unlpam.edu.ar' => 11,
-            'revision.unidad@unlpam.edu.ar' => 6,
+            'revision.unidad@unlpam.edu.ar' => 3,
             'consulta.global@unlpam.edu.ar' => 10,
-            'consulta.unidad@unlpam.edu.ar' => 4,
+            'consulta.unidad@unlpam.edu.ar' => 3,
         ];
 
         foreach ($totalesEsperados as $mail => $totalEsperado) {
@@ -105,5 +111,13 @@ class ConvenioDemoSeederTest extends TestCase
                 ->assertOk()
                 ->assertJsonPath('total', $totalEsperado);
         }
+    }
+
+    private function seedDemoDependencies(): void
+    {
+        $this->seed(RolesUnlpamSeeder::class);
+        $this->seed(InstitucionUnlpamSeeder::class);
+        $this->seed(UnidadesAcademicasUnlpamSeeder::class);
+        $this->seed(UsuariosUnlpamSeeder::class);
     }
 }
