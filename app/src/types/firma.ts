@@ -11,11 +11,23 @@ export type FirmantePendiente = {
   firmado: boolean;
 };
 
+export type ConvenioPadreFirma = {
+  id_instrumento: number;
+  titulo: string;
+  expediente: string | null;
+};
+
 export type PendienteFirmaCompleto = {
   id_instrumento: number;
   titulo: string;
+  expediente: string | null;
+  objeto: string | null;
   tipo: string | null;
   unidad_academica: string | null;
+  procedencia: string | null;
+  inicio: string | null;
+  vencimiento: string | null;
+  convenio_padre: ConvenioPadreFirma | null;
   aprobado_el: string | null;
   horas_pendiente: number | null;
   demorado: boolean;

@@ -11,10 +11,32 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { VerificacionMfa } from '@/components/auth/verificacion-mfa';
 import { Txt } from '@/components/panel/txt';
 import { API_URL } from '@/constants/api';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { getToken, setToken } from '@/lib/auth-storage';
+import { clearTokenDispositivo, getTokenDispositivo } from '@/lib/biometria-storage';
+import { consumirSesionVencida } from '@/lib/sesion-estado';
+import { ApiError, NetworkError } from '@/services/api-client';
+import {
+  iniciarLogin,
+  loginBiometrico,
+  mensajeDeError,
+  type SesionApp,
+} from '@/services/auth-app';
+import { biometriaDisponible, confirmarConBiometria } from '@/services/biometria-login';
+
+const MAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Mensaje para mostrar: si no hay conexión, indica a qué dirección se intentó llegar. */
+function textoDeError(error: unknown, porDefecto: string): string {
+  if (error instanceof NetworkError) {
+    return `No se pudo conectar con el servidor (${API_URL}). Verificá que Laravel esté levantado.`;
+  }
+
+  return mensajeDeError(error, porDefecto);
+}
 
 export default function LoginScreen() {
   const tema = useSgcTheme();
@@ -26,6 +48,10 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [paso, setPaso] = useState<'credenciales' | 'mfa'>('credenciales');
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [biometriaLista, setBiometriaLista] = useState(false);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -33,7 +59,19 @@ export default function LoginScreen() {
         const token = await getToken();
         if (token) {
           router.replace('/dashboard');
+          return;
         }
+
+        // Volvimos al login porque la API venció la sesión (10 minutos sin uso).
+        if (consumirSesionVencida()) {
+          setInfo('Tu sesión venció por inactividad. Ingresá de nuevo.');
+        }
+
+        const [hayBiometria, tokenDispositivo] = await Promise.all([
+          biometriaDisponible(),
+          getTokenDispositivo(),
+        ]);
+        setBiometriaLista(hayBiometria && tokenDispositivo !== null);
       } finally {
         setCheckingSession(false);
       }
@@ -44,44 +82,72 @@ export default function LoginScreen() {
 
   const canSubmit = mail.trim().length > 0 && password.length > 0 && !loading;
 
+  async function abrirSesion(sesion: SesionApp) {
+    await setToken(sesion.access_token);
+    router.replace('/dashboard');
+  }
+
+  /** Paso 1: mail y contraseña. Si son correctos, la API pide el código (paso 2). */
   async function handleLogin() {
     if (!canSubmit) return;
+
+    if (!MAIL_VALIDO.test(mail.trim())) {
+      setError('Ingresá un correo electrónico válido.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    setInfo(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/login`, {
-        method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({ mail: mail.trim(), password }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        const firstFieldError = data?.errors
-          ? Object.values<string[]>(data.errors)[0]?.[0]
-          : null;
-        setError(firstFieldError ?? data?.message ?? 'No se pudo iniciar sesión.');
-        return;
-      }
-
-      await setToken(data.access_token);
-      router.replace('/dashboard');
+      const desafio = await iniciarLogin(mail.trim(), password);
+      setMfaToken(desafio.mfa_token);
+      setPaso('mfa');
     } catch (loginError) {
-      if (loginError instanceof Error && loginError.name === 'AbortError') {
-        setError(`No se pudo conectar con el servidor (${API_URL}). Verificá que Laravel esté levantado.`);
-        return;
-      }
-
-      setError(`No se pudo conectar con el servidor (${API_URL}).`);
+      setError(textoDeError(loginError, 'No se pudo iniciar sesión.'));
     } finally {
-      clearTimeout(timeoutId);
       setLoading(false);
     }
+  }
+
+  /** Ingreso con huella o rostro: reemplaza la contraseña y el código (el celular ya es el segundo factor). */
+  async function handleBiometria() {
+    if (loading) return;
+
+    setLoading(true);
+    setError(null);
+    setInfo(null);
+
+    try {
+      const confirmada = await confirmarConBiometria('Ingresá al Sistema de Gestión de Convenios');
+      if (!confirmada) return;
+
+      const tokenDispositivo = await getTokenDispositivo();
+      if (!tokenDispositivo) {
+        setBiometriaLista(false);
+        return;
+      }
+
+      await abrirSesion(await loginBiometrico(tokenDispositivo));
+    } catch (biometriaError) {
+      // La API ya no reconoce al dispositivo (revocado, vencido o usuario dado de baja).
+      if (biometriaError instanceof ApiError && biometriaError.status === 401) {
+        await clearTokenDispositivo();
+        setBiometriaLista(false);
+      }
+
+      setError(textoDeError(biometriaError, 'No se pudo ingresar con biometría.'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function volverAlLogin(mensaje?: string) {
+    setPaso('credenciales');
+    setMfaToken(null);
+    setPassword('');
+    setError(mensaje ?? null);
   }
 
   // Paleta de la app (misma que el resto de las pantallas), según la preferencia claro/oscuro.
@@ -126,6 +192,15 @@ export default function LoginScreen() {
                 </Txt>
               </View>
 
+              {paso === 'mfa' && mfaToken ? (
+                <>
+                  <VerificacionMfa
+                    mfaToken={mfaToken}
+                    onVerificado={abrirSesion}
+                    onCancelar={volverAlLogin}
+                  />
+                </>
+              ) : (
               <View style={styles.formFields}>
                 <View style={styles.field}>
                   <Txt variante="detalle" negrita style={styles.label}>Correo Electrónico</Txt>
@@ -174,6 +249,12 @@ export default function LoginScreen() {
                   </View>
                 </View>
 
+                {info && (
+                  <Txt variante="detalle" color="textSecondary" style={styles.info}>
+                    {info}
+                  </Txt>
+                )}
+
                 {error && (
                   <Txt variante="detalle" style={styles.error}>
                     {error}
@@ -196,6 +277,22 @@ export default function LoginScreen() {
                   )}
                 </Pressable>
 
+                {biometriaLista && (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={handleBiometria}
+                    disabled={loading}
+                    style={({ pressed }) => [
+                      styles.buttonOutline,
+                      { borderColor: brand },
+                      (loading || pressed) && styles.buttonDim,
+                    ]}>
+                    <Txt style={[styles.buttonOutlineText, { color: brandText }]}>
+                      Ingresar con huella o rostro
+                    </Txt>
+                  </Pressable>
+                )}
+
                 <Pressable
                   accessibilityRole="button"
                   style={styles.forgotButton}
@@ -205,6 +302,7 @@ export default function LoginScreen() {
                   </Txt>
                 </Pressable>
               </View>
+              )}
             </View>
           </View>
 
@@ -322,6 +420,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonDim: { opacity: 0.65 },
+  buttonOutline: {
+    height: 48,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonOutlineText: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+  },
+  info: {
+    textAlign: 'center',
+  },
   buttonText: {
     color: '#ffffff',
     fontSize: 16,

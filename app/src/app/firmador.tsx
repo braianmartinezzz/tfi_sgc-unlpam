@@ -7,13 +7,13 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
-import { File, Paths } from 'expo-file-system';
 import SignatureCanvas, {
   type SignatureViewRef,
 } from 'react-native-signature-canvas';
@@ -21,12 +21,11 @@ import SignatureCanvas, {
 import { Card, EstadoVacio } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
 import { Txt } from '@/components/panel/txt';
-import { API_URL } from '@/constants/api';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
-import { getToken } from '@/lib/auth-storage';
-import { listarPendientesFirma, registrarFirma } from '@/services/firma';
+import { crearComentarioFirma, descargarConstanciaFirma, descargarDocumentoFirma, listarPendientesFirma, registrarFirma } from '@/services/firma';
 import type { PendienteFirmaCompleto } from '@/types/firma';
+import type { ComentarioFirmador } from '@/types/firmador-comentarios';
 
 export default function FirmadorScreen() {
   const tema = useSgcTheme();
@@ -44,6 +43,8 @@ export default function FirmadorScreen() {
   const [error, setError] = useState<string | null>(null);
   const [actualizando, setActualizando] = useState(false);
   const [firmando, setFirmando] = useState(false);
+  const [comentarios, setComentarios] = useState<ComentarioFirmador[]>([]);
+  const [nuevoComentario, setNuevoComentario] = useState('');
 
   const cargar = useCallback(async (mostrarCarga = true) => {
     if (mostrarCarga) setEstado('cargando');
@@ -120,6 +121,7 @@ export default function FirmadorScreen() {
   const seleccionar = (pendiente: PendienteFirmaCompleto) => {
     setSeleccionado(pendiente);
     setTrazo(null);
+    setNuevoComentario('');
   };
 
   const abrirPdf = async () => {
@@ -129,26 +131,28 @@ export default function FirmadorScreen() {
     }
 
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Iniciá sesión nuevamente.');
-
-      const destino = new File(Paths.cache, seleccionado.documento.nombre_archivo);
-      await File.downloadFileAsync(
-        `${API_URL}/api/firmas/${seleccionado.id_instrumento}/documento`,
-        destino,
-        {
-          headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
-          idempotent: true,
-        },
+      const documento = await descargarDocumentoFirma(
+        seleccionado.id_instrumento,
+        seleccionado.documento.nombre_archivo,
       );
 
+      if (documento.tipo === 'web') {
+        const url = URL.createObjectURL(documento.blob);
+        const enlace = document.createElement('a');
+        enlace.href = url;
+        enlace.download = seleccionado.documento.nombre_archivo;
+        enlace.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return;
+      }
+
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(destino.uri, {
+        await Sharing.shareAsync(documento.uri, {
           mimeType: 'application/pdf',
           dialogTitle: seleccionado.titulo,
         });
       } else {
-        Alert.alert('PDF descargado', destino.uri);
+        Alert.alert('PDF descargado', documento.uri);
       }
     } catch (exception) {
       Alert.alert('No se pudo abrir el PDF', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
@@ -195,10 +199,8 @@ export default function FirmadorScreen() {
       });
 
       Alert.alert(
-        resultado.estado === 'Firmado' ? 'Convenio firmado' : 'Firma registrada',
-        resultado.estado === 'Firmado'
-          ? 'Todas las partes firmaron el convenio.'
-          : `Quedan ${resultado.firmas_pendientes} firma(s) pendiente(s).`,
+        'Firma individual registrada',
+        `Tu evidencia quedó guardada. El convenio permanece en estado ${resultado.estado}; Gestión debe registrar por separado la firma administrativa.${resultado.firmas_pendientes > 0 ? ` Quedan ${resultado.firmas_pendientes} firma(s) individual(es) pendiente(s).` : ''}`,
       );
 
       setTrazo(null);
@@ -209,6 +211,37 @@ export default function FirmadorScreen() {
       Alert.alert('No se pudo registrar la firma', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
     } finally {
       setFirmando(false);
+    }
+  };
+
+  const publicarComentario = async () => {
+    if (!seleccionado || nuevoComentario.trim() === '') return;
+    try {
+      const comentario = await crearComentarioFirma(seleccionado.id_instrumento, nuevoComentario.trim());
+      setComentarios((actuales) => [comentario, ...actuales]);
+      setNuevoComentario('');
+      if (comentario.ofensivo) Alert.alert('Comentario moderado', 'El texto fue reemplazado por “comentario ofensivo”.');
+    } catch (exception) {
+      Alert.alert('No se pudo publicar', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
+    }
+  };
+
+  const compartirConstancia = async () => {
+    if (!seleccionado) return;
+    try {
+      const documento = await descargarConstanciaFirma(seleccionado.id_instrumento);
+      if (documento.tipo === 'web') {
+        const url = URL.createObjectURL(documento.blob);
+        const enlace = document.createElement('a');
+        enlace.href = url;
+        enlace.download = `constancia-firma-${seleccionado.id_instrumento}.pdf`;
+        enlace.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(documento.uri, { mimeType: 'application/pdf', dialogTitle: 'Constancia de firma' });
+      }
+    } catch (exception) {
+      Alert.alert('No se pudo generar la constancia', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
     }
   };
 
@@ -283,6 +316,18 @@ export default function FirmadorScreen() {
               <Txt variante="detalle" color="textSecondary">
                 {[seleccionado.tipo, seleccionado.unidad_academica].filter(Boolean).join(' · ')}
               </Txt>
+              <Txt variante="detalle" color="textSecondary">
+                {[seleccionado.expediente ? `Expediente ${seleccionado.expediente}` : null,
+                  seleccionado.procedencia ? `Procedencia: ${seleccionado.procedencia}` : null,
+                  seleccionado.inicio ? `Inicio: ${seleccionado.inicio.slice(0, 10)}` : null,
+                  seleccionado.vencimiento ? `Vence: ${seleccionado.vencimiento.slice(0, 10)}` : null,
+                ].filter(Boolean).join(' · ')}
+              </Txt>
+              {seleccionado.convenio_padre ? (
+                <Txt variante="detalle" color="textSecondary">
+                  Convenio padre: {seleccionado.convenio_padre.titulo}{seleccionado.convenio_padre.expediente ? ` · ${seleccionado.convenio_padre.expediente}` : ''}
+                </Txt>
+              ) : null}
 
               <Pressable
                 accessibilityRole="button"
@@ -343,6 +388,57 @@ export default function FirmadorScreen() {
                 )}
               </Pressable>
             </Card>
+
+            <Card titulo="Comentarios" bordeSuperior={tema.brand}>
+              <TextInput
+                value={nuevoComentario}
+                onChangeText={setNuevoComentario}
+                placeholder="Escribí un comentario para los firmantes…"
+                placeholderTextColor={tema.textSecondary}
+                multiline
+                style={[styles.comentarioInput, {
+                  borderColor: tema.border,
+                  color: tema.text,
+                  backgroundColor: tema.surface,
+                }]}
+              />
+              <Pressable
+                accessibilityRole="button"
+                onPress={publicarComentario}
+                disabled={nuevoComentario.trim() === ''}
+                style={[styles.botonSecundario, { borderColor: tema.brand }, nuevoComentario.trim() === '' && { opacity: 0.5 }]}
+              >
+                <Txt negrita style={{ color: tema.brandText }}>Publicar comentario</Txt>
+              </Pressable>
+
+              {comentarios.length === 0 ? (
+                <Txt variante="detalle" color="textSecondary">No hay comentarios aún.</Txt>
+              ) : null}
+
+              {comentarios.map((comentario) => (
+                <View key={comentario.id_comentario} style={[styles.comentario, { borderColor: tema.border }]}>
+                  <Txt negrita>{comentario.usuario.nombre}</Txt>
+                  <Txt variante="detalle" color={comentario.ofensivo ? 'textSecondary' : 'text'}>
+                    {comentario.contenido}
+                  </Txt>
+                  <Txt variante="etiqueta" color="textSecondary">
+                    {new Date(comentario.fecha).toLocaleString()}
+                  </Txt>
+                </View>
+              ))}
+            </Card>
+
+            <Card titulo="Acciones" bordeSuperior={tema.brand}>
+              <View style={styles.botonesAcciones}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={compartirConstancia}
+                  style={[styles.botonAccion, { borderColor: tema.brand }]}
+                >
+                  <Txt negrita style={{ color: tema.brandText }}>Compartir constancia</Txt>
+                </Pressable>
+              </View>
+            </Card>
           </View>
         ) : null}
       </ScrollView>
@@ -361,4 +457,10 @@ const styles = StyleSheet.create({
   botonesFirma: { flexDirection: 'row', gap: SgcSpacing.sm },
   boton: { borderRadius: SgcRadius.sm, paddingVertical: SgcSpacing.md, alignItems: 'center' },
   botonSecundario: { borderWidth: 1, borderRadius: SgcRadius.sm, paddingVertical: SgcSpacing.md, alignItems: 'center', flex: 1 },
+  comentarios: { gap: SgcSpacing.sm, maxHeight: 200, overflow: 'hidden' },
+  comentario: { borderWidth: 1, borderRadius: SgcRadius.md, padding: SgcSpacing.md, gap: SgcSpacing.sm },
+  nuevoComentario: { flexDirection: 'row', gap: SgcSpacing.sm, alignItems: 'center' },
+  botonesAcciones: { flexDirection: 'row', gap: SgcSpacing.sm },
+  botonAccion: { borderWidth: 1, borderRadius: SgcRadius.sm, paddingVertical: SgcSpacing.md, alignItems: 'center', flex: 1 },
+  comentarioInput: { borderWidth: 1, borderRadius: SgcRadius.md, padding: SgcSpacing.md, maxHeight: 100, textAlignVertical: 'top' },
 });

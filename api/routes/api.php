@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AprobarConvenioController;
 use App\Http\Controllers\Api\ArchivarConvenioController;
 use App\Http\Controllers\Api\AuditoriaController;
+use App\Http\Controllers\Api\AuthAppController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConfiguracionController;
 use App\Http\Controllers\Api\ConvenioController;
@@ -20,13 +21,26 @@ use App\Http\Controllers\Api\RolController;
 use App\Http\Controllers\Api\UnidadAcademicaController;
 use App\Http\Controllers\Api\UsuarioController;
 use App\Http\Controllers\Api\VencimientoController;
+use App\Http\Controllers\Api\ComentarioFirmadorController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\PanelController;
 use App\Http\Controllers\Api\FirmaController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
-Route::middleware('auth:sanctum')->group(function () {
+// Login de la app móvil: contraseña + MFA (mail, SMS o push) y biometría.
+// El login de la web (/login) no cambia.
+Route::prefix('app')->middleware('throttle:20,1')->group(function () {
+    Route::post('/login', [AuthAppController::class, 'login']);
+    Route::post('/mfa/enviar', [AuthAppController::class, 'enviarCodigo']);
+    Route::post('/mfa/verificar', [AuthAppController::class, 'verificarCodigo']);
+    Route::post('/login/biometrico', [AuthAppController::class, 'loginBiometrico']);
+});
+
+Route::middleware(['auth:sanctum', 'sesion.app'])->group(function () {
+    Route::post('/app/biometria', [AuthAppController::class, 'activarBiometria']);
+    Route::delete('/app/biometria', [AuthAppController::class, 'desactivarBiometria']);
+
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
@@ -168,4 +182,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber(['id', 'idPersona']);
 
     Route::get('/panel', [PanelController::class, 'index']);
+
+    // Comentarios firmador
+    Route::get('/convenios/{id}/comentarios-firmador', [ComentarioFirmadorController::class, 'index'])->whereNumber('id');
+    Route::post('/convenios/{id}/comentarios-firmador', [ComentarioFirmadorController::class, 'store'])->whereNumber('id');
+
+    Route::get('/convenios/{id}/constancia-firma', [FirmaController::class, 'constanciaPdf'])->whereNumber('id');
 });

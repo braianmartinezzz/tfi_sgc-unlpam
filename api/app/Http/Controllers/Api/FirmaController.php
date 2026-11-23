@@ -79,6 +79,20 @@ class FirmaController extends Controller
         return response()->json(['data' => $constancia]);
     }
 
+    /** GET /api/convenios/{id}/constancia-firma */
+    public function constanciaPdf(Request $request, string $id, FirmaService $service): StreamedResponse|JsonResponse
+    {
+        try {
+            $constancia = $service->constanciaPdf($id, $request->user());
+        } catch (ModelNotFoundException) {
+            return $this->noEncontrado('Convenio no encontrado.');
+        } catch (AuthorizationException $exception) {
+            return $this->prohibido($exception);
+        }
+
+        return $this->descargar($constancia['ruta'], $constancia['nombre_archivo'], 'application/pdf');
+    }
+
     /** PUT /api/convenios/{id}/firmantes */
     public function definirFirmantes(
         DefinirFirmantesRequest $request,

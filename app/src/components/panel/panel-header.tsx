@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { Image } from 'expo-image';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemeToggle } from '@/components/panel/theme-toggle';
 import { Txt } from '@/components/panel/txt';
 import { SgcFont, SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
+import { useProfilePhoto } from '@/hooks/use-profile-photo';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { iniciales } from '@/lib/format';
 
@@ -28,6 +30,7 @@ export function PanelHeader({
   const tema = useSgcTheme();
   const insets = useSafeAreaInsets();
   const [texto, setTexto] = useState('');
+  const fotoPerfil = useProfilePhoto();
 
   return (
     <View
@@ -64,9 +67,13 @@ export function PanelHeader({
             { backgroundColor: tema.brand, borderColor: tema.onTopbar },
             pressed && { opacity: 0.8 },
           ]}>
-          <Txt variante="etiqueta" color="onBrand">
-            {iniciales(nombreUsuario)}
-          </Txt>
+          {fotoPerfil ? (
+            <Image source={{ uri: fotoPerfil }} style={styles.avatarImagen} contentFit="cover" />
+          ) : (
+            <Txt variante="etiqueta" color="onBrand">
+              {iniciales(nombreUsuario)}
+            </Txt>
+          )}
         </Pressable>
       </View>
 
@@ -149,6 +156,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarImagen: {
+    width: '100%',
+    height: '100%',
   },
   buscador: {
     flex: 1,

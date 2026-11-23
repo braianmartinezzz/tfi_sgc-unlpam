@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 
 import { API_URL } from '@/constants/api';
 import { clearToken, getToken } from '@/lib/auth-storage';
+import { marcarSesionVencida } from '@/lib/sesion-estado';
 
 const TIMEOUT_MS = 15000;
 
@@ -32,6 +33,7 @@ async function sesionExpirada(): Promise<void> {
   cerrandoSesion = true;
 
   try {
+    marcarSesionVencida();
     await clearToken();
     router.replace('/');
   } catch {

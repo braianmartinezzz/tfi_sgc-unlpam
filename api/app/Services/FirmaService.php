@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Throwable;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 /**
  * Firma de convenios desde la app: cada firmante (persona vinculada a un usuario) firma con su
@@ -74,7 +76,10 @@ class FirmaService
 
         return Instrumento::query()
             ->whereIn('id_instrumento', $ids)
-            ->with('convenio.unidadAcademica:id_unidad_academica,sigla,nombre')
+            ->with([
+                'convenio.unidadAcademica:id_unidad_academica,sigla,nombre',
+                'convenio.especifico.marco.convenio.instrumento:id_instrumento,titulo,expediente',
+            ])
             ->get()
             ->map(fn (Instrumento $instrumento) => [
                 'instrumento' => $instrumento,
@@ -94,11 +99,23 @@ class FirmaService
                 $horas = $fila['aprobado_el'] ? (int) $fila['aprobado_el']->diffInHours(now()) : null;
                 $version = $this->versionParaFirmar($instrumento->id_instrumento);
 
+                $marco = $instrumento->convenio?->especifico?->marco?->convenio?->instrumento;
+
                 return [
                     'id_instrumento' => $instrumento->id_instrumento,
                     'titulo' => $instrumento->titulo,
+                    'expediente' => $instrumento->expediente,
+                    'objeto' => $instrumento->objeto,
                     'tipo' => $instrumento->convenio?->tipo,
                     'unidad_academica' => $instrumento->convenio?->unidadAcademica?->sigla,
+                    'procedencia' => $instrumento->convenio?->unidadAcademica?->nombre,
+                    'inicio' => $instrumento->inicio?->toIso8601String(),
+                    'vencimiento' => $instrumento->vencimiento?->toIso8601String(),
+                    'convenio_padre' => $marco ? [
+                        'id_instrumento' => $marco->id_instrumento,
+                        'titulo' => $marco->titulo,
+                        'expediente' => $marco->expediente,
+                    ] : null,
                     'aprobado_el' => $fila['aprobado_el']?->toIso8601String(),
                     'horas_pendiente' => $horas,
                     'demorado' => $horas !== null && $horas >= self::HORAS_DEMORADA,
@@ -152,16 +169,34 @@ class FirmaService
      */
     public function constancia(string $id, Usuario $usuario): array
     {
-        $convenio = Convenio::query()->with('instrumento')->findOrFail($id);
+        $convenio = Convenio::query()->with([
+            'instrumento',
+            'unidadAcademica:id_unidad_academica,sigla,nombre',
+            'especifico.marco.convenio.instrumento:id_instrumento,titulo,expediente',
+        ])->findOrFail($id);
 
         $this->autorizarConsulta($convenio, $usuario);
 
         $firmantes = $this->firmantes($convenio->id_instrumento);
 
+        $instrumento = $convenio->instrumento;
+        $marco = $convenio->especifico?->marco?->convenio?->instrumento;
+
         return [
             'id_instrumento' => $convenio->id_instrumento,
-            'titulo' => $convenio->instrumento?->titulo,
-            'estado' => $convenio->instrumento?->estado,
+            'titulo' => $instrumento?->titulo,
+            'expediente' => $instrumento?->expediente,
+            'objeto' => $instrumento?->objeto,
+            'tipo' => $convenio->tipo,
+            'procedencia' => $convenio->unidadAcademica?->nombre,
+            'unidad_academica' => $convenio->unidadAcademica?->sigla,
+            'inicio' => $instrumento?->inicio?->toIso8601String(),
+            'vencimiento' => $instrumento?->vencimiento?->toIso8601String(),
+            'convenio_padre' => $marco ? [
+                'id_instrumento' => $marco->id_instrumento,
+                'titulo' => $marco->titulo,
+                'expediente' => $marco->expediente,
+            ] : null,
             'firmas_requeridas' => count($firmantes),
             'firmas_registradas' => count(array_filter($firmantes, fn (array $firmante) => $firmante['firmado'])),
             'firmantes' => $firmantes,
@@ -347,6 +382,8 @@ class FirmaService
                             .'. Faltan '.$pendientes.' '.($pendientes === 1 ? 'firma' : 'firmas').'.'
                 );
 
+                $this->generarConstanciaPdf($convenio, $usuario);
+
                 return [
                     'id_instrumento' => $convenio->id_instrumento,
                     'estado' => $estado,
@@ -494,5 +531,78 @@ class FirmaService
                 'id_usuario' => $destinatario->id_usuario,
             ]);
         }
+    }
+
+    private function generarConstanciaPdf(Convenio $convenio, Usuario $usuario): void
+    {
+        $constancia = $this->constancia((string) $convenio->id_instrumento, $usuario);
+
+        $options = new Options();
+        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', false);
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($this->htmlConstancia($constancia), 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        $nombreArchivo = 'constancia_firma_convenio_'.$convenio->id_instrumento.'.pdf';
+        $rutaArchivo = 'constancias/'.$nombreArchivo;
+
+        Storage::disk('private')->put($rutaArchivo, $dompdf->output());
+    }
+
+    public function constanciaPdf(string $id, Usuario $usuario): array
+    {
+        $convenio = Convenio::query()->with('instrumento')->findOrFail($id);
+        $this->autorizarConsulta($convenio, $usuario);
+
+        $constancia = $this->constancia((string) $convenio->id_instrumento, $usuario);
+
+        $dompdf = new Dompdf();
+        $dompdf->loadHtml($this->htmlConstancia($constancia), 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        $ruta = 'constancias/constancia-firma-'.$convenio->id_instrumento.'-'.now()->format('YmdHis').'.pdf';
+        Storage::disk('private')->put($ruta, $dompdf->output());
+
+        return ['ruta' => $ruta, 'nombre_archivo' => 'constancia-firma-'.$convenio->id_instrumento.'.pdf'];
+    }
+
+    private function htmlConstancia(array $constancia): string
+    {
+        $firmantes = collect($constancia['firmantes'])->map(function (array $firmante) {
+            $estado = $firmante['firmado'] ? 'FIRMADO' : 'PENDIENTE';
+            $fecha = $firmante['firmado'] && $firmante['fecha_hora_firma']
+                ? htmlspecialchars((string) $firmante['fecha_hora_firma'])
+                : '—';
+            $ubicacion = $firmante['firmado']
+                ? htmlspecialchars(($firmante['latitud'] !== null ? (string) $firmante['latitud'] : '—').', '.($firmante['longitud'] !== null ? (string) $firmante['longitud'] : '—'))
+                : '—';
+
+            return '<tr><td>'.htmlspecialchars($firmante['nombre'].' '.$firmante['apellido']).'</td>'
+                .'<td>'.$estado.'</td><td>'.$fecha.'</td><td>'.$ubicacion.'</td></tr>';
+        })->implode('');
+
+        $padre = $constancia['convenio_padre']
+            ? htmlspecialchars($constancia['convenio_padre']['titulo'].' ('.$constancia['convenio_padre']['expediente'].')')
+            : '—';
+
+        return '<!doctype html><html><head><meta charset="utf-8"><style>'
+            .'body{font-family:DejaVu Sans,sans-serif;font-size:11px;color:#171717;margin:36px}'
+            .'h1{font-size:20px;color:#b91c1c}.meta td{padding:4px 8px}.firmantes{width:100%;border-collapse:collapse;margin-top:14px}'
+            .'.firmantes th,.firmantes td{border:1px solid #a3a3a3;padding:7px;text-align:left}.pie{margin-top:24px;color:#525252;font-size:9px}'
+            .'@page{margin:28px}</style></head><body>'
+            .' <h1>Constancia de firmas individuales</h1>'
+            .' <table class="meta"><tr><td><strong>Convenio</strong></td><td>'.htmlspecialchars((string) ($constancia['titulo'] ?? '—')).'</td></tr>'
+            .' <tr><td><strong>Expediente</strong></td><td>'.htmlspecialchars((string) ($constancia['expediente'] ?? '—')).'</td></tr>'
+            .' <tr><td><strong>Procedencia</strong></td><td>'.htmlspecialchars((string) ($constancia['procedencia'] ?? '—')).'</td></tr>'
+            .' <tr><td><strong>Convenio padre</strong></td><td>'.$padre.'</td></tr>'
+            .' <tr><td><strong>Vigencia</strong></td><td>'.htmlspecialchars((string) ($constancia['inicio'] ?? '—')).' al '.htmlspecialchars((string) ($constancia['vencimiento'] ?? '—')).'</td></tr></table>'
+            .' <table class="firmantes"><thead><tr><th>Firmante</th><th>Estado</th><th>Fecha y hora</th><th>Latitud, longitud</th></tr></thead><tbody>'.$firmantes.'</tbody></table>'
+            .' <p class="pie">Constancia generada el '.htmlspecialchars(now()->toIso8601String()).'. Evidencia administrativa individual; no equivale a firma digital PKI.</p>'
+            .' </body></html>';
     }
 }

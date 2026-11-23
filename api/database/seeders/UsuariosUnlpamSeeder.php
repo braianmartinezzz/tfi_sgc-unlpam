@@ -7,6 +7,8 @@ use App\Models\UnidadAcademica;
 use App\Models\Usuario;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use App\Models\Persona;
+use Illuminate\Support\Facades\DB;
 
 class UsuariosUnlpamSeeder extends Seeder
 {
@@ -55,16 +57,54 @@ class UsuariosUnlpamSeeder extends Seeder
 
         $unidadIngenieria = $unidades['FI'];
 
-        Usuario::query()->updateOrCreate(
-            ['mail' => 'admin@unlpam.edu.ar'],
-            [
-                'nombre' => 'Usuario de Administración - UNLPam',
-                'password' => $password,
-                'activo' => true,
-                'id_rol' => $roles['Administración']->id_rol,
-                'id_unidad' => $unidadIngenieria->id_unidad_academica,
-                'alcance_global' => false,
-            ]
-        );
+        foreach ([
+            'rector@unlpam.edu.ar' => [
+                'nombre' => 'Rector',
+                'apellido' => 'UNLPam',
+                'dni' => 'DNI-DEMO-RECTOR',
+            ],
+            'decano@unlpam.edu.ar' => [
+                'nombre' => 'Decano',
+                'apellido' => 'UNLPam',
+                'dni' => 'DNI-DEMO-DECANO',
+            ],
+        ] as $correo => $datos) {
+            $persona = Persona::query()->updateOrCreate(
+                ['dni' => $datos['dni']],
+                [
+                    'nombre' => $datos['nombre'],
+                    'apellido' => $datos['apellido'],
+                ]
+            );
+
+            $usuario = Usuario::query()->updateOrCreate(
+                ['mail' => $correo],
+                [
+                    'nombre' => $datos['nombre'].' - UNLPam',
+                    'password' => $password,
+                    'activo' => true,
+                    'id_rol' => $roles['Administración']->id_rol,
+                    'id_unidad' => $unidadIngenieria->id_unidad_academica,
+                    'alcance_global' => true,
+                    'id_persona' => $persona->id_persona,
+                ]
+            );
+
+            foreach ([4, 15] as $idInstrumento) {
+                DB::table('firma')->updateOrInsert(
+                    [
+                        'id_instrumento' => $idInstrumento,
+                        'id_persona' => $persona->id_persona,
+                    ],
+                    [
+                        'fecha_hora_firma' => null,
+                        'latitud' => null,
+                        'longitud' => null,
+                        'trazo_ruta' => null,
+                        'biometria_confirmada' => false,
+                    ]
+                );
+            }
+        }
     }
 }
