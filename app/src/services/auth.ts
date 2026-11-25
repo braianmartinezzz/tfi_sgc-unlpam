@@ -1,4 +1,5 @@
 import { clearToken } from '@/lib/auth-storage';
+import { limpiarOffline } from '@/lib/offline-storage';
 import { apiRequest } from '@/services/api-client';
 import { eliminarPushToken } from '@/services/push-token';
 import type { UsuarioAutenticado } from '@/types/auth';
@@ -23,4 +24,11 @@ export async function cerrarSesion(): Promise<void> {
   }
 
   await clearToken();
+
+  // Al cerrar sesión por decisión del usuario no queda su panel ni su cola en el celular.
+  try {
+    await limpiarOffline();
+  } catch (error) {
+    console.warn('No se pudieron borrar los datos offline:', error);
+  }
 }

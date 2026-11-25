@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { olvidarInstantaneaEnMemoria } from '@/lib/panel-memoria';
+
 const PREFIX = 'sgc_offline:';
+const CLAVE_DUENO = 'duenio_cache';
 
 export type PendingOperation = {
   id: string;
@@ -52,6 +55,37 @@ export async function agregarCola(
 
 export async function actualizarCola(cola: PendingOperation[]): Promise<void> {
   await guardarOffline('pending_operations', cola);
+}
+
+/** Cambia solo una operación de la cola, sobre lo que hay guardado ahora (no sobre una copia vieja). */
+export async function actualizarOperacion(
+  id: string,
+  cambios: Partial<Pick<PendingOperation, 'attempts'>>,
+): Promise<void> {
+  const cola = await leerCola();
+  await actualizarCola(cola.map((operacion) => (operacion.id === id ? { ...operacion, ...cambios } : operacion)));
+}
+
+/** Borra todo lo guardado para uso offline (panel, convenios, cola) y la copia en memoria. */
+export async function limpiarOffline(): Promise<void> {
+  olvidarInstantaneaEnMemoria();
+
+  const claves = (await AsyncStorage.getAllKeys()).filter((clave) => clave.startsWith(PREFIX));
+  if (claves.length > 0) await AsyncStorage.multiRemove(claves);
+}
+
+/**
+ * Los datos offline pertenecen a un usuario. Si entra otro en el mismo celular se borran
+ * antes de mostrarlos, para que no vea el panel ni dispare la cola del anterior.
+ * Si es el mismo usuario (por ejemplo, tras vencer la sesión) se conservan.
+ */
+export async function asegurarCacheDelUsuario(idUsuario: number): Promise<void> {
+  const dueno = await leerOffline<number>(CLAVE_DUENO);
+
+  if (dueno !== idUsuario) {
+    await limpiarOffline();
+    await guardarOffline(CLAVE_DUENO, idUsuario);
+  }
 }
 
 export async function quitarDeCola(id: string): Promise<void> {

@@ -5,25 +5,15 @@ import NetInfo from '@react-native-community/netinfo';
 
 import { clearToken } from '@/lib/auth-storage';
 import { guardarOffline, leerOffline } from '@/lib/offline-storage';
+import {
+  guardarInstantaneaEnMemoria,
+  leerInstantaneaEnMemoria,
+  type InstantaneaPanel as Instantanea,
+} from '@/lib/panel-memoria';
 import { ApiError, NetworkError } from '@/services/api-client';
 import { sincronizarCola } from '@/services/offline-sync';
 import { obtenerUsuarioActual } from '@/services/auth';
 import { obtenerPanel } from '@/services/panel';
-import type { UsuarioAutenticado } from '@/types/auth';
-import type { PanelData } from '@/types/panel';
-
-type Instantanea = {
-  me: UsuarioAutenticado;
-  panel: PanelData;
-  actualizado: Date;
-};
-
-/**
- * Última respuesta exitosa. Vive en memoria: sirve para mostrar los pendientes de firma
- * cuando se pierde la conexión. Para que sobreviva al cierre de la app hay que guardarla
- * en un almacenamiento persistente (por ejemplo AsyncStorage) en este mismo punto.
- */
-let ultimaInstantanea: Instantanea | null = null;
 
 const REINTENTO_SIN_CONEXION_MS = 15000;
 
@@ -31,8 +21,8 @@ export type EstadoPanel = 'cargando' | 'listo' | 'error';
 
 export function usePanel() {
   const router = useRouter();
-  const [instantanea, setInstantanea] = useState<Instantanea | null>(ultimaInstantanea);
-  const [estado, setEstado] = useState<EstadoPanel>(ultimaInstantanea ? 'listo' : 'cargando');
+  const [instantanea, setInstantanea] = useState<Instantanea | null>(leerInstantaneaEnMemoria);
+  const [estado, setEstado] = useState<EstadoPanel>(leerInstantaneaEnMemoria() ? 'listo' : 'cargando');
   const [sinConexion, setSinConexion] = useState(false);
   const [actualizando, setActualizando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +35,7 @@ export function usePanel() {
         const [me, panel] = await Promise.all([obtenerUsuarioActual(), obtenerPanel()]);
         const nueva: Instantanea = { me, panel, actualizado: new Date() };
 
-        ultimaInstantanea = nueva;
+        guardarInstantaneaEnMemoria(nueva);
         setInstantanea(nueva);
         setSinConexion(false);
         setError(null);
@@ -63,7 +53,7 @@ export function usePanel() {
           setEstado('listo');
         } else {
           setError(causa instanceof Error ? causa.message : 'No se pudo cargar el panel.');
-          setEstado(ultimaInstantanea ? 'listo' : 'error');
+          setEstado(leerInstantaneaEnMemoria() ? 'listo' : 'error');
         }
       } finally {
         setActualizando(false);
@@ -101,12 +91,12 @@ export function usePanel() {
   // Carga el último panel al montar el hook.
   useEffect(() => {
     void leerOffline<Instantanea>('panel_latest').then((guardada) => {
-      if (guardada) {
-        ultimaInstantanea = {
-          ...guardada,
-          actualizado: new Date(guardada.actualizado),
-        };
-        setInstantanea(ultimaInstantanea);
+      // Si mientras se leía el disco ya llegó una respuesta del servidor, esa es más nueva.
+      if (guardada && !leerInstantaneaEnMemoria()) {
+        const restaurada = { ...guardada, actualizado: new Date(guardada.actualizado) };
+
+        guardarInstantaneaEnMemoria(restaurada);
+        setInstantanea((actual) => actual ?? restaurada);
         setEstado('listo');
       }
     });

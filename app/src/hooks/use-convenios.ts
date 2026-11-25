@@ -101,7 +101,8 @@ export function useConvenios(filtros: Filtros) {
 
   useEffect(() => {
     void leerOffline<Datos>('convenios_latest').then((guardados) => {
-      if (guardados) setDatos(guardados);
+      // No pisa una respuesta del servidor que haya llegado antes de terminar de leer el disco.
+      if (guardados) setDatos((actuales) => actuales ?? guardados);
     });
   }, []);
 

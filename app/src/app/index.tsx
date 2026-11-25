@@ -16,6 +16,8 @@ import { Txt } from '@/components/panel/txt';
 import { API_URL } from '@/constants/api';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { getToken, setToken } from '@/lib/auth-storage';
+import { consumirDestinoPendiente } from '@/lib/destino-pendiente';
+import { asegurarCacheDelUsuario } from '@/lib/offline-storage';
 import { clearTokenDispositivo, getTokenDispositivo } from '@/lib/biometria-storage';
 import { consumirSesionVencida } from '@/lib/sesion-estado';
 import { ApiError, NetworkError } from '@/services/api-client';
@@ -88,11 +90,22 @@ export default function LoginScreen() {
   async function abrirSesion(sesion: SesionApp) {
     await setToken(sesion.access_token);
 
+    // Si entra otra persona en este celular, no hereda el panel ni la cola de la anterior.
+    try {
+      await asegurarCacheDelUsuario(sesion.user.id_usuario);
+    } catch (cacheError) {
+      console.warn('No se pudo preparar el caché offline:', cacheError);
+    }
+
     void registrarPushToken().catch((error) => {
       console.warn('No se pudo registrar el token push:', error);
     });
 
     router.replace('/dashboard');
+
+    // Venía de tocar un aviso con la sesión vencida: ahora sí se abre.
+    const destino = consumirDestinoPendiente();
+    if (destino) router.push(destino);
   }
 
   /** Paso 1: mail y contraseña. Si son correctos, la API pide el código (paso 2). */

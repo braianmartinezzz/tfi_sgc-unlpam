@@ -1,0 +1,1258 @@
+diff --git a/app/__tests__/api-client.test.ts b/app/__tests__/api-client.test.ts
+new file mode 100644
+index 0000000..80a10e7
+--- /dev/null
++++ b/app/__tests__/api-client.test.ts
+@@ -0,0 +1,65 @@
++import { router } from 'expo-router';
++
++import { getToken } from '@/lib/auth-storage';
++import { consumirSesionVencida } from '@/lib/sesion-estado';
++import { ApiError, NetworkError, apiRequest } from '@/services/api-client';
++
++jest.mock('@/lib/auth-storage', () => ({ getToken: jest.fn(), clearToken: jest.fn(async () => undefined) }));
++
++const { clearToken } = jest.requireMock('@/lib/auth-storage');
++const fetchMock = jest.fn();
++(globalThis as { fetch: unknown }).fetch = fetchMock;
++
++const respuesta = (status: number, cuerpo: unknown = {}) => ({
++  ok: status >= 200 && status < 300,
++  status,
++  json: async () => cuerpo,
++});
++
++beforeEach(() => {
++  consumirSesionVencida();
++  (getToken as jest.Mock).mockResolvedValue('token-1');
++});
++
++describe('sesión expirada y renovación', () => {
++  it('envía el token y devuelve el JSON', async () => {
++    fetchMock.mockResolvedValue(respuesta(200, { ok: 1 }));
++
++    await expect(apiRequest('/me')).resolves.toEqual({ ok: 1 });
++    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer token-1');
++  });
++
++  it('ante un 401 con sesión: limpia el token, marca el vencimiento y vuelve al login', async () => {
++    fetchMock.mockResolvedValue(respuesta(401, { message: 'Unauthenticated.' }));
++
++    await expect(apiRequest('/panel')).rejects.toMatchObject({ status: 401 });
++    await new Promise((r) => setImmediate(r));
++
++    expect(clearToken).toHaveBeenCalledTimes(1);
++    expect(router.replace).toHaveBeenCalledWith('/');
++    expect(consumirSesionVencida()).toBe(true);
++    expect(consumirSesionVencida()).toBe(false);
++  });
++
++  it('no trata como vencimiento el 401 del propio logout ni el de pedidos sin token', async () => {
++    fetchMock.mockResolvedValue(respuesta(401));
++    await expect(apiRequest('/logout', { method: 'POST' })).rejects.toBeInstanceOf(ApiError);
++
++    (getToken as jest.Mock).mockResolvedValue(null);
++    await expect(apiRequest('/app/login', { method: 'POST' })).rejects.toBeInstanceOf(ApiError);
++
++    expect(clearToken).not.toHaveBeenCalled();
++  });
++});
++
++describe('errores', () => {
++  it('usa el mensaje de la API (422)', async () => {
++    fetchMock.mockResolvedValue(respuesta(422, { message: 'Código incorrecto.' }));
++    await expect(apiRequest('/x')).rejects.toMatchObject({ status: 422, message: 'Código incorrecto.' });
++  });
++
++  it('si no hay red lanza NetworkError', async () => {
++    fetchMock.mockRejectedValue(new TypeError('Network request failed'));
++    await expect(apiRequest('/x')).rejects.toBeInstanceOf(NetworkError);
++  });
++});
+diff --git a/app/__tests__/firma-y-biometria.test.ts b/app/__tests__/firma-y-biometria.test.ts
+new file mode 100644
+index 0000000..4e49b06
+--- /dev/null
++++ b/app/__tests__/firma-y-biometria.test.ts
+@@ -0,0 +1,77 @@
++import * as Location from 'expo-location';
++import * as LocalAuthentication from 'expo-local-authentication';
++
++import { biometriaDisponible, confirmarConBiometria } from '@/services/biometria-login';
++import { UbicacionError, obtenerUbicacionParaFirma } from '@/services/ubicacion-firma';
++
++jest.mock('expo-location', () => ({
++  requestForegroundPermissionsAsync: jest.fn(),
++  hasServicesEnabledAsync: jest.fn(),
++  getCurrentPositionAsync: jest.fn(),
++  Accuracy: { Balanced: 3 },
++}));
++jest.mock('expo-local-authentication', () => ({
++  hasHardwareAsync: jest.fn(),
++  isEnrolledAsync: jest.fn(),
++  authenticateAsync: jest.fn(),
++}));
++
++const L = Location as jest.Mocked<typeof Location>;
++const A = LocalAuthentication as jest.Mocked<typeof LocalAuthentication>;
++
++describe('confirmación de permisos de ubicación', () => {
++  beforeEach(() => {
++    L.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as never);
++    L.hasServicesEnabledAsync.mockResolvedValue(true);
++    L.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: -36.6, longitude: -64.3 } } as never);
++  });
++
++  it('con permiso devuelve latitud y longitud', async () => {
++    await expect(obtenerUbicacionParaFirma()).resolves.toEqual({ latitud: -36.6, longitud: -64.3 });
++  });
++
++  it('permiso denegado: se puede volver a pedir', async () => {
++    L.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true } as never);
++    const error = await obtenerUbicacionParaFirma().catch((e) => e);
++
++    expect(error).toBeInstanceOf(UbicacionError);
++    expect(error.bloqueado).toBe(false);
++  });
++
++  it('permiso bloqueado: indica ir a los ajustes', async () => {
++    L.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false } as never);
++    expect(await obtenerUbicacionParaFirma().catch((e) => e)).toMatchObject({ bloqueado: true });
++  });
++
++  it('GPS apagado y falla de lectura tienen mensaje propio', async () => {
++    L.hasServicesEnabledAsync.mockResolvedValue(false);
++    await expect(obtenerUbicacionParaFirma()).rejects.toThrow(/GPS/);
++
++    L.hasServicesEnabledAsync.mockResolvedValue(true);
++    L.getCurrentPositionAsync.mockRejectedValue(new Error('timeout'));
++    await expect(obtenerUbicacionParaFirma()).rejects.toThrow(/No se pudo obtener tu ubicación/);
++  });
++});
++
++describe('biometría', () => {
++  it('disponible solo con sensor y huella/rostro cargado', async () => {
++    A.hasHardwareAsync.mockResolvedValue(true);
++    A.isEnrolledAsync.mockResolvedValue(true);
++    expect(await biometriaDisponible()).toBe(true);
++
++    A.isEnrolledAsync.mockResolvedValue(false);
++    expect(await biometriaDisponible()).toBe(false);
++  });
++
++  it('la confirmación nunca acepta el PIN del celular', async () => {
++    A.authenticateAsync.mockResolvedValue({ success: true } as never);
++    expect(await confirmarConBiometria('Firmar')).toBe(true);
++    expect(A.authenticateAsync).toHaveBeenCalledWith(expect.objectContaining({ disableDeviceFallback: true }));
++
++    A.authenticateAsync.mockResolvedValue({ success: false } as never);
++    expect(await confirmarConBiometria('Firmar')).toBe(false);
++
++    A.authenticateAsync.mockRejectedValue(new Error('lockout'));
++    expect(await confirmarConBiometria('Firmar')).toBe(false);
++  });
++});
+diff --git a/app/__tests__/login-y-sesion.test.ts b/app/__tests__/login-y-sesion.test.ts
+new file mode 100644
+index 0000000..83e7d8d
+--- /dev/null
++++ b/app/__tests__/login-y-sesion.test.ts
+@@ -0,0 +1,87 @@
++import { agregarCola, guardarOffline, leerCola, leerOffline } from '@/lib/offline-storage';
++import { ApiError, NetworkError } from '@/services/api-client';
++import {
++  activarBiometria,
++  enviarCodigoMfa,
++  iniciarLogin,
++  loginBiometrico,
++  mensajeDeError,
++  verificarCodigoMfa,
++} from '@/services/auth-app';
++import { cerrarSesion } from '@/services/auth';
++
++jest.mock('@/lib/auth-storage', () => ({ getToken: jest.fn(), clearToken: jest.fn(async () => undefined) }));
++jest.mock('@/services/push-token', () => ({ eliminarPushToken: jest.fn(async () => undefined) }));
++jest.mock('@/services/api-client', () => {
++  const actual = jest.requireActual('@/services/api-client');
++  return { ...actual, apiRequest: jest.fn() };
++});
++
++const { apiRequest } = jest.requireMock('@/services/api-client');
++const { clearToken } = jest.requireMock('@/lib/auth-storage');
++
++describe('login con correo, SMS y push', () => {
++  beforeEach(() => apiRequest.mockResolvedValue({}));
++
++  it('paso 1 envía mail y contraseña', async () => {
++    await iniciarLogin('a@unlpam.edu.ar', 'clave');
++    expect(apiRequest).toHaveBeenCalledWith('/app/login', {
++      method: 'POST',
++      body: JSON.stringify({ mail: 'a@unlpam.edu.ar', password: 'clave' }),
++    });
++  });
++
++  it.each([
++    ['mail', undefined, null],
++    ['sms', undefined, null],
++    ['push', 'ExponentPushToken[abc]', 'ExponentPushToken[abc]'],
++  ] as const)('paso 2 por %s', async (canal, entrada, esperado) => {
++    await enviarCodigoMfa('mfa-1', canal, entrada);
++    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({
++      mfa_token: 'mfa-1',
++      canal,
++      push_token: esperado,
++    });
++  });
++
++  it('paso 3 verifica el código', async () => {
++    await verificarCodigoMfa('mfa-1', '123456');
++    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ mfa_token: 'mfa-1', codigo: '123456' });
++  });
++
++  it('muestra el mensaje de la API o de red, y uno por defecto para lo inesperado', () => {
++    expect(mensajeDeError(new ApiError(422, 'Código incorrecto.'), 'x')).toBe('Código incorrecto.');
++    expect(mensajeDeError(new NetworkError(), 'x')).toMatch(/conectar/);
++    expect(mensajeDeError(new Error('raro'), 'Falló')).toBe('Falló');
++  });
++});
++
++describe('activación y uso de biometría', () => {
++  it('activar devuelve el token del dispositivo', async () => {
++    apiRequest.mockResolvedValue({ token_dispositivo: 'dev-1' });
++    await expect(activarBiometria('clave')).resolves.toBe('dev-1');
++  });
++
++  it('el ingreso usa el token del dispositivo como Bearer', async () => {
++    apiRequest.mockResolvedValue({});
++    await loginBiometrico('dev-1');
++    expect(apiRequest).toHaveBeenCalledWith('/app/login/biometrico', {
++      method: 'POST',
++      headers: { Authorization: 'Bearer dev-1' },
++    });
++  });
++});
++
++describe('cerrar sesión', () => {
++  it('cierra aunque el servidor no responda y borra los datos offline', async () => {
++    apiRequest.mockRejectedValue(new NetworkError());
++    await guardarOffline('panel_latest', { dato: 1 });
++    await agregarCola({ method: 'PATCH', path: '/a' });
++
++    await expect(cerrarSesion()).resolves.toBeUndefined();
++
++    expect(clearToken).toHaveBeenCalled();
++    expect(await leerOffline('panel_latest')).toBeNull();
++    expect(await leerCola()).toEqual([]);
++  });
++});
+diff --git a/app/__tests__/offline-sync.test.ts b/app/__tests__/offline-sync.test.ts
+new file mode 100644
+index 0000000..cb7b57e
+--- /dev/null
++++ b/app/__tests__/offline-sync.test.ts
+@@ -0,0 +1,126 @@
++import NetInfo from '@react-native-community/netinfo';
++
++import {
++  agregarCola,
++  asegurarCacheDelUsuario,
++  guardarOffline,
++  leerCola,
++  leerOffline,
++  limpiarOffline,
++} from '@/lib/offline-storage';
++import { leerInstantaneaEnMemoria, guardarInstantaneaEnMemoria } from '@/lib/panel-memoria';
++import { ApiError, NetworkError } from '@/services/api-client';
++import { MAX_INTENTOS, sincronizarCola } from '@/services/offline-sync';
++import { marcarNotificacionLeida } from '@/services/notificaciones';
++
++jest.mock('@/services/api-client', () => {
++  const actual = jest.requireActual('@/services/api-client');
++  return { ...actual, apiRequest: jest.fn() };
++});
++
++const { apiRequest } = jest.requireMock('@/services/api-client');
++const conRed = (valor: boolean) =>
++  (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: valor, isInternetReachable: valor });
++
++beforeEach(async () => {
++  await limpiarOffline();
++  conRed(true);
++  apiRequest.mockReset();
++});
++
++const encolar = (path: string) => agregarCola({ method: 'PATCH', path });
++
++describe('cola offline y sincronización', () => {
++  it('sin conexión no envía nada y conserva la cola', async () => {
++    await encolar('/a');
++    conRed(false);
++
++    expect(await sincronizarCola()).toEqual({ procesadas: 0, descartadas: 0, pendientes: 1 });
++    expect(apiRequest).not.toHaveBeenCalled();
++  });
++
++  it('con conexión envía en orden y vacía la cola', async () => {
++    await encolar('/a');
++    await encolar('/b');
++    apiRequest.mockResolvedValue({});
++
++    expect(await sincronizarCola()).toEqual({ procesadas: 2, descartadas: 0, pendientes: 0 });
++    expect(apiRequest.mock.calls.map((c: unknown[]) => c[0])).toEqual(['/a', '/b']);
++  });
++
++  it('si la red cae a mitad de camino, lo ya enviado no se reenvía después', async () => {
++    await encolar('/a');
++    await encolar('/b');
++    apiRequest.mockResolvedValueOnce({}).mockRejectedValueOnce(new NetworkError());
++
++    expect(await sincronizarCola()).toMatchObject({ procesadas: 1, pendientes: 1 });
++    expect((await leerCola()).map((o) => o.path)).toEqual(['/b']);
++
++    apiRequest.mockResolvedValue({});
++    await sincronizarCola();
++    expect(apiRequest.mock.calls.map((c: unknown[]) => c[0])).toEqual(['/a', '/b', '/b']);
++  });
++
++  it('un rechazo definitivo (422/404) se descarta y no traba las demás', async () => {
++    await encolar('/mala');
++    await encolar('/buena');
++    apiRequest.mockRejectedValueOnce(new ApiError(404, 'No existe')).mockResolvedValueOnce({});
++
++    expect(await sincronizarCola()).toEqual({ procesadas: 1, descartadas: 1, pendientes: 0 });
++  });
++
++  it('con 401 corta y conserva todo para cuando se vuelva a iniciar sesión', async () => {
++    await encolar('/a');
++    apiRequest.mockRejectedValue(new ApiError(401, 'Unauthenticated.'));
++
++    expect(await sincronizarCola()).toMatchObject({ procesadas: 0, descartadas: 0, pendientes: 1 });
++    expect((await leerCola())[0].attempts).toBe(0);
++  });
++
++  it('una falla del servidor cuenta intentos y al llegar al máximo se descarta', async () => {
++    await encolar('/a');
++    apiRequest.mockRejectedValue(new ApiError(500, 'Error'));
++
++    for (let i = 1; i < MAX_INTENTOS; i++) {
++      await sincronizarCola();
++      expect((await leerCola())[0].attempts).toBe(i);
++    }
++
++    expect(await sincronizarCola()).toMatchObject({ descartadas: 1, pendientes: 0 });
++  });
++
++  it('marcar una notificación como leída sin red queda en la cola', async () => {
++    apiRequest.mockRejectedValueOnce(new NetworkError());
++
++    expect(await marcarNotificacionLeida(7)).toBe(false);
++    expect(await leerCola()).toMatchObject([{ method: 'PATCH', path: '/notificaciones/7/leida' }]);
++  });
++
++  it('un error de la API al marcar leída no se encola', async () => {
++    apiRequest.mockRejectedValueOnce(new ApiError(404, 'No existe'));
++
++    await expect(marcarNotificacionLeida(7)).rejects.toBeInstanceOf(ApiError);
++    expect(await leerCola()).toEqual([]);
++  });
++});
++
++describe('lectura offline del panel: datos por usuario', () => {
++  const instantanea = { me: { id_usuario: 1 }, panel: {}, actualizado: new Date() } as never;
++
++  it('el mismo usuario conserva panel y cola; otro usuario los pierde', async () => {
++    await asegurarCacheDelUsuario(1);
++    await guardarOffline('panel_latest', { dato: 1 });
++    guardarInstantaneaEnMemoria(instantanea);
++    await encolar('/a');
++
++    await asegurarCacheDelUsuario(1);
++    expect(await leerOffline('panel_latest')).toEqual({ dato: 1 });
++    expect(await leerCola()).toHaveLength(1);
++
++    await asegurarCacheDelUsuario(2);
++    expect(await leerOffline('panel_latest')).toBeNull();
++    expect(await leerCola()).toEqual([]);
++    expect(leerInstantaneaEnMemoria()).toBeNull();
++    expect(await leerOffline('duenio_cache')).toBe(2);
++  });
++});
+diff --git a/app/__tests__/push-navegacion.test.ts b/app/__tests__/push-navegacion.test.ts
+new file mode 100644
+index 0000000..ac4120d
+--- /dev/null
++++ b/app/__tests__/push-navegacion.test.ts
+@@ -0,0 +1,76 @@
++import { router } from 'expo-router';
++
++import { consumirDestinoPendiente } from '@/lib/destino-pendiente';
++import { destinoDePush } from '@/lib/push-destino';
++import { ApiError, NetworkError } from '@/services/api-client';
++import { abrirDesdePush } from '@/services/push-apertura';
++
++jest.mock('@/lib/auth-storage', () => ({ getToken: jest.fn() }));
++jest.mock('@/services/api-client', () => {
++  const actual = jest.requireActual('@/services/api-client');
++  return { ...actual, apiRequest: jest.fn() };
++});
++
++const { getToken } = jest.requireMock('@/lib/auth-storage');
++const { apiRequest } = jest.requireMock('@/services/api-client');
++const FICHA = { pathname: '/convenio/[id]', params: { id: '12' } };
++
++beforeEach(() => {
++  consumirDestinoPendiente();
++  getToken.mockResolvedValue('t');
++  apiRequest.mockResolvedValue({});
++});
++
++describe('destino según el aviso', () => {
++  it('convenio, lista y código MFA', () => {
++    expect(destinoDePush({ id_instrumento: 12 })).toEqual(FICHA);
++    expect(destinoDePush({ id_instrumento: '12' })).toEqual(FICHA);
++    expect(destinoDePush({ id_instrumento: null })).toBe('/notificaciones');
++    expect(destinoDePush({ id_instrumento: -3 })).toBe('/notificaciones');
++    expect(destinoDePush({})).toBe('/notificaciones');
++    expect(destinoDePush({ tipo: 'mfa' })).toBeNull();
++  });
++});
++
++describe('apertura de un aviso', () => {
++  it('con sesión válida abre el destino', async () => {
++    await abrirDesdePush({ id_instrumento: 12 });
++    expect(router.push).toHaveBeenCalledWith(FICHA);
++  });
++
++  it('la push del código MFA no navega', async () => {
++    await abrirDesdePush({ tipo: 'mfa' });
++    expect(router.push).not.toHaveBeenCalled();
++    expect(router.replace).not.toHaveBeenCalled();
++  });
++
++  it('sin token va al login y recuerda el destino', async () => {
++    getToken.mockResolvedValue(null);
++    await abrirDesdePush({ id_instrumento: 12 });
++
++    expect(router.replace).toHaveBeenCalledWith('/');
++    expect(router.push).not.toHaveBeenCalled();
++    expect(consumirDestinoPendiente()).toEqual(FICHA);
++    expect(consumirDestinoPendiente()).toBeNull();
++  });
++
++  it('con sesión vencida (401) no navega y recuerda el destino', async () => {
++    apiRequest.mockRejectedValue(new ApiError(401, 'Unauthenticated.'));
++    await abrirDesdePush({ id_instrumento: 12 });
++
++    expect(router.push).not.toHaveBeenCalled();
++    expect(consumirDestinoPendiente()).toEqual(FICHA);
++  });
++
++  it('sin conexión abre igual (datos guardados)', async () => {
++    apiRequest.mockRejectedValue(new NetworkError());
++    await abrirDesdePush({ id_instrumento: 12 });
++    expect(router.push).toHaveBeenCalledWith(FICHA);
++  });
++
++  it('el destino pendiente caduca', () => {
++    const { guardarDestinoPendiente } = jest.requireActual('@/lib/destino-pendiente');
++    guardarDestinoPendiente('/notificaciones', 0);
++    expect(consumirDestinoPendiente(6 * 60 * 1000)).toBeNull();
++  });
++});
+diff --git a/app/__tests__/setup.ts b/app/__tests__/setup.ts
+new file mode 100644
+index 0000000..3f9a915
+--- /dev/null
++++ b/app/__tests__/setup.ts
+@@ -0,0 +1,23 @@
++jest.mock('@react-native-async-storage/async-storage', () =>
++  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
++);
++
++jest.mock('@react-native-community/netinfo', () => ({
++  __esModule: true,
++  default: { fetch: jest.fn(), addEventListener: jest.fn(() => jest.fn()) },
++}));
++
++jest.mock('expo-router', () => ({
++  router: { replace: jest.fn(), push: jest.fn() },
++}));
++
++jest.mock('expo-secure-store', () => ({
++  isAvailableAsync: jest.fn(async () => true),
++  getItemAsync: jest.fn(async () => null),
++  setItemAsync: jest.fn(async () => undefined),
++  deleteItemAsync: jest.fn(async () => undefined),
++}));
++
++afterEach(() => {
++  jest.clearAllMocks();
++});
+diff --git a/app/package.json b/app/package.json
+index c9961c6..0637ad2 100644
+--- a/app/package.json
++++ b/app/package.json
+@@ -41,9 +41,13 @@
+     "react-native-worklets": "0.13.0"
+   },
+   "devDependencies": {
++    "@react-native/jest-preset": "^0.88.1",
++    "@types/jest": "~29.5.14",
+     "@types/react": "~19.3.0",
+     "eslint": "^9.0.0",
+     "eslint-config-expo": "~58.0.4",
++    "jest": "~29.7.0",
++    "jest-expo": "~58.0.15",
+     "typescript": "~6.0.3"
+   },
+   "scripts": {
+@@ -52,7 +56,20 @@
+     "android": "expo start --android",
+     "ios": "expo start --ios",
+     "web": "expo start --web",
+-    "lint": "expo lint"
++    "lint": "expo lint",
++    "test": "jest"
+   },
+-  "private": true
++  "private": true,
++  "jest": {
++    "preset": "jest-expo",
++    "testMatch": [
++      "<rootDir>/__tests__/**/*.test.ts"
++    ],
++    "moduleNameMapper": {
++      "^@/(.*)$": "<rootDir>/src/$1"
++    },
++    "setupFilesAfterEnv": [
++      "<rootDir>/__tests__/setup.ts"
++    ]
++  }
+ }
+diff --git a/app/src/app/_layout.tsx b/app/src/app/_layout.tsx
+index 5d1c96f..57ce9a9 100644
+--- a/app/src/app/_layout.tsx
++++ b/app/src/app/_layout.tsx
+@@ -1,23 +1,14 @@
+ import { useEffect } from 'react';
+ import { Platform } from 'react-native';
+-import { router, DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
++import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+ 
+ import { useSgcTheme } from '@/hooks/use-sgc-theme';
++import { abrirDesdePush } from '@/services/push-apertura';
+ 
+ export default function RootLayout() {
+   // La preferencia guardada en la app (no el tema del sistema) decide el tema de navegación.
+   const { scheme } = useSgcTheme();
+ 
+-  function abrirDesdePush(data: Record<string, unknown>): void {
+-    const id = Number(data.id_instrumento);
+-
+-    if (Number.isInteger(id) && id > 0) {
+-      router.push({ pathname: '/convenio/[id]', params: { id: String(id) } });
+-    } else {
+-      router.push('/notificaciones');
+-    }
+-  }
+-
+   useEffect(() => {
+     if (Platform.OS === 'web') return;
+ 
+@@ -37,12 +28,14 @@ export default function RootLayout() {
+ 
+       const respuestaInicial = await Notifications.getLastNotificationResponseAsync();
+       if (respuestaInicial) {
+-        abrirDesdePush(respuestaInicial.notification.request.content.data ?? {});
++        void abrirDesdePush(respuestaInicial.notification.request.content.data ?? {});
+         await Notifications.clearLastNotificationResponseAsync();
+       }
+ 
+       suscripcion = Notifications.addNotificationResponseReceivedListener((respuesta) => {
+-        abrirDesdePush(respuesta.notification.request.content.data ?? {});
++        // Solo el toque sobre el aviso; descartarlo (u otras acciones) no navega.
++        if (respuesta.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
++        void abrirDesdePush(respuesta.notification.request.content.data ?? {});
+       });
+     })();
+ 
+diff --git a/app/src/app/firmador.tsx b/app/src/app/firmador.tsx
+index 92ddb1e..2ef63db 100644
+--- a/app/src/app/firmador.tsx
++++ b/app/src/app/firmador.tsx
+@@ -3,6 +3,7 @@ import {
+   ActivityIndicator,
+   Alert,
+   BackHandler,
++  Linking,
+   Pressable,
+   RefreshControl,
+   ScrollView,
+@@ -12,7 +13,6 @@ import {
+ } from 'react-native';
+ import { useLocalSearchParams, useRouter } from 'expo-router';
+ import * as LocalAuthentication from 'expo-local-authentication';
+-import * as Location from 'expo-location';
+ import * as Sharing from 'expo-sharing';
+ import SignatureCanvas, {
+   type SignatureViewRef,
+@@ -27,6 +27,8 @@ import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
+ import { useSgcTheme } from '@/hooks/use-sgc-theme';
+ import { detectarConflicto, type ConflictoFirma } from '@/lib/concurrencia-firma';
+ import { ApiError } from '@/services/api-client';
++import { confirmarConBiometria } from '@/services/biometria-login';
++import { UbicacionError, obtenerUbicacionParaFirma } from '@/services/ubicacion-firma';
+ import { crearComentarioFirma, descargarConstanciaFirma, descargarDocumentoFirma, listarPendientesFirma, registrarFirma } from '@/services/firma';
+ import type { PendienteFirmaCompleto } from '@/types/firma';
+ import type { ComentarioFirmador } from '@/types/firmador-comentarios';
+@@ -260,26 +262,17 @@ export default function FirmadorScreen() {
+         throw new Error('El dispositivo no tiene huella o reconocimiento facial configurado.');
+       }
+ 
+-      const autenticacion = await LocalAuthentication.authenticateAsync({
+-        promptMessage: 'Confirmá tu identidad para firmar',
+-        cancelLabel: 'Cancelar',
+-        disableDeviceFallback: false,
+-      });
+-      if (!autenticacion.success) throw new Error('La confirmación biométrica fue cancelada.');
+-
+-      const permiso = await Location.requestForegroundPermissionsAsync();
+-      if (permiso.status !== 'granted') {
+-        throw new Error('Hace falta permiso de ubicación para registrar la firma.');
++      // Solo huella o rostro (sin PIN del celular): se informa a la API como biometría confirmada.
++      if (!(await confirmarConBiometria('Confirmá tu identidad para firmar'))) {
++        throw new Error('La confirmación biométrica fue cancelada.');
+       }
+ 
+-      const posicion = await Location.getCurrentPositionAsync({
+-        accuracy: Location.Accuracy.Balanced,
+-      });
++      const { latitud, longitud } = await obtenerUbicacionParaFirma();
+ 
+       const resultado = await registrarFirma(seleccionado.id_instrumento, {
+         trazo,
+-        latitud: posicion.coords.latitude,
+-        longitud: posicion.coords.longitude,
++        latitud,
++        longitud,
+         biometria_confirmada: true,
+         version_registro: seleccionado.version_registro,
+       });
+@@ -305,7 +298,16 @@ export default function FirmadorScreen() {
+         }
+       }
+ 
+-      Alert.alert('No se pudo registrar la firma', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
++      const mensaje = exception instanceof Error ? exception.message : 'Intentá nuevamente.';
++
++      if (exception instanceof UbicacionError && exception.bloqueado) {
++        Alert.alert('No se pudo registrar la firma', mensaje, [
++          { text: 'Cancelar', style: 'cancel' },
++          { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
++        ]);
++      } else {
++        Alert.alert('No se pudo registrar la firma', mensaje);
++      }
+     } finally {
+       setFirmando(false);
+     }
+diff --git a/app/src/app/index.tsx b/app/src/app/index.tsx
+index 9d2f229..6387a7b 100644
+--- a/app/src/app/index.tsx
++++ b/app/src/app/index.tsx
+@@ -16,6 +16,8 @@ import { Txt } from '@/components/panel/txt';
+ import { API_URL } from '@/constants/api';
+ import { useSgcTheme } from '@/hooks/use-sgc-theme';
+ import { getToken, setToken } from '@/lib/auth-storage';
++import { consumirDestinoPendiente } from '@/lib/destino-pendiente';
++import { asegurarCacheDelUsuario } from '@/lib/offline-storage';
+ import { clearTokenDispositivo, getTokenDispositivo } from '@/lib/biometria-storage';
+ import { consumirSesionVencida } from '@/lib/sesion-estado';
+ import { ApiError, NetworkError } from '@/services/api-client';
+@@ -88,11 +90,22 @@ export default function LoginScreen() {
+   async function abrirSesion(sesion: SesionApp) {
+     await setToken(sesion.access_token);
+ 
++    // Si entra otra persona en este celular, no hereda el panel ni la cola de la anterior.
++    try {
++      await asegurarCacheDelUsuario(sesion.user.id_usuario);
++    } catch (cacheError) {
++      console.warn('No se pudo preparar el caché offline:', cacheError);
++    }
++
+     void registrarPushToken().catch((error) => {
+       console.warn('No se pudo registrar el token push:', error);
+     });
+ 
+     router.replace('/dashboard');
++
++    // Venía de tocar un aviso con la sesión vencida: ahora sí se abre.
++    const destino = consumirDestinoPendiente();
++    if (destino) router.push(destino);
+   }
+ 
+   /** Paso 1: mail y contraseña. Si son correctos, la API pide el código (paso 2). */
+diff --git a/app/src/app/notificaciones.tsx b/app/src/app/notificaciones.tsx
+index 9654dd5..911ab3e 100644
+--- a/app/src/app/notificaciones.tsx
++++ b/app/src/app/notificaciones.tsx
+@@ -32,6 +32,8 @@ export default function NotificacionesScreen() {
+ 
+     try {
+       await marcarNotificacionLeida(notificacionId);
++    } catch {
++      // Si no se pudo marcar (ej. 404) igual se abre el convenio; el panel se refresca abajo.
+     } finally {
+       if (idInstrumento !== null) router.push(Destinos.convenio(idInstrumento));
+       void actualizar();
+diff --git a/app/src/hooks/use-convenios.ts b/app/src/hooks/use-convenios.ts
+index 8fb04a7..3001c53 100644
+--- a/app/src/hooks/use-convenios.ts
++++ b/app/src/hooks/use-convenios.ts
+@@ -101,7 +101,8 @@ export function useConvenios(filtros: Filtros) {
+ 
+   useEffect(() => {
+     void leerOffline<Datos>('convenios_latest').then((guardados) => {
+-      if (guardados) setDatos(guardados);
++      // No pisa una respuesta del servidor que haya llegado antes de terminar de leer el disco.
++      if (guardados) setDatos((actuales) => actuales ?? guardados);
+     });
+   }, []);
+ 
+diff --git a/app/src/hooks/use-panel.ts b/app/src/hooks/use-panel.ts
+index 94e5b67..d07c979 100644
+--- a/app/src/hooks/use-panel.ts
++++ b/app/src/hooks/use-panel.ts
+@@ -5,25 +5,15 @@ import NetInfo from '@react-native-community/netinfo';
+ 
+ import { clearToken } from '@/lib/auth-storage';
+ import { guardarOffline, leerOffline } from '@/lib/offline-storage';
++import {
++  guardarInstantaneaEnMemoria,
++  leerInstantaneaEnMemoria,
++  type InstantaneaPanel as Instantanea,
++} from '@/lib/panel-memoria';
+ import { ApiError, NetworkError } from '@/services/api-client';
+ import { sincronizarCola } from '@/services/offline-sync';
+ import { obtenerUsuarioActual } from '@/services/auth';
+ import { obtenerPanel } from '@/services/panel';
+-import type { UsuarioAutenticado } from '@/types/auth';
+-import type { PanelData } from '@/types/panel';
+-
+-type Instantanea = {
+-  me: UsuarioAutenticado;
+-  panel: PanelData;
+-  actualizado: Date;
+-};
+-
+-/**
+- * Última respuesta exitosa. Vive en memoria: sirve para mostrar los pendientes de firma
+- * cuando se pierde la conexión. Para que sobreviva al cierre de la app hay que guardarla
+- * en un almacenamiento persistente (por ejemplo AsyncStorage) en este mismo punto.
+- */
+-let ultimaInstantanea: Instantanea | null = null;
+ 
+ const REINTENTO_SIN_CONEXION_MS = 15000;
+ 
+@@ -31,8 +21,8 @@ export type EstadoPanel = 'cargando' | 'listo' | 'error';
+ 
+ export function usePanel() {
+   const router = useRouter();
+-  const [instantanea, setInstantanea] = useState<Instantanea | null>(ultimaInstantanea);
+-  const [estado, setEstado] = useState<EstadoPanel>(ultimaInstantanea ? 'listo' : 'cargando');
++  const [instantanea, setInstantanea] = useState<Instantanea | null>(leerInstantaneaEnMemoria);
++  const [estado, setEstado] = useState<EstadoPanel>(leerInstantaneaEnMemoria() ? 'listo' : 'cargando');
+   const [sinConexion, setSinConexion] = useState(false);
+   const [actualizando, setActualizando] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+@@ -45,7 +35,7 @@ export function usePanel() {
+         const [me, panel] = await Promise.all([obtenerUsuarioActual(), obtenerPanel()]);
+         const nueva: Instantanea = { me, panel, actualizado: new Date() };
+ 
+-        ultimaInstantanea = nueva;
++        guardarInstantaneaEnMemoria(nueva);
+         setInstantanea(nueva);
+         setSinConexion(false);
+         setError(null);
+@@ -63,7 +53,7 @@ export function usePanel() {
+           setEstado('listo');
+         } else {
+           setError(causa instanceof Error ? causa.message : 'No se pudo cargar el panel.');
+-          setEstado(ultimaInstantanea ? 'listo' : 'error');
++          setEstado(leerInstantaneaEnMemoria() ? 'listo' : 'error');
+         }
+       } finally {
+         setActualizando(false);
+@@ -101,12 +91,12 @@ export function usePanel() {
+   // Carga el último panel al montar el hook.
+   useEffect(() => {
+     void leerOffline<Instantanea>('panel_latest').then((guardada) => {
+-      if (guardada) {
+-        ultimaInstantanea = {
+-          ...guardada,
+-          actualizado: new Date(guardada.actualizado),
+-        };
+-        setInstantanea(ultimaInstantanea);
++      // Si mientras se leía el disco ya llegó una respuesta del servidor, esa es más nueva.
++      if (guardada && !leerInstantaneaEnMemoria()) {
++        const restaurada = { ...guardada, actualizado: new Date(guardada.actualizado) };
++
++        guardarInstantaneaEnMemoria(restaurada);
++        setInstantanea((actual) => actual ?? restaurada);
+         setEstado('listo');
+       }
+     });
+diff --git a/app/src/lib/destino-pendiente.ts b/app/src/lib/destino-pendiente.ts
+new file mode 100644
+index 0000000..5246413
+--- /dev/null
++++ b/app/src/lib/destino-pendiente.ts
+@@ -0,0 +1,21 @@
++import type { Href } from 'expo-router';
++
++/**
++ * Pantalla a la que ir después de iniciar sesión: se guarda cuando el usuario toca un aviso
++ * (push) pero la sesión ya había vencido. Vive en memoria y caduca a los pocos minutos.
++ */
++const VIGENCIA_MS = 5 * 60 * 1000;
++
++let pendiente: { destino: Href; guardadoEn: number } | null = null;
++
++export function guardarDestinoPendiente(destino: Href, ahora = Date.now()): void {
++  pendiente = { destino, guardadoEn: ahora };
++}
++
++/** Devuelve el destino una sola vez (o null si no hay o caducó). */
++export function consumirDestinoPendiente(ahora = Date.now()): Href | null {
++  const actual = pendiente;
++  pendiente = null;
++
++  return actual && ahora - actual.guardadoEn <= VIGENCIA_MS ? actual.destino : null;
++}
+diff --git a/app/src/lib/offline-storage.ts b/app/src/lib/offline-storage.ts
+index 72da6e4..96480e1 100644
+--- a/app/src/lib/offline-storage.ts
++++ b/app/src/lib/offline-storage.ts
+@@ -1,6 +1,9 @@
+ import AsyncStorage from '@react-native-async-storage/async-storage';
+ 
++import { olvidarInstantaneaEnMemoria } from '@/lib/panel-memoria';
++
+ const PREFIX = 'sgc_offline:';
++const CLAVE_DUENO = 'duenio_cache';
+ 
+ export type PendingOperation = {
+   id: string;
+@@ -54,6 +57,37 @@ export async function actualizarCola(cola: PendingOperation[]): Promise<void> {
+   await guardarOffline('pending_operations', cola);
+ }
+ 
++/** Cambia solo una operación de la cola, sobre lo que hay guardado ahora (no sobre una copia vieja). */
++export async function actualizarOperacion(
++  id: string,
++  cambios: Partial<Pick<PendingOperation, 'attempts'>>,
++): Promise<void> {
++  const cola = await leerCola();
++  await actualizarCola(cola.map((operacion) => (operacion.id === id ? { ...operacion, ...cambios } : operacion)));
++}
++
++/** Borra todo lo guardado para uso offline (panel, convenios, cola) y la copia en memoria. */
++export async function limpiarOffline(): Promise<void> {
++  olvidarInstantaneaEnMemoria();
++
++  const claves = (await AsyncStorage.getAllKeys()).filter((clave) => clave.startsWith(PREFIX));
++  if (claves.length > 0) await AsyncStorage.multiRemove(claves);
++}
++
++/**
++ * Los datos offline pertenecen a un usuario. Si entra otro en el mismo celular se borran
++ * antes de mostrarlos, para que no vea el panel ni dispare la cola del anterior.
++ * Si es el mismo usuario (por ejemplo, tras vencer la sesión) se conservan.
++ */
++export async function asegurarCacheDelUsuario(idUsuario: number): Promise<void> {
++  const dueno = await leerOffline<number>(CLAVE_DUENO);
++
++  if (dueno !== idUsuario) {
++    await limpiarOffline();
++    await guardarOffline(CLAVE_DUENO, idUsuario);
++  }
++}
++
+ export async function quitarDeCola(id: string): Promise<void> {
+   const cola = await leerCola();
+   await actualizarCola(cola.filter((operacion) => operacion.id !== id));
+diff --git a/app/src/lib/panel-memoria.ts b/app/src/lib/panel-memoria.ts
+new file mode 100644
+index 0000000..35eba15
+--- /dev/null
++++ b/app/src/lib/panel-memoria.ts
+@@ -0,0 +1,26 @@
++import type { UsuarioAutenticado } from '@/types/auth';
++import type { PanelData } from '@/types/panel';
++
++export type InstantaneaPanel = {
++  me: UsuarioAutenticado;
++  panel: PanelData;
++  actualizado: Date;
++};
++
++/**
++ * Última respuesta exitosa del panel, en memoria. Está en su propio módulo para poder
++ * olvidarla al cerrar sesión o al entrar otro usuario (ver `limpiarOffline`).
++ */
++let ultima: InstantaneaPanel | null = null;
++
++export function leerInstantaneaEnMemoria(): InstantaneaPanel | null {
++  return ultima;
++}
++
++export function guardarInstantaneaEnMemoria(valor: InstantaneaPanel): void {
++  ultima = valor;
++}
++
++export function olvidarInstantaneaEnMemoria(): void {
++  ultima = null;
++}
+diff --git a/app/src/lib/push-destino.ts b/app/src/lib/push-destino.ts
+new file mode 100644
+index 0000000..307bb67
+--- /dev/null
++++ b/app/src/lib/push-destino.ts
+@@ -0,0 +1,17 @@
++import type { Href } from 'expo-router';
++
++import { Destinos } from '@/constants/navigation';
++
++/**
++ * A qué pantalla lleva una push según su `data`:
++ * - código de verificación (`tipo: 'mfa'`): a ninguna, el usuario ya está en el login;
++ * - aviso de un convenio: la ficha de ese convenio;
++ * - cualquier otro aviso: la lista de notificaciones.
++ */
++export function destinoDePush(data: Record<string, unknown>): Href | null {
++  if (data.tipo === 'mfa') return null;
++
++  const id = Number(data.id_instrumento);
++
++  return Number.isInteger(id) && id > 0 ? Destinos.convenio(id) : Destinos.notificaciones();
++}
+diff --git a/app/src/services/auth.ts b/app/src/services/auth.ts
+index 834a63d..5912195 100644
+--- a/app/src/services/auth.ts
++++ b/app/src/services/auth.ts
+@@ -1,4 +1,5 @@
+ import { clearToken } from '@/lib/auth-storage';
++import { limpiarOffline } from '@/lib/offline-storage';
+ import { apiRequest } from '@/services/api-client';
+ import { eliminarPushToken } from '@/services/push-token';
+ import type { UsuarioAutenticado } from '@/types/auth';
+@@ -23,4 +24,11 @@ export async function cerrarSesion(): Promise<void> {
+   }
+ 
+   await clearToken();
++
++  // Al cerrar sesión por decisión del usuario no queda su panel ni su cola en el celular.
++  try {
++    await limpiarOffline();
++  } catch (error) {
++    console.warn('No se pudieron borrar los datos offline:', error);
++  }
+ }
+diff --git a/app/src/services/notificaciones.ts b/app/src/services/notificaciones.ts
+index 47781be..ddf977e 100644
+--- a/app/src/services/notificaciones.ts
++++ b/app/src/services/notificaciones.ts
+@@ -1,7 +1,22 @@
+-import { apiRequest } from '@/services/api-client';
++import { agregarCola } from '@/lib/offline-storage';
++import { NetworkError, apiRequest } from '@/services/api-client';
+ 
+-export async function marcarNotificacionLeida(idNotificacion: number): Promise<void> {
+-  await apiRequest(`/notificaciones/${idNotificacion}/leida`, { method: 'PATCH' });
++/**
++ * Marca una notificación como leída. Si no hay conexión con el servidor queda en la cola
++ * offline y se envía al volver la red (`sincronizarCola`); devuelve `false` en ese caso.
++ */
++export async function marcarNotificacionLeida(idNotificacion: number): Promise<boolean> {
++  const path = `/notificaciones/${idNotificacion}/leida`;
++
++  try {
++    await apiRequest(path, { method: 'PATCH' });
++    return true;
++  } catch (error) {
++    if (!(error instanceof NetworkError)) throw error;
++
++    await agregarCola({ method: 'PATCH', path });
++    return false;
++  }
+ }
+ 
+ export async function marcarTodasNotificacionesLeidas(): Promise<number> {
+diff --git a/app/src/services/offline-sync.ts b/app/src/services/offline-sync.ts
+index 2cb20f2..be842d3 100644
+--- a/app/src/services/offline-sync.ts
++++ b/app/src/services/offline-sync.ts
+@@ -1,12 +1,14 @@
+ import NetInfo from '@react-native-community/netinfo';
+ 
+ import {
++  actualizarOperacion,
+   leerCola,
+   quitarDeCola,
+-  actualizarCola,
+-  type PendingOperation,
+ } from '@/lib/offline-storage';
+-import { apiRequest } from '@/services/api-client';
++import { ApiError, NetworkError, apiRequest } from '@/services/api-client';
++
++/** Reintentos de un mismo pedido que falla por el servidor (5xx, 408, 429) antes de descartarlo. */
++export const MAX_INTENTOS = 5;
+ 
+ let sincronizando = false;
+ 
+@@ -15,42 +17,78 @@ async function hayConexion(): Promise<boolean> {
+   return estado.isConnected === true && estado.isInternetReachable !== false;
+ }
+ 
+-export async function sincronizarCola(): Promise<{ procesadas: number; pendientes: number }> {
+-  if (sincronizando) return { procesadas: 0, pendientes: await contarPendientes() };
+-  if (!(await hayConexion())) return { procesadas: 0, pendientes: await contarPendientes() };
++/** Errores que no se arreglan reintentando (datos inválidos, sin permiso, ya no existe). */
++function esErrorDefinitivo(error: unknown): boolean {
++  return (
++    error instanceof ApiError &&
++    error.status >= 400 &&
++    error.status < 500 &&
++    error.status !== 401 &&
++    error.status !== 408 &&
++    error.status !== 429
++  );
++}
++
++export type ResultadoSincronizacion = {
++  procesadas: number;
++  /** Operaciones que el servidor rechazó de forma definitiva y se sacaron de la cola. */
++  descartadas: number;
++  pendientes: number;
++};
++
++/**
++ * Envía en orden lo que quedó en la cola mientras no había conexión.
++ *
++ * - Éxito: la operación sale de la cola.
++ * - Sin conexión o sesión vencida (401): se corta y todo queda para después.
++ * - Rechazo definitivo (400, 403, 404, 409, 422...): se descarta y sigue con la próxima,
++ *   para que un pedido inválido no trabe a los demás.
++ * - Falla del servidor (5xx, 408, 429): se cuenta el intento y se corta; al llegar a
++ *   `MAX_INTENTOS` se descarta.
++ */
++export async function sincronizarCola(): Promise<ResultadoSincronizacion> {
++  if (sincronizando || !(await hayConexion())) {
++    return { procesadas: 0, descartadas: 0, pendientes: await contarPendientes() };
++  }
+ 
+   sincronizando = true;
+ 
+   try {
+-    let cola = await leerCola();
+     let procesadas = 0;
++    let descartadas = 0;
+ 
+-    for (const operacion of cola) {
++    for (const operacion of await leerCola()) {
+       try {
+         await apiRequest(operacion.path, {
+           method: operacion.method,
+-          ...(operacion.body !== undefined
+-            ? { body: JSON.stringify(operacion.body) }
+-            : {}),
++          ...(operacion.body !== undefined ? { body: JSON.stringify(operacion.body) } : {}),
+         });
+ 
+         await quitarDeCola(operacion.id);
+         procesadas++;
+       } catch (error) {
+-        const actualizado: PendingOperation = {
+-          ...operacion,
+-          attempts: operacion.attempts + 1,
+-        };
++        if (error instanceof NetworkError || (error instanceof ApiError && error.status === 401)) break;
++
++        if (esErrorDefinitivo(error)) {
++          await quitarDeCola(operacion.id);
++          descartadas++;
++          continue;
++        }
++
++        const intentos = operacion.attempts + 1;
+ 
+-        cola = cola.map((item) => (item.id === operacion.id ? actualizado : item));
+-        await actualizarCola(cola);
++        if (intentos >= MAX_INTENTOS) {
++          await quitarDeCola(operacion.id);
++          descartadas++;
++        } else {
++          await actualizarOperacion(operacion.id, { attempts: intentos });
++        }
+ 
+-        if (error instanceof Error) break;
++        break;
+       }
+     }
+ 
+-    const pendientes = await contarPendientes();
+-    return { procesadas, pendientes };
++    return { procesadas, descartadas, pendientes: await contarPendientes() };
+   } finally {
+     sincronizando = false;
+   }
+diff --git a/app/src/services/push-apertura.ts b/app/src/services/push-apertura.ts
+new file mode 100644
+index 0000000..82d539b
+--- /dev/null
++++ b/app/src/services/push-apertura.ts
+@@ -0,0 +1,36 @@
++import { router } from 'expo-router';
++
++import { guardarDestinoPendiente } from '@/lib/destino-pendiente';
++import { destinoDePush } from '@/lib/push-destino';
++import { ApiError, apiRequest } from '@/services/api-client';
++import { getToken } from '@/lib/auth-storage';
++
++/**
++ * Abre la pantalla que corresponde al aviso que tocó el usuario.
++ *
++ * Antes de navegar se comprueba la sesión (`/me`, que además la renueva): con 10 minutos de
++ * inactividad lo habitual es que haya vencido. En ese caso se vuelve al login y, al ingresar,
++ * se abre el destino pedido. Sin conexión se navega igual (se muestran los datos guardados).
++ */
++export async function abrirDesdePush(data: Record<string, unknown>): Promise<void> {
++  const destino = destinoDePush(data);
++  if (destino === null) return;
++
++  if (!(await getToken())) {
++    guardarDestinoPendiente(destino);
++    router.replace('/');
++    return;
++  }
++
++  try {
++    await apiRequest('/me');
++  } catch (error) {
++    if (error instanceof ApiError && error.status === 401) {
++      // api-client ya limpió la sesión y llevó al login.
++      guardarDestinoPendiente(destino);
++      return;
++    }
++  }
++
++  router.push(destino);
++}
+diff --git a/app/src/services/ubicacion-firma.ts b/app/src/services/ubicacion-firma.ts
+new file mode 100644
+index 0000000..e713a22
+--- /dev/null
++++ b/app/src/services/ubicacion-firma.ts
+@@ -0,0 +1,39 @@
++import * as Location from 'expo-location';
++
++/** No se pudo obtener la ubicación para firmar. `bloqueado`: solo se arregla desde los ajustes del celular. */
++export class UbicacionError extends Error {
++  bloqueado: boolean;
++
++  constructor(message: string, bloqueado = false) {
++    super(message);
++    this.name = 'UbicacionError';
++    this.bloqueado = bloqueado;
++  }
++}
++
++/** Pide permiso (si hace falta) y devuelve la posición actual, con mensajes claros para cada falla. */
++export async function obtenerUbicacionParaFirma(): Promise<{ latitud: number; longitud: number }> {
++  const permiso = await Location.requestForegroundPermissionsAsync();
++
++  if (permiso.status !== 'granted') {
++    if (permiso.canAskAgain === false) {
++      throw new UbicacionError(
++        'El permiso de ubicación está bloqueado. Habilitalo en los ajustes de la aplicación para poder firmar.',
++        true,
++      );
++    }
++
++    throw new UbicacionError('Hace falta permiso de ubicación para registrar la firma.');
++  }
++
++  if (!(await Location.hasServicesEnabledAsync())) {
++    throw new UbicacionError('La ubicación (GPS) del dispositivo está desactivada. Activala y reintentá.');
++  }
++
++  try {
++    const posicion = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
++    return { latitud: posicion.coords.latitude, longitud: posicion.coords.longitude };
++  } catch {
++    throw new UbicacionError('No se pudo obtener tu ubicación. Probá en un lugar con mejor señal.');
++  }
++}
+diff --git a/app/tsconfig.json b/app/tsconfig.json
+index 2e9a669..0765eb1 100644
+--- a/app/tsconfig.json
++++ b/app/tsconfig.json
+@@ -2,6 +2,7 @@
+   "extends": "expo/tsconfig.base",
+   "compilerOptions": {
+     "strict": true,
++    "types": ["jest", "node"],
+     "paths": {
+       "@/*": [
+         "./src/*"
+diff --git a/docs/pruebas-moviles.md b/docs/pruebas-moviles.md
+new file mode 100644
+index 0000000..9f01897
+--- /dev/null
++++ b/docs/pruebas-moviles.md
+@@ -0,0 +1,45 @@
++# Fase 6 — Pruebas móviles
++
++Dos partes: **tests automáticos** (`cd app && npm test`, 36 casos, corren sin celular) y **pruebas en dispositivos reales** (lo que ningún test puede confirmar: sensores, push, permisos del sistema).
++
++## Preparación para dispositivos reales
++
++| Requisito | Android | iOS |
++|---|---|---|
++| Build | `npx expo run:android` o `eas build --profile development` (Expo Go **no** sirve para push remotas) | `npx expo run:ios` o `eas build --profile development` (requiere cuenta Apple Developer) |
++| API | `php artisan serve --host=0.0.0.0` y `EXPO_PUBLIC_API_URL=http://IP_DE_LA_PC:8000` en `app/.env` | igual |
++| Push | `extra.eas.projectId` en `app.json` (`eas init`) + credenciales FCM | `extra.eas.projectId` + clave APNs |
++| Biometría | huella o rostro cargado en el celular | Face ID / Touch ID cargado |
++
++Pendientes de configuración que **no** se tocaron (son decisiones tuyas): `extra.eas.projectId`, `android.package` e `ios.bundleIdentifier` no están en `app.json`. Sin `projectId` el canal push del login devuelve "este dispositivo no puede recibir push". Un build *release* de Android bloquea `http://` (la API local sin HTTPS): usar un build de desarrollo o publicar la API con HTTPS.
++
++## Matriz: qué cubre cada punto
++
++| # | Punto | Test automático | Prueba manual en celular real |
++|---|---|---|---|
++| 1 | Login con correo, SMS y push | `login-y-sesion` (los 3 canales, errores) | Ingresar por cada canal. Push: llega, muestra el código; **tocarla no debe navegar** |
++| 2 | Sesión expirada y renovación | `api-client` (401 → login + aviso, renovación por uso) | Dejar 10 min sin uso y tocar algo: vuelve al login con "venció por inactividad" |
++| 3 | Activación y uso de biometría | `login-y-sesion`, `firma-y-biometria` | Perfil → activar (pide contraseña + huella/rostro); cerrar sesión; ingresar solo con huella. Revocar desde otro lado: debe pedir contraseña |
++| 4 | Lectura offline del panel | `offline-sync` (datos por usuario) | Abrir el panel con red, activar modo avión, reabrir la app: se ve el panel con banner "Sin conexión" |
++| 5 | Cola offline y sincronización | `offline-sync` (orden, red caída, 4xx, 401, 5xx) | Con la API apagada, tocar un aviso en Notificaciones; encender la API: queda leído |
++| 6 | Recepción y apertura de push | `push-navegacion` | Con app abierta, en segundo plano y cerrada: llega el aviso y al tocarlo abre |
++| 7 | Navegación desde avisos | `push-navegacion` (convenio / lista / sesión vencida) | Aviso de convenio → ficha. Con sesión vencida → login y luego ficha |
++| 8 | Firma con ubicación y registro biométrico | `firma-y-biometria` | Firmar: pide huella/rostro (sin PIN) y ubicación; se registra con latitud/longitud |
++| 9 | Confirmación de permisos | `firma-y-biometria` | Denegar ubicación → mensaje; denegar "para siempre" → botón **Abrir ajustes**; GPS apagado → aviso |
++| 10 | Estados de carga, error y vacío | — (revisión visual) | Panel/convenios/notificaciones: spinner, error con API apagada, "No tenés notificaciones" |
++| 11 | Android e iOS reales | — | Repetir 1–10 en al menos un Android y un iPhone; anotar modelo y versión |
++
++## Planilla de resultados
++
++| # | Android (modelo/versión) | iOS (modelo/versión) | Observaciones |
++|---|---|---|---|
++| 1 | | | |
++| 2 | | | |
++| 3 | | | |
++| 4 | | | |
++| 5 | | | |
++| 6 | | | |
++| 7 | | | |
++| 8 | | | |
++| 9 | | | |
++| 10 | | | |

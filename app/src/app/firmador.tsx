@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,7 +13,6 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
 import SignatureCanvas, {
   type SignatureViewRef,
@@ -27,6 +27,8 @@ import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { detectarConflicto, type ConflictoFirma } from '@/lib/concurrencia-firma';
 import { ApiError } from '@/services/api-client';
+import { confirmarConBiometria } from '@/services/biometria-login';
+import { UbicacionError, obtenerUbicacionParaFirma } from '@/services/ubicacion-firma';
 import { crearComentarioFirma, descargarConstanciaFirma, descargarDocumentoFirma, listarPendientesFirma, registrarFirma } from '@/services/firma';
 import type { PendienteFirmaCompleto } from '@/types/firma';
 import type { ComentarioFirmador } from '@/types/firmador-comentarios';
@@ -260,26 +262,17 @@ export default function FirmadorScreen() {
         throw new Error('El dispositivo no tiene huella o reconocimiento facial configurado.');
       }
 
-      const autenticacion = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Confirmá tu identidad para firmar',
-        cancelLabel: 'Cancelar',
-        disableDeviceFallback: false,
-      });
-      if (!autenticacion.success) throw new Error('La confirmación biométrica fue cancelada.');
-
-      const permiso = await Location.requestForegroundPermissionsAsync();
-      if (permiso.status !== 'granted') {
-        throw new Error('Hace falta permiso de ubicación para registrar la firma.');
+      // Solo huella o rostro (sin PIN del celular): se informa a la API como biometría confirmada.
+      if (!(await confirmarConBiometria('Confirmá tu identidad para firmar'))) {
+        throw new Error('La confirmación biométrica fue cancelada.');
       }
 
-      const posicion = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      const { latitud, longitud } = await obtenerUbicacionParaFirma();
 
       const resultado = await registrarFirma(seleccionado.id_instrumento, {
         trazo,
-        latitud: posicion.coords.latitude,
-        longitud: posicion.coords.longitude,
+        latitud,
+        longitud,
         biometria_confirmada: true,
         version_registro: seleccionado.version_registro,
       });
@@ -305,7 +298,16 @@ export default function FirmadorScreen() {
         }
       }
 
-      Alert.alert('No se pudo registrar la firma', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
+      const mensaje = exception instanceof Error ? exception.message : 'Intentá nuevamente.';
+
+      if (exception instanceof UbicacionError && exception.bloqueado) {
+        Alert.alert('No se pudo registrar la firma', mensaje, [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+        ]);
+      } else {
+        Alert.alert('No se pudo registrar la firma', mensaje);
+      }
     } finally {
       setFirmando(false);
     }

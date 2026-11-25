@@ -32,6 +32,8 @@ export default function NotificacionesScreen() {
 
     try {
       await marcarNotificacionLeida(notificacionId);
+    } catch {
+      // Si no se pudo marcar (ej. 404) igual se abre el convenio; el panel se refresca abajo.
     } finally {
       if (idInstrumento !== null) router.push(Destinos.convenio(idInstrumento));
       void actualizar();
