@@ -19,11 +19,14 @@ import SignatureCanvas, {
 } from 'react-native-signature-canvas';
 import NetInfo from '@react-native-community/netinfo';
 
+import { ConflictoFirmaCard } from '@/components/firma/conflicto-firma-card';
 import { Card, EstadoVacio } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
 import { Txt } from '@/components/panel/txt';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
+import { detectarConflicto, type ConflictoFirma } from '@/lib/concurrencia-firma';
+import { ApiError } from '@/services/api-client';
 import { crearComentarioFirma, descargarConstanciaFirma, descargarDocumentoFirma, listarPendientesFirma, registrarFirma } from '@/services/firma';
 import type { PendienteFirmaCompleto } from '@/types/firma';
 import type { ComentarioFirmador } from '@/types/firmador-comentarios';
@@ -46,23 +49,59 @@ export default function FirmadorScreen() {
   const [firmando, setFirmando] = useState(false);
   const [comentarios, setComentarios] = useState<ComentarioFirmador[]>([]);
   const [nuevoComentario, setNuevoComentario] = useState('');
+  const [conflicto, setConflicto] = useState<ConflictoFirma | null>(null);
+  // Permite comparar contra lo que la persona tiene abierto sin depender del cierre de cada callback.
+  const seleccionadoRef = useRef<PendienteFirmaCompleto | null>(null);
+
+  useEffect(() => {
+    seleccionadoRef.current = seleccionado;
+  }, [seleccionado]);
+
+  /**
+   * Aplica la lista vigente del servidor. Si el convenio abierto cambió, NO se pisa en
+   * silencio (la firma dibujada quedaría atada a datos que la persona nunca vio): se
+   * muestra el conflicto y ella decide. Devuelve true si se puede seguir sin riesgo.
+   */
+  const aplicarLista = useCallback(
+    (lista: PendienteFirmaCompleto[], mensajeServidor?: string): boolean => {
+      setPendientes(lista);
+
+      const local = seleccionadoRef.current;
+      if (!local) return true;
+
+      const vigente = lista.find((item) => item.id_instrumento === local.id_instrumento);
+      const detectado = detectarConflicto(local, vigente, mensajeServidor);
+
+      if (detectado) {
+        setConflicto(detectado);
+        return false;
+      }
+
+      if (vigente) setSeleccionado(vigente);
+      return true;
+    },
+    [],
+  );
+
+  /** Vuelve a pedir el estado al servidor y avisa si lo abierto quedó desactualizado. */
+  const verificarVersion = useCallback(
+    async (mensajeServidor?: string): Promise<boolean> =>
+      aplicarLista(await listarPendientesFirma(), mensajeServidor),
+    [aplicarLista],
+  );
 
   const cargar = useCallback(async (mostrarCarga = true) => {
     if (mostrarCarga) setEstado('cargando');
     setError(null);
 
     try {
-      const lista = await listarPendientesFirma();
-      setPendientes(lista);
-      setSeleccionado((actual) =>
-        actual ? lista.find((item) => item.id_instrumento === actual.id_instrumento) ?? null : null,
-      );
+      aplicarLista(await listarPendientesFirma());
       setEstado('listo');
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'No se pudieron cargar los pendientes.');
       setEstado('error');
     }
-  }, []);
+  }, [aplicarLista]);
 
   useEffect(() => {
     let activo = true;
@@ -98,6 +137,7 @@ export default function FirmadorScreen() {
 
   // Desde la lista se vuelve a la lista; desde la ficha, a la ficha.
   const salirDeSeleccion = useCallback(() => {
+    setConflicto(null);
     if (vinoDeFicha) {
       router.back();
     } else {
@@ -120,9 +160,37 @@ export default function FirmadorScreen() {
   }, [seleccionado, vinoDeFicha, salirDeSeleccion]);
 
   const seleccionar = (pendiente: PendienteFirmaCompleto) => {
+    setConflicto(null);
     setSeleccionado(pendiente);
     setTrazo(null);
     setNuevoComentario('');
+  };
+
+  // Resolución de un conflicto de versión ------------------------------------------------
+
+  /** Toma la versión vigente y empieza de cero: se borran la firma y el comentario en borrador. */
+  const recargarConflicto = () => {
+    if (!conflicto?.actual) return;
+    firmaRef.current?.clearSignature();
+    setTrazo(null);
+    setNuevoComentario('');
+    setSeleccionado(conflicto.actual);
+    setConflicto(null);
+  };
+
+  /** Toma la versión vigente pero deja la firma y el comentario para revisarlos y confirmar de nuevo. */
+  const conservarConflicto = () => {
+    if (!conflicto?.actual) return;
+    setSeleccionado(conflicto.actual);
+    setConflicto(null);
+  };
+
+  /** Abandona el convenio y borra lo cargado. */
+  const descartarConflicto = () => {
+    firmaRef.current?.clearSignature();
+    setTrazo(null);
+    setNuevoComentario('');
+    salirDeSeleccion();
   };
 
   const abrirPdf = async () => {
@@ -132,6 +200,9 @@ export default function FirmadorScreen() {
     }
 
     try {
+      // El PDF que se abre tiene que corresponder a lo que se va a firmar.
+      if (!(await verificarVersion())) return;
+
       const documento = await descargarDocumentoFirma(
         seleccionado.id_instrumento,
         seleccionado.documento.nombre_archivo,
@@ -180,6 +251,9 @@ export default function FirmadorScreen() {
     setFirmando(true);
 
     try {
+      // Antes de pedir huella y ubicación: si algo cambió, se avisa sin molestar a la persona.
+      if (!(await verificarVersion())) return;
+
       const hardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!hardware || !enrolled) {
@@ -207,6 +281,7 @@ export default function FirmadorScreen() {
         latitud: posicion.coords.latitude,
         longitud: posicion.coords.longitude,
         biometria_confirmada: true,
+        version_registro: seleccionado.version_registro,
       });
 
       Alert.alert(
@@ -215,10 +290,21 @@ export default function FirmadorScreen() {
       );
 
       setTrazo(null);
+      seleccionadoRef.current = null;
       setSeleccionado(null);
       await cargar(false);
       if (vinoDeFicha) router.back();
     } catch (exception) {
+      // La API responde 409 tanto por una versión vieja como por otros conflictos de estado
+      // (p. ej. "Ya firmaste"). Se vuelve a leer el servidor para distinguirlos.
+      if (exception instanceof ApiError && exception.status === 409) {
+        try {
+          if (!(await verificarVersion(exception.message))) return;
+        } catch {
+          // Sin conexión para releer: se muestra el mensaje original de la API.
+        }
+      }
+
       Alert.alert('No se pudo registrar la firma', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
     } finally {
       setFirmando(false);
@@ -323,6 +409,16 @@ export default function FirmadorScreen() {
               </Txt>
             </Pressable>
 
+            {conflicto ? (
+              <ConflictoFirmaCard
+                conflicto={conflicto}
+                hayBorrador={trazo !== null || nuevoComentario.trim() !== ''}
+                onRecargar={recargarConflicto}
+                onConservar={conservarConflicto}
+                onDescartar={descartarConflicto}
+              />
+            ) : null}
+
             <Card titulo={seleccionado.titulo} bordeSuperior={tema.brand}>
               <Txt variante="detalle" color="textSecondary">
                 {[seleccionado.tipo, seleccionado.unidad_academica].filter(Boolean).join(' · ')}
@@ -389,8 +485,8 @@ export default function FirmadorScreen() {
               <Pressable
                 accessibilityRole="button"
                 onPress={confirmarFirma}
-                disabled={firmando || !trazo}
-                style={[styles.boton, { backgroundColor: tema.brand }, (firmando || !trazo) && { opacity: 0.5 }]}
+                disabled={firmando || !trazo || conflicto !== null}
+                style={[styles.boton, { backgroundColor: tema.brand }, (firmando || !trazo || conflicto !== null) && { opacity: 0.5 }]}
               >
                 {firmando ? (
                   <ActivityIndicator color="#FFFFFF" />

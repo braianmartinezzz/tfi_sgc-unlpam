@@ -13,6 +13,7 @@ export type ConvenioLista = {
     titulo: string;
     estado: string;
     vencimiento: string | null;
+    version_registro?: number;
   } | null;
   unidad_academica: UnidadAcademica | null;
   instituciones_firmantes: { id_institucion: number; razon_social: string }[];

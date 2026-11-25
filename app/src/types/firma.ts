@@ -22,6 +22,8 @@ export type PendienteFirmaCompleto = {
   titulo: string;
   expediente: string | null;
   objeto: string | null;
+  /** Versión del convenio (bloqueo optimista): se reenvía al firmar para detectar cambios ajenos. */
+  version_registro: number;
   tipo: string | null;
   unidad_academica: string | null;
   procedencia: string | null;

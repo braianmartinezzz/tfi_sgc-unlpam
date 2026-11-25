@@ -74,7 +74,14 @@ export function descargarDocumentoFirma(
 
 export async function registrarFirma(
   idInstrumento: number,
-  datos: { trazo: string; latitud: number; longitud: number; biometria_confirmada: boolean },
+  datos: {
+    trazo: string;
+    latitud: number;
+    longitud: number;
+    biometria_confirmada: boolean;
+    /** Versión del convenio que vio la persona; si cambió, la API responde 409. */
+    version_registro: number;
+  },
 ): Promise<{ estado: string; firmas_pendientes: number }> {
   const respuesta = await apiRequest<{
     data: { estado: string; firmas_pendientes: number };
