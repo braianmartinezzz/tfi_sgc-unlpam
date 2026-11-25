@@ -30,13 +30,14 @@ const NOMBRE_CANAL: Record<CanalMfa, string> = {
 
 type Props = {
   mfaToken: string;
+  canalesDisponibles?: CanalMfa[];
   onVerificado: (sesion: SesionApp) => void | Promise<void>;
   /** Volver al login (por decisión del usuario o porque el desafío ya no sirve). */
   onCancelar: (mensaje?: string) => void;
 };
 
 /** Segundo paso del login: elegir cómo recibir el código y escribirlo. */
-export function VerificacionMfa({ mfaToken, onVerificado, onCancelar }: Props) {
+export function VerificacionMfa({ mfaToken, canalesDisponibles, onVerificado, onCancelar }: Props) {
   const tema = useSgcTheme();
 
   const [envio, setEnvio] = useState<EnvioCodigo | null>(null);
@@ -107,6 +108,10 @@ export function VerificacionMfa({ mfaToken, onVerificado, onCancelar }: Props) {
     { backgroundColor: tema.surface, borderColor: tema.border, color: tema.text },
   ];
 
+  const canales = canalesDisponibles?.length
+    ? CANALES.filter(({ canal }) => canalesDisponibles.includes(canal))
+    : CANALES;
+
   return (
     <View style={styles.contenedor}>
       <Txt style={[styles.titulo, { color: tema.text }]}>Verificación en dos pasos</Txt>
@@ -117,7 +122,7 @@ export function VerificacionMfa({ mfaToken, onVerificado, onCancelar }: Props) {
             Elegí cómo querés recibir tu código de {LONGITUD_CODIGO} dígitos.
           </Txt>
 
-          {CANALES.map(({ canal, titulo, detalle }) => (
+          {canales.map(({ canal, titulo, detalle }) => (
             <Pressable
               key={canal}
               accessibilityRole="button"

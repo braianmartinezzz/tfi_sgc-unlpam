@@ -10,7 +10,8 @@ import { Destinos } from '@/constants/navigation';
 import { SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { formatFecha } from '@/lib/format';
-import { ApiError } from '@/services/api-client';
+import { ApiError, NetworkError } from '@/services/api-client';
+import { guardarOffline, leerOffline } from '@/lib/offline-storage';
 import { obtenerConvenio } from '@/services/convenios';
 import { listarPendientesFirma } from '@/services/firma';
 import type { ConvenioDetalle } from '@/types/convenio';
@@ -47,8 +48,21 @@ export default function ConvenioScreen() {
         convenio,
         pendiente: pendientes.find((p) => p.id_instrumento === idInstrumento) ?? null,
       });
+      void guardarOffline(`convenio_${idInstrumento}`, {
+        convenio,
+        pendiente: pendientes.find((p) => p.id_instrumento === idInstrumento) ?? null,
+      });
       setError(null);
     } catch (causa) {
+      if (causa instanceof NetworkError) {
+        const guardado = await leerOffline<Datos>(`convenio_${idInstrumento}`);
+        if (guardado) {
+          setDatos(guardado);
+          setError(null);
+          return;
+        }
+      }
+
       setError(
         causa instanceof ApiError && causa.status === 404
           ? 'No se encontró el convenio, o no tenés permiso para verlo.'

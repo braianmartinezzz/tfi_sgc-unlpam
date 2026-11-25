@@ -24,8 +24,10 @@ import {
   loginBiometrico,
   mensajeDeError,
   type SesionApp,
+  type CanalMfa,
 } from '@/services/auth-app';
 import { biometriaDisponible, confirmarConBiometria } from '@/services/biometria-login';
+import { registrarPushToken } from '@/services/push-token';
 
 const MAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -51,6 +53,7 @@ export default function LoginScreen() {
   const [info, setInfo] = useState<string | null>(null);
   const [paso, setPaso] = useState<'credenciales' | 'mfa'>('credenciales');
   const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [canalesMfa, setCanalesMfa] = useState<CanalMfa[] | undefined>();
   const [biometriaLista, setBiometriaLista] = useState(false);
 
   useEffect(() => {
@@ -84,6 +87,11 @@ export default function LoginScreen() {
 
   async function abrirSesion(sesion: SesionApp) {
     await setToken(sesion.access_token);
+
+    void registrarPushToken().catch((error) => {
+      console.warn('No se pudo registrar el token push:', error);
+    });
+
     router.replace('/dashboard');
   }
 
@@ -103,6 +111,7 @@ export default function LoginScreen() {
     try {
       const desafio = await iniciarLogin(mail.trim(), password);
       setMfaToken(desafio.mfa_token);
+      setCanalesMfa(desafio.canales);
       setPaso('mfa');
     } catch (loginError) {
       setError(textoDeError(loginError, 'No se pudo iniciar sesión.'));
@@ -146,6 +155,7 @@ export default function LoginScreen() {
   function volverAlLogin(mensaje?: string) {
     setPaso('credenciales');
     setMfaToken(null);
+    setCanalesMfa(undefined);
     setPassword('');
     setError(mensaje ?? null);
   }
@@ -196,6 +206,7 @@ export default function LoginScreen() {
                 <>
                   <VerificacionMfa
                     mfaToken={mfaToken}
+                    canalesDisponibles={canalesMfa}
                     onVerificado={abrirSesion}
                     onCancelar={volverAlLogin}
                   />
@@ -296,7 +307,7 @@ export default function LoginScreen() {
                 <Pressable
                   accessibilityRole="button"
                   style={styles.forgotButton}
-                  onPress={() => setError('La recuperación de contraseña estará disponible próximamente.') }>
+                  onPress={() => setError('Para recuperar tu contraseña, contactá al administrador del sistema.') }>
                   <Txt style={[styles.forgotText, { color: brandText }]}>
                     Olvidé mi contraseña
                   </Txt>

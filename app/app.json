@@ -41,6 +41,13 @@
       "expo-notifications",
       "expo-sharing",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "La aplicación usa la cámara únicamente para leer el código QR de un convenio.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "La aplicación usa tu ubicación para registrar la ubicación de las firmas de convenios."

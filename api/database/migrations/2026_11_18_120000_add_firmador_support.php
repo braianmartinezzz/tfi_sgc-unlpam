@@ -8,16 +8,23 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Persona firmante que representa a un usuario (Rector/a, Decano/a, representantes).
-        Schema::table('usuario', function (Blueprint $table) {
-            $table->unsignedBigInteger('id_persona')->nullable()->unique();
-        });
+        if (! Schema::hasColumn('usuario', 'id_persona')) {
+            Schema::table('usuario', function (Blueprint $table) {
+                $table->unsignedBigInteger('id_persona')->nullable()->unique();
+            });
+        }
 
-        // Evidencia de cada firma: imagen del trazo y constancia de la confirmación biométrica.
-        Schema::table('firma', function (Blueprint $table) {
-            $table->string('trazo_ruta', 255)->nullable();
-            $table->boolean('biometria_confirmada')->default(false);
-        });
+        if (! Schema::hasColumn('firma', 'trazo_ruta')) {
+            Schema::table('firma', function (Blueprint $table) {
+                $table->string('trazo_ruta', 255)->nullable();
+            });
+        }
+
+        if (! Schema::hasColumn('firma', 'biometria_confirmada')) {
+            Schema::table('firma', function (Blueprint $table) {
+                $table->boolean('biometria_confirmada')->default(false);
+            });
+        }
     }
 
     public function down(): void

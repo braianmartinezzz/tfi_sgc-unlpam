@@ -49,4 +49,19 @@ class ExpoPushService
 
         return ($ticket['status'] ?? null) === 'ok';
     }
+
+    public function enviarAUsuario(int $idUsuario, string $titulo, string $cuerpo, array $datos = []): int
+    {
+        $enviadas = 0;
+
+        foreach (
+            \App\Models\PushToken::query()->where('id_usuario', $idUsuario)->get(['token']) as $registro
+        ) {
+            if ($this->enviar($registro->token, $titulo, $cuerpo, $datos)) {
+                $enviadas++;
+            }
+        }
+
+        return $enviadas;
+    }
 }

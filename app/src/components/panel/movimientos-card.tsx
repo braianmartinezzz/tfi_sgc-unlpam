@@ -1,20 +1,29 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Card, EstadoVacio } from '@/components/panel/card';
+import { Card, Enlace, EstadoVacio } from '@/components/panel/card';
 import { EstadoBadge } from '@/components/panel/estado-badge';
 import { Txt } from '@/components/panel/txt';
 import { SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { formatRelativo } from '@/lib/format';
+import { registrarMovimientoConsultado } from '@/lib/movimientos-storage';
 import type { MovimientoPanel } from '@/types/panel';
 
 type MovimientosCardProps = {
   movimientos: MovimientoPanel[];
   onAbrirConvenio: (idInstrumento: number) => void;
+  /** Sin handler no se muestra el enlace "Ver todos". */
+  onVerTodos?: () => void;
 };
 
-export function MovimientosCard({ movimientos, onAbrirConvenio }: MovimientosCardProps) {
+export function MovimientosCard({ movimientos, onAbrirConvenio, onVerTodos }: MovimientosCardProps) {
   const tema = useSgcTheme();
+
+  /** Guarda la consulta en el historial local y luego navega. */
+  const abrir = (movimiento: MovimientoPanel) => {
+    void registrarMovimientoConsultado(movimiento);
+    onAbrirConvenio(movimiento.id_instrumento);
+  };
 
   return (
     <Card titulo="Últimos movimientos">
@@ -26,7 +35,7 @@ export function MovimientosCard({ movimientos, onAbrirConvenio }: MovimientosCar
             <Pressable
               key={movimiento.id_instrumento}
               accessibilityRole="button"
-              onPress={() => onAbrirConvenio(movimiento.id_instrumento)}
+              onPress={() => abrir(movimiento)}
               style={({ pressed }) => [
                 styles.fila,
                 indice % 2 === 1 && { backgroundColor: tema.rowAlternate },
@@ -54,6 +63,8 @@ export function MovimientosCard({ movimientos, onAbrirConvenio }: MovimientosCar
           ))}
         </View>
       )}
+
+      {onVerTodos ? <Enlace texto="Ver todos los movimientos" onPress={onVerTodos} /> : null}
     </Card>
   );
 }

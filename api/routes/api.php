@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\ComentarioFirmadorController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\PanelController;
 use App\Http\Controllers\Api\FirmaController;
+use App\Http\Controllers\Api\NotificacionController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -188,4 +189,10 @@ Route::middleware(['auth:sanctum', 'sesion.app'])->group(function () {
     Route::post('/convenios/{id}/comentarios-firmador', [ComentarioFirmadorController::class, 'store'])->whereNumber('id');
 
     Route::get('/convenios/{id}/constancia-firma', [FirmaController::class, 'constanciaPdf'])->whereNumber('id');
+
+    // Notificaciones
+    Route::post('/notificaciones/push', [NotificacionController::class, 'registrarPush']);
+    Route::delete('/notificaciones/push', [NotificacionController::class, 'eliminarPush']);
+    Route::patch('/notificaciones/{id}/leida', [NotificacionController::class, 'marcarLeida'])->whereNumber('id');
+    Route::patch('/notificaciones/leidas', [NotificacionController::class, 'marcarTodasLeidas']);
 });

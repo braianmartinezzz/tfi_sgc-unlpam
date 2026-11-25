@@ -6,19 +6,12 @@ import type { Href } from 'expo-router';
  * y cambiar su ruta en `Destinos`.
  */
 export const Disponible = {
-  escanearQr: false,
+  escanearQr: true,
   notificaciones: true,
   miPerfil: true,
   registrarIdentidad: true,
   ayuda: true,
 } as const;
-
-function proximamente(titulo: string, detalle?: string): Href {
-  return {
-    pathname: '/proximamente',
-    params: detalle ? { titulo, detalle } : { titulo },
-  };
-}
 
 export const Destinos = {
   buscarConvenios: (texto: string): Href => ({
@@ -36,9 +29,9 @@ export const Destinos = {
     pathname: '/convenio/[id]',
     params: { id: String(idInstrumento) },
   }),
-  escanearQr: (): Href => proximamente('Lector de código QR'),
+  escanearQr: (): Href => '/escanear-qr',
   notificaciones: (): Href => '/notificaciones',
-  movimientos: (): Href => proximamente('Movimientos recientes'),
+  movimientos: (): Href => '/movimientos',
   miPerfil: (): Href => '/perfil',
   registrarIdentidad: (): Href => '/identidad',
   ayuda: (): Href => '/ayuda',

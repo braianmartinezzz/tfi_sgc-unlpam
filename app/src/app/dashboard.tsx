@@ -170,6 +170,7 @@ export default function PanelScreen() {
                   <MovimientosCard
                     movimientos={panel.ultimos_movimientos}
                     onAbrirConvenio={(id) => irA(Destinos.convenio(id))}
+                    onVerTodos={() => irA(Destinos.movimientos())}
                   />
 
                   <AccesosRapidos

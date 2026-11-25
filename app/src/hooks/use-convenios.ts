@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { clearToken } from '@/lib/auth-storage';
+import { guardarOffline, leerOffline } from '@/lib/offline-storage';
 import { ApiError } from '@/services/api-client';
 import { listarConvenios } from '@/services/convenios';
 import type { ConvenioLista, FiltrosConvenios } from '@/types/convenio';
@@ -55,12 +56,16 @@ export function useConvenios(filtros: Filtros) {
           };
 
           if (modo !== 'agregar' || !previos || previos.filtros !== filtros) {
-            return { ...base, items: respuesta.data };
+            const siguiente: Datos = { ...base, items: respuesta.data };
+            void guardarOffline('convenios_latest', siguiente);
+            return siguiente;
           }
 
           const yaEstan = new Set(previos.items.map((c) => c.id_instrumento));
           const nuevos = respuesta.data.filter((c) => !yaEstan.has(c.id_instrumento));
-          return { ...base, items: [...previos.items, ...nuevos] };
+          const siguiente: Datos = { ...base, items: [...previos.items, ...nuevos] };
+          void guardarOffline('convenios_latest', siguiente);
+          return siguiente;
         });
         setFallo(null);
         setErrorMas(null);
@@ -93,6 +98,12 @@ export function useConvenios(filtros: Filtros) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- la carga actualiza el estado al resolverse
     void cargar(1, 'inicial');
   }, [cargar]);
+
+  useEffect(() => {
+    void leerOffline<Datos>('convenios_latest').then((guardados) => {
+      if (guardados) setDatos(guardados);
+    });
+  }, []);
 
   const actual = datos && datos.filtros === filtros ? datos : null;
   const estado: EstadoLista = actual

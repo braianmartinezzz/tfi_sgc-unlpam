@@ -1,9 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 
 import { clearToken } from '@/lib/auth-storage';
+import { guardarOffline, leerOffline } from '@/lib/offline-storage';
 import { ApiError, NetworkError } from '@/services/api-client';
+import { sincronizarCola } from '@/services/offline-sync';
 import { obtenerUsuarioActual } from '@/services/auth';
 import { obtenerPanel } from '@/services/panel';
 import type { UsuarioAutenticado } from '@/types/auth';
@@ -47,6 +50,7 @@ export function usePanel() {
         setSinConexion(false);
         setError(null);
         setEstado('listo');
+        void guardarOffline('panel_latest', nueva);
       } catch (causa) {
         if (causa instanceof ApiError && causa.status === 401) {
           await clearToken();
@@ -83,22 +87,6 @@ export function usePanel() {
     return () => suscripcion.remove();
   }, [cargar]);
 
-  // En web, el navegador avisa cuando vuelve o se pierde la red.
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-
-    const alVolver = () => void cargar(false);
-    const alPerder = () => setSinConexion(true);
-
-    window.addEventListener('online', alVolver);
-    window.addEventListener('offline', alPerder);
-
-    return () => {
-      window.removeEventListener('online', alVolver);
-      window.removeEventListener('offline', alPerder);
-    };
-  }, [cargar]);
-
   // Sin conexión, se reintenta cada tanto hasta recuperarla.
   useEffect(() => {
     if (!sinConexion) return;
@@ -109,6 +97,36 @@ export function usePanel() {
   }, [sinConexion, cargar]);
 
   const actualizar = useCallback(() => cargar(true), [cargar]);
+
+  // Carga el último panel al montar el hook.
+  useEffect(() => {
+    void leerOffline<Instantanea>('panel_latest').then((guardada) => {
+      if (guardada) {
+        ultimaInstantanea = {
+          ...guardada,
+          actualizado: new Date(guardada.actualizado),
+        };
+        setInstantanea(ultimaInstantanea);
+        setEstado('listo');
+      }
+    });
+  }, []);
+
+  // Android/iOS informan cambios reales de red mediante NetInfo.
+  useEffect(() => {
+    const suscripcion = NetInfo.addEventListener((estado) => {
+      const conectada = estado.isConnected === true && estado.isInternetReachable !== false;
+
+      if (conectada) {
+        void sincronizarCola();
+        void cargar(false);
+      } else {
+        setSinConexion(true);
+      }
+    });
+
+    return () => suscripcion();
+  }, [cargar]);
 
   return {
     me: instantanea?.me ?? null,

@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
 
 import { Card, EstadoVacio } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
@@ -10,6 +11,7 @@ import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { usePanel } from '@/hooks/use-panel';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { formatRelativo } from '@/lib/format';
+import { marcarNotificacionLeida, marcarTodasNotificacionesLeidas } from '@/services/notificaciones';
 
 /**
  * Lista completa de las notificaciones que trae el panel. Reutiliza `usePanel`, que arranca
@@ -22,6 +24,30 @@ export default function NotificacionesScreen() {
 
   const notificaciones = panel?.notificaciones.items ?? [];
   const noLeidas = panel?.notificaciones.no_leidas ?? 0;
+
+  const [marcando, setMarcando] = useState(false);
+
+  async function abrirNotificacion(notificacionId: number, idInstrumento: number | null) {
+    if (!notificacionId) return;
+
+    try {
+      await marcarNotificacionLeida(notificacionId);
+    } finally {
+      if (idInstrumento !== null) router.push(Destinos.convenio(idInstrumento));
+      void actualizar();
+    }
+  }
+
+  async function marcarTodas() {
+    if (marcando) return;
+    setMarcando(true);
+    try {
+      await marcarTodasNotificacionesLeidas();
+      await actualizar();
+    } finally {
+      setMarcando(false);
+    }
+  }
 
   return (
     <View style={[styles.pantalla, { backgroundColor: tema.page }]}>
@@ -72,6 +98,18 @@ export default function NotificacionesScreen() {
                   : `${notificaciones.length} en total`}
               </Txt>
 
+              {noLeidas > 0 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={marcando}
+                  onPress={() => void marcarTodas()}
+                  style={({ pressed }) => [styles.marcarTodas, pressed && { opacity: 0.7 }]}>
+                  <Txt variante="detalle" negrita style={{ color: tema.brandText }}>
+                    {marcando ? 'Marcando...' : 'Marcar todas como leídas'}
+                  </Txt>
+                </Pressable>
+              ) : null}
+
               {notificaciones.length === 0 ? (
                 <Card>
                   <EstadoVacio texto="No tenés notificaciones." />
@@ -85,9 +123,9 @@ export default function NotificacionesScreen() {
                   <Pressable
                     key={notificacion.id_notificacion}
                     accessibilityRole={idInstrumento === null ? 'text' : 'button'}
-                    accessibilityHint={idInstrumento === null ? undefined : 'Abre el convenio'}
+                    accessibilityHint={idInstrumento === null ? 'Marca la notificación como leída' : 'Marca como leída y abre el convenio'}
                     disabled={idInstrumento === null}
-                    onPress={() => idInstrumento !== null && router.push(Destinos.convenio(idInstrumento))}
+                    onPress={() => void abrirNotificacion(notificacion.id_notificacion, idInstrumento)}
                     style={({ pressed }) => [
                       styles.fila,
                       {
@@ -124,5 +162,15 @@ const styles = StyleSheet.create({
     borderRadius: SgcRadius.sm,
     padding: SgcSpacing.md,
     gap: 2,
+  },
+  marcarTodas: {
+    padding: SgcSpacing.md,
+    borderRadius: SgcRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    alignSelf: 'flex-start',
+    minHeight: 32,
   },
 });

@@ -17,6 +17,7 @@ import * as Sharing from 'expo-sharing';
 import SignatureCanvas, {
   type SignatureViewRef,
 } from 'react-native-signature-canvas';
+import NetInfo from '@react-native-community/netinfo';
 
 import { Card, EstadoVacio } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
@@ -161,6 +162,16 @@ export default function FirmadorScreen() {
 
   const confirmarFirma = async () => {
     if (!seleccionado) return;
+
+    const conexion = await NetInfo.fetch();
+    if (conexion.isConnected !== true || conexion.isInternetReachable === false) {
+      Alert.alert(
+        'Firma no disponible sin conexión',
+        'La evidencia de firma debe enviarse al servidor. Conectá el dispositivo y reintentá.',
+      );
+      return;
+    }
+
     if (!trazo) {
       Alert.alert('Firma requerida', 'Dibujá tu firma antes de continuar.');
       return;

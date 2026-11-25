@@ -42,4 +42,20 @@ class Notificacion extends Model
     {
         return $this->belongsTo(Usuario::class, 'id_usuario', 'id_usuario');
     }
+
+    protected static function booted(): void
+    {
+        static::created(function (Notificacion $notificacion): void {
+            app(\App\Services\ExpoPushService::class)->enviarAUsuario(
+                (int) $notificacion->id_usuario,
+                'Sistema de Gestión de Convenios',
+                $notificacion->mensaje,
+                [
+                    'tipo' => $notificacion->tipo,
+                    'id_notificacion' => $notificacion->id_notificacion,
+                    'id_instrumento' => $notificacion->id_instrumento,
+                ]
+            );
+        });
+    }
 }

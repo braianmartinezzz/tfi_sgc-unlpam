@@ -1,3 +1,6 @@
+import { File, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
+
 import { API_URL } from '@/constants/api';
 import { getToken } from '@/lib/auth-storage';
 import type { PendienteFirmaCompleto } from '@/types/firma';
@@ -9,24 +12,64 @@ export async function listarPendientesFirma(): Promise<PendienteFirmaCompleto[]>
   return respuesta.data;
 }
 
-export async function descargarDocumentoFirma(idInstrumento: number): Promise<Response> {
+/**
+ * Un PDF ya bajado de la API: en la web queda como Blob (se descarga desde el navegador);
+ * en Android e iOS se guarda en la caché de la app y se devuelve su uri para compartirlo.
+ */
+export type DocumentoDescargado =
+  | { tipo: 'web'; blob: Blob }
+  | { tipo: 'archivo'; uri: string };
+
+/** Nombre apto para el sistema de archivos del celular, siempre con extensión .pdf. */
+function nombreDePdf(nombre: string): string {
+  const limpio = nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'documento';
+  return limpio.toLowerCase().endsWith('.pdf') ? limpio : `${limpio}.pdf`;
+}
+
+async function descargarPdf(
+  ruta: string,
+  nombreArchivo: string,
+  mensajePorDefecto: string,
+): Promise<DocumentoDescargado> {
   const token = await getToken();
-  const response = await fetch(`${API_URL}/api/firmas/${idInstrumento}/documento`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  if (!token) throw new ApiError(401, 'Iniciá sesión nuevamente para descargar el documento.');
+
+  const response = await fetch(`${API_URL}/api${ruta}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
   });
 
   if (!response.ok) {
-    let message = 'No se pudo descargar el documento.';
+    let mensaje = mensajePorDefecto;
     try {
       const body = await response.json();
-      if (typeof body?.message === 'string') message = body.message;
+      if (typeof body?.message === 'string') mensaje = body.message;
     } catch {
       // Se conserva el mensaje genérico.
     }
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, mensaje);
   }
 
-  return response;
+  if (Platform.OS === 'web') return { tipo: 'web', blob: await response.blob() };
+
+  const archivo = new File(Paths.cache, nombreDePdf(nombreArchivo));
+  archivo.create({ overwrite: true });
+  archivo.write(new Uint8Array(await response.arrayBuffer()));
+
+  return { tipo: 'archivo', uri: archivo.uri };
+}
+
+export function descargarDocumentoFirma(
+  idInstrumento: number,
+  nombreArchivo: string,
+): Promise<DocumentoDescargado> {
+  return descargarPdf(
+    `/firmas/${idInstrumento}/documento`,
+    nombreArchivo,
+    'No se pudo descargar el documento.',
+  );
 }
 
 export async function registrarFirma(
@@ -56,17 +99,10 @@ export async function crearComentarioFirma(idInstrumento: number, contenido: str
   return respuesta.data as ComentarioFirmador & { ofensivo: boolean };
 }
 
-export async function descargarConstanciaFirma(idInstrumento: number): Promise<DocumentoDescargado> {
-  const token = await getToken();
-  if (!token) throw new ApiError(401, 'Iniciá sesión nuevamente para descargar la constancia.');
-
-  const response = await fetch(`${API_URL}/api/convenios/${idInstrumento}/constancia-firma`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
-  });
-  if (!response.ok) throw new ApiError(response.status, 'No se pudo generar la constancia PDF.');
-
-  if (Platform.OS === 'web') return { tipo: 'web', blob: await response.blob() };
-  const archivo = new File(Paths.cache, `constancia-firma-${idInstrumento}.pdf`);
-  await archivo.write(await response.arrayBuffer());
-  return { tipo: 'archivo', uri: archivo.uri };
+export function descargarConstanciaFirma(idInstrumento: number): Promise<DocumentoDescargado> {
+  return descargarPdf(
+    `/convenios/${idInstrumento}/constancia-firma`,
+    `constancia-firma-${idInstrumento}.pdf`,
+    'No se pudo generar la constancia PDF.',
+  );
 }
