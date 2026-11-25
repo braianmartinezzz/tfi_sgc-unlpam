@@ -765,6 +765,17 @@ class ConvenioService
                 );
             }
 
+            // Optimistic locking: rechaza una edición basada en una versión anterior.
+            if (
+                array_key_exists('version_registro', $data)
+                && (int) $data['version_registro'] !== (int) $instrumento->version_registro
+            ) {
+                throw new \DomainException(
+                    'El convenio fue modificado por otro usuario mientras lo editabas. '
+                    .'Recargá los datos y volvé a intentar.'
+                );
+            }
+
             $instrumentoFields = array_intersect_key($data, array_flip([
                 'titulo',
                 'objeto',
@@ -811,6 +822,10 @@ class ConvenioService
             if (array_key_exists('instituciones_ids', $data)) {
                 $convenio->institucionesFirmantes()->sync($data['instituciones_ids']);
             }
+
+            // Toda edición exitosa incrementa la versión: la próxima podrá detectarse como obsoleta.
+            $instrumento->version_registro = (int) $instrumento->version_registro + 1;
+            $instrumento->save();
 
             return $convenio->load([
                 'instrumento',

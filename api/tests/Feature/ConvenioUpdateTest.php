@@ -52,7 +52,7 @@ class ConvenioUpdateTest extends TestCase
         $this->assertDatabaseHas('instrumento', [
             'id_instrumento' => $convenio->id_instrumento,
             'estado' => 'Borrador',
-            'version_registro' => 1,
+            'version_registro' => 2,
             'titulo' => 'Título actualizado',
             'objeto' => 'Objeto actualizado',
             'expediente' => 'EXP-200',
@@ -114,7 +114,7 @@ class ConvenioUpdateTest extends TestCase
             'objeto' => null,
             'expediente' => 'EXP-100',
             'notas' => null,
-            'version_registro' => 1,
+            'version_registro' => 2,
         ]);
         $this->assertDatabaseHas('convenio', [
             'id_instrumento' => $especifico->id_instrumento,
@@ -145,7 +145,6 @@ class ConvenioUpdateTest extends TestCase
             'id_convenio_marco' => $otroMarco->id_instrumento,
             'id_instrumento' => 999,
             'estado' => 'Firmado',
-            'version_registro' => 2,
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
@@ -153,7 +152,6 @@ class ConvenioUpdateTest extends TestCase
                 'id_convenio_marco',
                 'id_instrumento',
                 'estado',
-                'version_registro',
             ]);
 
         $this->assertDatabaseHas('instrumento', [
@@ -161,6 +159,73 @@ class ConvenioUpdateTest extends TestCase
             'titulo' => 'Convenio de prueba',
             'estado' => 'Borrador',
             'version_registro' => 1,
+        ]);
+    }
+
+    public function test_it_rejects_an_update_based_on_a_stale_version(): void
+    {
+        $context = $this->authenticate();
+        $convenio = $this->createConvenio($context, true);
+
+        // Primera edición con la versión vigente (1): pasa y queda en 2.
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Primera edición',
+            'version_registro' => 1,
+        ])->assertOk();
+
+        // Segunda edición basada en la versión vieja: conflicto, no pisa cambios.
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Edición obsoleta',
+            'version_registro' => 1,
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath(
+                'message',
+                'El convenio fue modificado por otro usuario mientras lo editabas. '
+                .'Recargá los datos y volvé a intentar.'
+            );
+
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'titulo' => 'Primera edición',
+            'version_registro' => 2,
+        ]);
+    }
+
+    public function test_it_increments_the_version_and_returns_it_on_update(): void
+    {
+        $context = $this->authenticate();
+        $convenio = $this->createConvenio($context, true);
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Edición con versión',
+            'version_registro' => 1,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.instrumento.version_registro', 2);
+
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Segunda edición',
+            'version_registro' => 2,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.instrumento.version_registro', 3);
+    }
+
+    public function test_it_accepts_an_update_without_version_for_backward_compatibility(): void
+    {
+        $context = $this->authenticate();
+        $convenio = $this->createConvenio($context, true);
+
+        // La web aún no envía version_registro: el PUT sigue funcionando sin él.
+        $this->putJson('/api/convenios/'.$convenio->id_instrumento, [
+            'titulo' => 'Edición sin versión',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('instrumento', [
+            'id_instrumento' => $convenio->id_instrumento,
+            'titulo' => 'Edición sin versión',
+            'version_registro' => 2,
         ]);
     }
 

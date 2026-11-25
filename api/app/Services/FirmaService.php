@@ -106,6 +106,7 @@ class FirmaService
                     'titulo' => $instrumento->titulo,
                     'expediente' => $instrumento->expediente,
                     'objeto' => $instrumento->objeto,
+                    'version_registro' => (int) $instrumento->version_registro,
                     'tipo' => $instrumento->convenio?->tipo,
                     'unidad_academica' => $instrumento->convenio?->unidadAcademica?->sigla,
                     'procedencia' => $instrumento->convenio?->unidadAcademica?->nombre,
@@ -298,6 +299,16 @@ class FirmaService
 
                 if ($instrumento->estado !== 'Aprobado') {
                     throw new DomainException('El convenio debe estar en estado Aprobado para poder firmarse.');
+                }
+
+                // Optimistic locking: rechaza una firma sobre una versión vieja del convenio.
+                if (
+                    array_key_exists('version_registro', $datos)
+                    && (int) $datos['version_registro'] !== (int) $instrumento->version_registro
+                ) {
+                    throw new DomainException(
+                        'El convenio cambió desde que lo cargaste. Volvé a cargarlo antes de firmar.'
+                    );
                 }
 
                 if ($fila->fecha_hora_firma !== null) {

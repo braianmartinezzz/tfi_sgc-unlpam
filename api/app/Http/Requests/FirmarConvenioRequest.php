@@ -22,6 +22,8 @@ class FirmarConvenioRequest extends FormRequest
             'longitud' => ['required', 'numeric', 'between:-180,180'],
             // La huella o el rostro los valida el teléfono; la app informa el resultado.
             'biometria_confirmada' => ['required', 'accepted'],
+            // Optimistic locking: versión del convenio que vio la app al cargar el firmador.
+            'version_registro' => ['sometimes', 'integer', 'min:1'],
         ];
     }
 

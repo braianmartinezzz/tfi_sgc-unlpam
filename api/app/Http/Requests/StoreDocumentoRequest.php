@@ -19,6 +19,8 @@ class StoreDocumentoRequest extends FormRequest
             'tipo' => ['required', 'string', 'max:50'],
             'titulo' => ['required', 'string', 'max:255'],
             'archivo' => ['required', 'file', 'mimes:pdf', 'max:20480'],
+            // Optimistic locking: versión del convenio que vio el cliente al cargar el documento.
+            'version_registro' => ['sometimes', 'integer', 'min:1'],
         ];
     }
 

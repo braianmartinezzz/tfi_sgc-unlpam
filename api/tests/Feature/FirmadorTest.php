@@ -150,6 +150,7 @@ class FirmadorTest extends TestCase
             ->assertJsonPath('data.0.demorado', true)
             ->assertJsonPath('data.1.demorado', false)
             ->assertJsonCount(2, 'data.0.firmantes')
+            ->assertJsonPath('data.1.version_registro', 1)
             ->assertJsonPath('data.1.documento.nombre_archivo', 'convenio.pdf');
 
         $this->assertNotNull($viejo);
@@ -358,6 +359,40 @@ class FirmadorTest extends TestCase
         $this->authenticate($ctx['decano']);
 
         $this->postJson('/api/convenios/999999/firmar', $this->datosDeFirma())->assertNotFound();
+    }
+
+    public function test_signing_with_a_stale_version_is_rejected(): void
+    {
+        $ctx = $this->escenario();
+        $this->authenticate($ctx['decano']);
+
+        // La app cargó la versión 1; entre tanto, el convenio pasó a la versión 2.
+        Instrumento::query()
+            ->whereKey($ctx['convenio']->id_instrumento)
+            ->update(['version_registro' => 2]);
+
+        $this->postJson(
+            "/api/convenios/{$ctx['convenio']->id_instrumento}/firmar",
+            array_merge($this->datosDeFirma(), ['version_registro' => 1])
+        )
+            ->assertStatus(409)
+            ->assertJsonPath(
+                'message',
+                'El convenio cambió desde que lo cargaste. Volvé a cargarlo antes de firmar.'
+            );
+
+        // La firma no se registró.
+        $fila = DB::table('firma')
+            ->where('id_instrumento', $ctx['convenio']->id_instrumento)
+            ->where('id_persona', $ctx['personaB'])
+            ->first();
+        $this->assertNull($fila->fecha_hora_firma);
+
+        // Con la versión vigente la firma pasa.
+        $this->postJson(
+            "/api/convenios/{$ctx['convenio']->id_instrumento}/firmar",
+            array_merge($this->datosDeFirma(), ['version_registro' => 2])
+        )->assertOk();
     }
 
     // ---------------------------------------------------------------- constancia y trazo

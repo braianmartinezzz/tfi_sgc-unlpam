@@ -102,6 +102,17 @@ class DocumentoService
                     );
                 }
 
+                // Optimistic locking: rechaza una carga basada en una versión anterior.
+                if (
+                    array_key_exists('version_registro', $data)
+                    && (int) $data['version_registro'] !== (int) $instrumento->version_registro
+                ) {
+                    throw new \DomainException(
+                        'El convenio fue modificado por otro usuario. '
+                        .'Recargá los datos y volvé a intentar.'
+                    );
+                }
+
                 $hashSha256 = hash_file('sha256', $file->getRealPath());
 
                 if ($hashSha256 === false) {

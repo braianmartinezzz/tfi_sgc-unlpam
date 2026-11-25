@@ -55,7 +55,8 @@ class UpdateConvenioRequest extends FormRequest
             ],
             'id_instrumento' => ['missing'],
             'estado' => ['missing'],
-            'version_registro' => ['missing'],
+            // Optimistic locking: si viene y no coincide con el actual → 409 en el service.
+            'version_registro' => ['sometimes', 'integer', 'min:1'],
             'es_marco' => ['missing'],
         ];
     }

@@ -145,6 +145,33 @@ class DocumentoTest extends TestCase
         )->assertCreated();
     }
 
+    public function test_it_rejects_an_upload_based_on_a_stale_version(): void
+    {
+        [$convenio, $usuario, $instrumento] = $this->createConvenio();
+
+        // El cliente cargó la versión 1; entre tanto, el convenio pasó a la 2.
+        $instrumento->update(['version_registro' => 2]);
+
+        $this->actingAs($usuario, 'sanctum')
+            ->post(
+                "/api/convenios/{$convenio->id_instrumento}/documentos",
+                array_merge($this->validUpload(), ['version_registro' => 1])
+            )
+            ->assertStatus(409)
+            ->assertJsonPath(
+                'message',
+                'El convenio fue modificado por otro usuario. Recargá los datos y volvé a intentar.'
+            );
+
+        $this->assertDatabaseCount('documento', 0);
+
+        // Con la versión vigente la carga pasa.
+        $this->post(
+            "/api/convenios/{$convenio->id_instrumento}/documentos",
+            array_merge($this->validUpload(), ['version_registro' => 2])
+        )->assertCreated();
+    }
+
     public function test_it_removes_the_uploaded_file_when_database_persistence_fails(): void
     {
         [$convenio] = $this->createConvenio();
