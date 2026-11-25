@@ -1,5 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Card, EstadoVacio } from '@/components/panel/card';
@@ -12,35 +11,12 @@ import { SgcSpacing } from '@/constants/sgc-theme';
 import { usePanel } from '@/hooks/use-panel';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 import { formatRelativo } from '@/lib/format';
-import {
-  leerMovimientosConsultados,
-  registrarMovimientoConsultado,
-  type MovimientoConsultado,
-} from '@/lib/movimientos-storage';
-import type { MovimientoPanel } from '@/types/panel';
 
 export default function MovimientosScreen() {
   const tema = useSgcTheme();
   const router = useRouter();
   const { panel, estado, sinConexion, actualizado, actualizando, error, actualizar } = usePanel();
   const movimientos = panel?.ultimos_movimientos ?? [];
-  const [consultados, setConsultados] = useState<MovimientoConsultado[]>([]);
-
-  // Al volver de un convenio (o de otro pantalla) el historial queda actualizado.
-  useFocusEffect(
-    useCallback(() => {
-      void leerMovimientosConsultados().then(setConsultados);
-    }, []),
-  );
-
-  /** Registra la consulta y navega al convenio desde cualquier lista. */
-  const abrirConvenio = useCallback(
-    (movimiento: MovimientoPanel) => {
-      void registrarMovimientoConsultado(movimiento);
-      router.push(Destinos.convenio(movimiento.id_instrumento));
-    },
-    [router],
-  );
 
   return (
     <View style={[styles.pantalla, { backgroundColor: tema.page }]}>
@@ -58,34 +34,6 @@ export default function MovimientosScreen() {
           />
         }>
         <View style={styles.columna}>
-          {consultados.length > 0 ? (
-            <>
-              <Txt variante="subtitulo">Consultados recientemente</Txt>
-              {consultados.map((movimiento) => (
-                <Pressable
-                  key={`consultado-${movimiento.id_instrumento}`}
-                  accessibilityRole="button"
-                  onPress={() => abrirConvenio(movimiento)}
-                  style={({ pressed }) => [
-                    styles.fila,
-                    { backgroundColor: tema.surface, borderColor: tema.border },
-                    pressed && { backgroundColor: tema.rowAlternate },
-                  ]}>
-                  <Txt negrita>{movimiento.titulo ?? `Convenio #${movimiento.id_instrumento}`}</Txt>
-                  <View style={styles.estados}>
-                    <EstadoBadge estado={movimiento.estado_nuevo} />
-                  </View>
-                  <Txt variante="etiqueta" color="textSecondary">
-                    {formatRelativo(movimiento.registrado_el)}
-                    {movimiento.usuario ? ` · ${movimiento.usuario}` : ''}
-                  </Txt>
-                </Pressable>
-              ))}
-            </>
-          ) : null}
-
-          <Txt variante="subtitulo">Últimos movimientos</Txt>
-
           {estado === 'cargando' ? (
             <View style={styles.centrado}>
               <ActivityIndicator color={tema.brand} />
@@ -107,7 +55,7 @@ export default function MovimientosScreen() {
             <Pressable
               key={`${movimiento.id_instrumento}-${movimiento.fecha_hora}-${indice}`}
               accessibilityRole="button"
-              onPress={() => abrirConvenio(movimiento)}
+              onPress={() => router.push(Destinos.convenio(movimiento.id_instrumento))}
               style={({ pressed }) => [
                 styles.fila,
                 { backgroundColor: tema.surface, borderColor: tema.border },
