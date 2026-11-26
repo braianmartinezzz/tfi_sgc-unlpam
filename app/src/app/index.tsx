@@ -1,10 +1,9 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   TextInput,
   View,
@@ -12,9 +11,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { VerificacionMfa } from '@/components/auth/verificacion-mfa';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
 import { API_URL } from '@/constants/api';
+import { AREA_TACTIL_MINIMA } from '@/constants/accesibilidad';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
+import { anunciar } from '@/lib/accesibilidad';
 import { getToken, setToken } from '@/lib/auth-storage';
 import { consumirDestinoPendiente } from '@/lib/destino-pendiente';
 import { asegurarCacheDelUsuario } from '@/lib/offline-storage';
@@ -45,6 +47,8 @@ function textoDeError(error: unknown, porDefecto: string): string {
 export default function LoginScreen() {
   const tema = useSgcTheme();
   const router = useRouter();
+  // Con teclado físico, "Siguiente" en el correo salta a la contraseña.
+  const passwordRef = useRef<TextInput>(null);
 
   const [mail, setMail] = useState('');
   const [password, setPassword] = useState('');
@@ -84,6 +88,15 @@ export default function LoginScreen() {
 
     checkSession();
   }, [router]);
+
+  // Errores y avisos se leen en voz alta cuando aparecen.
+  useEffect(() => {
+    anunciar(error);
+  }, [error]);
+
+  useEffect(() => {
+    anunciar(info);
+  }, [info]);
 
   const canSubmit = mail.trim().length > 0 && password.length > 0 && !loading;
 
@@ -178,14 +191,14 @@ export default function LoginScreen() {
 
   const inputStyle = [
     styles.input,
-    { backgroundColor: surface, borderColor: border, color: tema.text },
+    { backgroundColor: surface, borderColor: border, color: tema.text, fontSize: 16 * tema.fontScale },
   ];
 
   if (checkingSession) {
     return (
       <View style={[styles.container, { backgroundColor: page }]}>
         <SafeAreaView style={styles.safeAreaCentered}>
-          <ActivityIndicator size="large" color={brand} />
+          <ActivityIndicator size="large" color={brand} accessibilityLabel="Cargando" />
         </SafeAreaView>
       </View>
     );
@@ -203,14 +216,20 @@ export default function LoginScreen() {
             <View style={styles.cardContent}>
               <View style={styles.header}>
                 <Txt style={[styles.brandText, { color: brandText }]}>UNLPam</Txt>
-                <Txt variante="detalle" color="textSecondary" style={styles.brandSubtext}>
+                {/* Repite el título de abajo: el lector de pantalla lo omite. */}
+                <Txt
+                  variante="detalle"
+                  color="textSecondary"
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  style={styles.brandSubtext}>
                   Sistema de Gestión de Convenios
                 </Txt>
 
-                <Txt style={[styles.systemTitle, { color: tema.text }]}>
+                <Txt encabezado style={[styles.systemTitle, { color: tema.text }]}>
                   Sistema de Gestión de Convenios
                 </Txt>
-                <Txt style={[styles.loginTitle, { color: tema.text }]}>
+                <Txt encabezado style={[styles.loginTitle, { color: tema.text }]}>
                   Iniciar Sesión
                 </Txt>
               </View>
@@ -240,6 +259,11 @@ export default function LoginScreen() {
                     textContentType="emailAddress"
                     autoComplete="email"
                     editable={!loading}
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    accessibilityLabel="Correo electrónico"
+                    accessibilityHint="Escribí tu correo institucional"
                   />
                 </View>
 
@@ -247,6 +271,7 @@ export default function LoginScreen() {
                   <Txt variante="detalle" negrita style={styles.label}>Contraseña</Txt>
                   <View>
                     <TextInput
+                      ref={passwordRef}
                       style={[inputStyle, styles.passwordInput]}
                       value={password}
                       onChangeText={setPassword}
@@ -260,16 +285,21 @@ export default function LoginScreen() {
                       onSubmitEditing={handleLogin}
                       returnKeyType="go"
                       editable={!loading}
+                      accessibilityLabel="Contraseña"
+                      accessibilityHint="Escribí tu contraseña"
                     />
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    <PressableA11y
+                      accessibilityRole="switch"
+                      accessibilityLabel="Mostrar contraseña"
+                      accessibilityHint="Muestra u oculta lo que escribiste"
+                      accessibilityState={{ checked: showPassword }}
                       style={styles.toggle}
+                      hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
                       onPress={() => setShowPassword((visible) => !visible)}>
                       <Txt variante="detalle" color="textSecondary">
                         {showPassword ? 'Ocultar' : 'Mostrar'}
                       </Txt>
-                    </Pressable>
+                    </PressableA11y>
                   </View>
                 </View>
 
@@ -280,13 +310,18 @@ export default function LoginScreen() {
                 )}
 
                 {error && (
-                  <Txt variante="detalle" style={styles.error}>
+                  <Txt
+                    variante="detalle"
+                    accessibilityRole="alert"
+                    style={[styles.error, { color: tema.danger }]}>
                     {error}
                   </Txt>
                 )}
 
-                <Pressable
+                <PressableA11y
                   accessibilityRole="button"
+                  accessibilityHint="Comprueba tus datos y pasa a la verificación en dos pasos"
+                  accessibilityState={{ disabled: !canSubmit, busy: loading }}
                   onPress={handleLogin}
                   disabled={!canSubmit}
                   style={({ pressed }) => [
@@ -295,15 +330,17 @@ export default function LoginScreen() {
                     (!canSubmit || pressed) && styles.buttonDim,
                   ]}>
                   {loading ? (
-                    <ActivityIndicator color="#ffffff" />
+                    <ActivityIndicator color="#ffffff" accessibilityLabel="Iniciando sesión" />
                   ) : (
                     <Txt style={styles.buttonText}>Iniciar Sesión</Txt>
                   )}
-                </Pressable>
+                </PressableA11y>
 
                 {biometriaLista && (
-                  <Pressable
+                  <PressableA11y
                     accessibilityRole="button"
+                    accessibilityHint="Abre la sesión con la huella o el rostro registrados en este celular"
+                    accessibilityState={{ disabled: loading }}
                     onPress={handleBiometria}
                     disabled={loading}
                     style={({ pressed }) => [
@@ -314,17 +351,18 @@ export default function LoginScreen() {
                     <Txt style={[styles.buttonOutlineText, { color: brandText }]}>
                       Ingresar con huella o rostro
                     </Txt>
-                  </Pressable>
+                  </PressableA11y>
                 )}
 
-                <Pressable
+                <PressableA11y
                   accessibilityRole="button"
+                  accessibilityHint="Explica cómo recuperar la contraseña"
                   style={styles.forgotButton}
                   onPress={() => setError('Para recuperar tu contraseña, contactá al administrador del sistema.') }>
                   <Txt style={[styles.forgotText, { color: brandText }]}>
                     Olvidé mi contraseña
                   </Txt>
-                </Pressable>
+                </PressableA11y>
               </View>
               )}
             </View>
@@ -422,7 +460,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     paddingHorizontal: 14,
-    fontSize: 16,
   },
   passwordInput: { paddingRight: 86 },
   toggle: {
@@ -433,7 +470,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   error: {
-    color: '#D93025',
     textAlign: 'center',
   },
   button: {
@@ -467,7 +503,7 @@ const styles = StyleSheet.create({
   },
   forgotButton: {
     alignItems: 'center',
-    minHeight: 32,
+    minHeight: AREA_TACTIL_MINIMA,
     justifyContent: 'center',
   },
   forgotText: {

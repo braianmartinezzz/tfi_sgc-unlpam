@@ -1,15 +1,18 @@
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useState } from 'react';
 
 import { Card, EstadoVacio } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
 import { OfflineBanner } from '@/components/panel/offline-banner';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
+import { AREA_TACTIL_MINIMA } from '@/constants/accesibilidad';
 import { Destinos } from '@/constants/navigation';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { usePanel } from '@/hooks/use-panel';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
+import { anunciar } from '@/lib/accesibilidad';
 import { formatRelativo } from '@/lib/format';
 import { marcarNotificacionLeida, marcarTodasNotificacionesLeidas } from '@/services/notificaciones';
 
@@ -46,6 +49,7 @@ export default function NotificacionesScreen() {
     try {
       await marcarTodasNotificacionesLeidas();
       await actualizar();
+      anunciar('Todas las notificaciones quedaron como leídas.');
     } finally {
       setMarcando(false);
     }
@@ -69,7 +73,7 @@ export default function NotificacionesScreen() {
         }>
         <View style={styles.columna}>
           {estado === 'cargando' ? (
-            <View style={styles.centrado}>
+            <View style={styles.centrado} accessibilityLiveRegion="polite">
               <ActivityIndicator color={tema.brand} />
               <Txt variante="detalle" color="textSecondary">
                 Cargando notificaciones…
@@ -79,7 +83,9 @@ export default function NotificacionesScreen() {
 
           {estado === 'error' ? (
             <Card titulo="No se pudieron cargar las notificaciones" bordeSuperior={tema.danger}>
-              <Txt color="textSecondary">{error}</Txt>
+              <Txt color="textSecondary" accessibilityRole="alert">
+                {error}
+              </Txt>
               <Txt variante="detalle" color="textSecondary">
                 Deslizá hacia abajo para reintentar.
               </Txt>
@@ -94,22 +100,24 @@ export default function NotificacionesScreen() {
 
           {estado === 'listo' && !sinConexion ? (
             <>
-              <Txt variante="detalle" color="textSecondary">
+              <Txt variante="detalle" color="textSecondary" accessibilityLiveRegion="polite">
                 {noLeidas > 0
                   ? `${noLeidas} sin leer · ${notificaciones.length} en total`
                   : `${notificaciones.length} en total`}
               </Txt>
 
               {noLeidas > 0 ? (
-                <Pressable
+                <PressableA11y
                   accessibilityRole="button"
+                  accessibilityHint="Marca todas las notificaciones como leídas"
+                  accessibilityState={{ disabled: marcando, busy: marcando }}
                   disabled={marcando}
                   onPress={() => void marcarTodas()}
                   style={({ pressed }) => [styles.marcarTodas, pressed && { opacity: 0.7 }]}>
                   <Txt variante="detalle" negrita style={{ color: tema.brandText }}>
                     {marcando ? 'Marcando...' : 'Marcar todas como leídas'}
                   </Txt>
-                </Pressable>
+                </PressableA11y>
               ) : null}
 
               {notificaciones.length === 0 ? (
@@ -120,12 +128,23 @@ export default function NotificacionesScreen() {
 
               {notificaciones.map((notificacion) => {
                 const idInstrumento = notificacion.id_instrumento;
+                const relativo = formatRelativo(notificacion.fecha_generacion);
 
                 return (
-                  <Pressable
+                  <PressableA11y
                     key={notificacion.id_notificacion}
                     accessibilityRole={idInstrumento === null ? 'text' : 'button'}
-                    accessibilityHint={idInstrumento === null ? 'Marca la notificación como leída' : 'Marca como leída y abre el convenio'}
+                    accessibilityLabel={[
+                      notificacion.leida ? null : 'Sin leer',
+                      notificacion.mensaje,
+                      relativo,
+                      idInstrumento !== null ? `Convenio número ${idInstrumento}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join('. ')}
+                    accessibilityHint={
+                      idInstrumento === null ? undefined : 'Marca como leída y abre el convenio'
+                    }
                     disabled={idInstrumento === null}
                     onPress={() => void abrirNotificacion(notificacion.id_notificacion, idInstrumento)}
                     style={({ pressed }) => [
@@ -139,10 +158,12 @@ export default function NotificacionesScreen() {
                     ]}>
                     <Txt negrita={!notificacion.leida}>{notificacion.mensaje}</Txt>
                     <Txt variante="etiqueta" color="textSecondary">
-                      {formatRelativo(notificacion.fecha_generacion)}
+                      {/* El estado no depende solo del color del borde: también se escribe. */}
+                      {notificacion.leida ? '' : 'Nueva · '}
+                      {relativo}
                       {idInstrumento !== null ? ` · Convenio #${idInstrumento}` : ''}
                     </Txt>
-                  </Pressable>
+                  </PressableA11y>
                 );
               })}
             </>
@@ -173,6 +194,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
     alignSelf: 'flex-start',
-    minHeight: 32,
+    minHeight: AREA_TACTIL_MINIMA,
   },
 });

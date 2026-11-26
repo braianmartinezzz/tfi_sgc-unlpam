@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/panel/card';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
@@ -75,12 +76,15 @@ export function AccesosRapidos({
       <View style={styles.grilla}>
         {accesos.map((acceso) => {
           const proximamente = !acceso.onPress;
-          const deshabilitado = proximamente || (sinConexion && acceso.requiereConexion);
+          const sinRed = sinConexion && acceso.requiereConexion;
+          const deshabilitado = proximamente || sinRed;
 
           return (
-            <Pressable
+            <PressableA11y
               key={acceso.clave}
               accessibilityRole="button"
+              accessibilityLabel={`${acceso.titulo}. ${proximamente ? 'Próximamente' : acceso.detalle}`}
+              accessibilityHint={sinRed ? 'No disponible sin conexión' : undefined}
               accessibilityState={{ disabled: deshabilitado }}
               disabled={deshabilitado}
               onPress={acceso.onPress}
@@ -94,7 +98,7 @@ export function AccesosRapidos({
               <Txt variante="detalle" color="textSecondary">
                 {proximamente ? 'Próximamente' : acceso.detalle}
               </Txt>
-            </Pressable>
+            </PressableA11y>
           );
         })}
       </View>

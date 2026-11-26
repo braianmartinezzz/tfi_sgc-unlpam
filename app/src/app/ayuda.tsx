@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
+import { AREA_TACTIL_MINIMA } from '@/constants/accesibilidad';
 import { SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 
@@ -15,8 +17,9 @@ const TEMAS: Tema[] = [
     titulo: 'Iniciar y cerrar sesión',
     pasos: [
       'Ingresá con tu correo institucional y tu contraseña.',
-      'La sesión queda guardada en el dispositivo: no hace falta iniciarla de nuevo cada vez.',
-      'Si la sesión vence, la aplicación te lleva sola a la pantalla de ingreso.',
+      'Elegí cómo recibir el código de 6 dígitos (correo, SMS o notificación push) y escribilo.',
+      'Si activaste la huella o el rostro en Mi perfil, podés ingresar solo con eso.',
+      'Si la sesión vence por inactividad (10 minutos), la aplicación te lleva sola a la pantalla de ingreso.',
       'Para salir, abrí Mi perfil y tocá "Cerrar sesión".',
     ],
   },
@@ -27,6 +30,16 @@ const TEMAS: Tema[] = [
       'Muestra tus convenios pendientes de firma, los totales por estado y los últimos movimientos.',
       'Los avisos señalan preavisos de vencimiento y firmas demoradas; tocá uno para abrir el convenio.',
       'Deslizá hacia abajo para actualizar los datos.',
+    ],
+  },
+  {
+    clave: 'notificaciones',
+    titulo: 'Notificaciones y vencimientos',
+    pasos: [
+      'Las notificaciones nuevas dicen "Nueva" y salen en negrita; al tocarlas se marcan como leídas y se abre el convenio.',
+      'Con "Marcar todas como leídas" limpiás la lista de una vez.',
+      'Si tocás un aviso push con la sesión vencida, primero ingresás y después se abre el convenio.',
+      'En la ficha, el vencimiento muestra la fecha y cuánto falta ("Vence en 17 días") o cuánto hace que venció.',
     ],
   },
   {
@@ -53,9 +66,21 @@ const TEMAS: Tema[] = [
     pasos: [
       'Solo pueden firmar los roles habilitados; para el resto el firmador no aparece.',
       'Elegí el convenio y, si querés, abrí el PDF para leerlo antes de firmar.',
-      'Dibujá tu firma y tocá "Guardar firma".',
-      'Al confirmar, la aplicación te pide tu huella o reconocimiento facial y permiso para registrar la ubicación.',
+      'Dibujá tu firma con el dedo y tocá "Guardar firma": la app avisa cuando quedó guardada. "Limpiar" borra el dibujo.',
+      'Tocá "Confirmar firma": la aplicación te pide tu huella o reconocimiento facial y permiso para registrar la ubicación.',
+      'Si el convenio cambió mientras lo tenías abierto, la app no firma y te muestra qué cambió para que decidas.',
       'Cuando firman todas las partes, el convenio pasa a "Firmado".',
+    ],
+  },
+  {
+    clave: 'accesibilidad',
+    titulo: 'Accesibilidad',
+    pasos: [
+      'En Mi perfil elegís el tema claro u oscuro y el tamaño de letra (chica, mediana o grande).',
+      'La app también respeta el tamaño de fuente que configures en los ajustes del celular.',
+      'Funciona con TalkBack (Android) y VoiceOver (iPhone): los botones se leen con su nombre y lo que hacen.',
+      'Con un teclado externo, Tab pasa de un elemento al siguiente y Enter o Espacio lo activan; el elemento seleccionado se marca con un borde azul.',
+      'El recuadro de la firma se dibuja con el dedo. Con lector de pantalla, activalo con doble toque y mantené para dibujar; si no te resulta, pedí ayuda para este paso.',
     ],
   },
   {
@@ -88,23 +113,34 @@ export default function AyudaScreen() {
 
             return (
               <Card key={tematica.clave} bordeSuperior={expandido ? tema.brand : undefined}>
-                <Pressable
+                <PressableA11y
                   accessibilityRole="button"
+                  accessibilityLabel={tematica.titulo}
+                  accessibilityHint={expandido ? 'Contrae la sección' : 'Despliega la sección'}
                   accessibilityState={{ expanded: expandido }}
                   onPress={() => setAbierto(expandido ? null : tematica.clave)}
                   style={styles.titulo}>
-                  <Txt variante="subtitulo" style={styles.tituloTexto}>
+                  <Txt encabezado variante="subtitulo" style={styles.tituloTexto}>
                     {tematica.titulo}
                   </Txt>
-                  <Txt variante="subtitulo" color="brandText">
+                  <Txt
+                    variante="subtitulo"
+                    color="brandText"
+                    importantForAccessibility="no"
+                    accessibilityElementsHidden>
                     {expandido ? '−' : '+'}
                   </Txt>
-                </Pressable>
+                </PressableA11y>
 
                 {expandido
                   ? tematica.pasos.map((paso) => (
                       <View key={paso} style={styles.paso}>
-                        <Txt color="textSecondary">•</Txt>
+                        <Txt
+                          color="textSecondary"
+                          importantForAccessibility="no"
+                          accessibilityElementsHidden>
+                          •
+                        </Txt>
                         <Txt style={styles.pasoTexto}>{paso}</Txt>
                       </View>
                     ))
@@ -122,7 +158,13 @@ const styles = StyleSheet.create({
   pantalla: { flex: 1 },
   contenido: { padding: SgcSpacing.lg, paddingBottom: SgcSpacing.xl * 2 },
   columna: { width: '100%', maxWidth: 800, alignSelf: 'center', gap: SgcSpacing.md },
-  titulo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SgcSpacing.sm },
+  titulo: {
+    minHeight: AREA_TACTIL_MINIMA,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SgcSpacing.sm,
+  },
   tituloTexto: { flex: 1 },
   paso: { flexDirection: 'row', gap: SgcSpacing.sm },
   pasoTexto: { flex: 1 },

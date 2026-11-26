@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/panel/card';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
@@ -43,29 +44,32 @@ export function ConflictoFirmaCard({
       </View>
 
       {sePuedeRecargar ? (
-        <Pressable
+        <PressableA11y
           accessibilityRole="button"
+          accessibilityHint="Abre la versión actual del convenio y borra la firma y el comentario cargados"
           onPress={onRecargar}
           style={[styles.boton, { backgroundColor: tema.brand }]}>
           <Txt negrita color="onBrand">Recargar versión vigente</Txt>
-        </Pressable>
+        </PressableA11y>
       ) : null}
 
       {sePuedeConservar ? (
-        <Pressable
+        <PressableA11y
           accessibilityRole="button"
+          accessibilityHint="Abre la versión actual y mantiene tu firma y comentario para que los revises"
           onPress={onConservar}
           style={[styles.botonSecundario, { borderColor: tema.brand }]}>
           <Txt negrita style={{ color: tema.brandText }}>Conservar mi firma y comentario</Txt>
-        </Pressable>
+        </PressableA11y>
       ) : null}
 
-      <Pressable
+      <PressableA11y
         accessibilityRole="button"
+        accessibilityHint="Sale del convenio y borra lo que cargaste"
         onPress={onDescartar}
         style={[styles.botonSecundario, { borderColor: tema.border }]}>
         <Txt negrita>Descartar mis cambios</Txt>
-      </Pressable>
+      </PressableA11y>
     </Card>
   );
 }

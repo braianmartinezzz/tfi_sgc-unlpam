@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Card, EstadoVacio } from '@/components/panel/card';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
@@ -38,7 +39,10 @@ export function PendientesCard({
       titulo="Mis pendientes de firma"
       bordeSuperior={tema.brand}
       acento={
-        <Txt variante="subtitulo" style={{ color: tema.brandText }}>
+        <Txt
+          variante="subtitulo"
+          accessibilityLabel={`${pendientes.length} en total`}
+          style={{ color: tema.brandText }}>
           {pendientes.length}
         </Txt>
       }>
@@ -52,33 +56,46 @@ export function PendientesCard({
         />
       ) : (
         <View style={styles.lista}>
-          {visibles.map((pendiente) => (
-            <Pressable
-              key={pendiente.id_instrumento}
-              accessibilityRole="button"
-              onPress={() => onAbrirConvenio(pendiente.id_instrumento)}
-              style={({ pressed }) => [
-                styles.fila,
-                { borderColor: tema.border },
-                pendiente.demorado && { borderLeftColor: tema.danger, borderLeftWidth: 4 },
-                pressed && { backgroundColor: tema.rowAlternate },
-              ]}>
-              <Txt negrita numberOfLines={2}>
-                {pendiente.titulo}
-              </Txt>
-              <Txt variante="detalle" color="textSecondary" numberOfLines={1}>
-                {[pendiente.unidad_academica, pendiente.firmantes.join(', ')]
+          {visibles.map((pendiente) => {
+            const detalle = [pendiente.unidad_academica, pendiente.firmantes.join(', ')]
+              .filter(Boolean)
+              .join(' · ');
+
+            return (
+              <PressableA11y
+                key={pendiente.id_instrumento}
+                accessibilityRole="button"
+                accessibilityLabel={[
+                  pendiente.titulo,
+                  detalle,
+                  pendiente.demorado ? 'Firma demorada' : null,
+                  textoDemora(pendiente.horas_pendiente),
+                ]
                   .filter(Boolean)
-                  .join(' · ')}
-              </Txt>
-              <Txt
-                variante="etiqueta"
-                style={{ color: pendiente.demorado ? tema.danger : tema.textSecondary }}>
-                {pendiente.demorado ? 'Demorado · ' : ''}
-                {textoDemora(pendiente.horas_pendiente)}
-              </Txt>
-            </Pressable>
-          ))}
+                  .join('. ')}
+                accessibilityHint="Abre la ficha del convenio"
+                onPress={() => onAbrirConvenio(pendiente.id_instrumento)}
+                style={({ pressed }) => [
+                  styles.fila,
+                  { borderColor: tema.border },
+                  pendiente.demorado && { borderLeftColor: tema.danger, borderLeftWidth: 4 },
+                  pressed && { backgroundColor: tema.rowAlternate },
+                ]}>
+                <Txt negrita numberOfLines={2}>
+                  {pendiente.titulo}
+                </Txt>
+                <Txt variante="detalle" color="textSecondary" numberOfLines={1}>
+                  {detalle}
+                </Txt>
+                <Txt
+                  variante="etiqueta"
+                  style={{ color: pendiente.demorado ? tema.danger : tema.textSecondary }}>
+                  {pendiente.demorado ? 'Demorado · ' : ''}
+                  {textoDemora(pendiente.horas_pendiente)}
+                </Txt>
+              </PressableA11y>
+            );
+          })}
         </View>
       )}
 
@@ -88,8 +105,14 @@ export function PendientesCard({
         </Txt>
       ) : null}
 
-      <Pressable
+      <PressableA11y
         accessibilityRole="button"
+        accessibilityHint={
+          sinConexion
+            ? 'Hace falta conexión a internet para firmar'
+            : 'Abre la lista de convenios para firmar'
+        }
+        accessibilityState={{ disabled: sinConexion }}
         disabled={sinConexion}
         onPress={onAbrirFirmador}
         style={({ pressed }) => [
@@ -101,8 +124,7 @@ export function PendientesCard({
         <Txt negrita color="onBrand">
           {sinConexion ? 'Firmar (requiere conexión)' : 'Abrir firmador de convenios'}
         </Txt>
-      </Pressable>
-
+      </PressableA11y>
     </Card>
   );
 }

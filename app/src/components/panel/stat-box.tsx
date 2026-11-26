@@ -19,7 +19,8 @@ export function StatBox({ valor, etiqueta, color, nota }: StatBoxProps) {
   return (
     <View
       accessible
-      accessibilityLabel={`${etiqueta}: ${valor}`}
+      // La nota también se lee: por ejemplo "2 vencido(s) sin archivar" es información importante.
+      accessibilityLabel={`${etiqueta}: ${valor}${nota ? `. ${nota}` : ''}`}
       style={[
         styles.caja,
         { backgroundColor: tema.surface, borderColor: tema.border, borderTopColor: color },

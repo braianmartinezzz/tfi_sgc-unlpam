@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Card, Enlace, EstadoVacio } from '@/components/panel/card';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
@@ -39,7 +40,10 @@ export function NotificacionesCard({
       titulo="Avisos y notificaciones"
       acento={
         noLeidas > 0 ? (
-          <View style={[styles.contador, { backgroundColor: tema.brand }]}>
+          <View
+            accessible
+            accessibilityLabel={`${noLeidas} sin leer`}
+            style={[styles.contador, { backgroundColor: tema.brand }]}>
             <Txt variante="etiqueta" color="onBrand">
               {noLeidas} sin leer
             </Txt>
@@ -49,9 +53,11 @@ export function NotificacionesCard({
       {sinNovedades ? <EstadoVacio texto="Sin novedades por el momento." /> : null}
 
       {alertas.map((alerta) => (
-        <Pressable
+        <PressableA11y
           key={`${alerta.tipo}-${alerta.id_instrumento}`}
           accessibilityRole="button"
+          accessibilityLabel={`${ETIQUETA_ALERTA[alerta.tipo]}. ${alerta.titulo}. ${alerta.mensaje}`}
+          accessibilityHint="Abre la ficha del convenio"
           onPress={() => onAbrirConvenio(alerta.id_instrumento)}
           style={({ pressed }) => [
             styles.fila,
@@ -70,36 +76,48 @@ export function NotificacionesCard({
           <Txt variante="detalle" color="textSecondary">
             {alerta.mensaje}
           </Txt>
-        </Pressable>
+        </PressableA11y>
       ))}
 
-      {visibles.map((notificacion) => (
-        <Pressable
-          key={notificacion.id_notificacion}
-          accessibilityRole="button"
-          disabled={notificacion.id_instrumento === null}
-          onPress={() =>
-            notificacion.id_instrumento !== null && onAbrirConvenio(notificacion.id_instrumento)
-          }
-          style={({ pressed }) => [
-            styles.fila,
-            {
-              borderColor: tema.border,
-              borderLeftColor: notificacion.leida ? tema.border : tema.info,
-            },
-            pressed && { backgroundColor: tema.rowAlternate },
-          ]}>
-          <Txt negrita={!notificacion.leida} numberOfLines={3}>
-            {notificacion.mensaje}
-          </Txt>
-          <Txt variante="etiqueta" color="textSecondary">
-            {formatRelativo(notificacion.fecha_generacion)}
-          </Txt>
-        </Pressable>
-      ))}
+      {visibles.map((notificacion) => {
+        const abre = notificacion.id_instrumento !== null;
+
+        return (
+          <PressableA11y
+            key={notificacion.id_notificacion}
+            accessibilityRole={abre ? 'button' : 'text'}
+            accessibilityLabel={`${notificacion.leida ? '' : 'Sin leer. '}${notificacion.mensaje}. ${formatRelativo(notificacion.fecha_generacion)}`}
+            accessibilityHint={abre ? 'Abre la ficha del convenio' : undefined}
+            disabled={!abre}
+            onPress={() =>
+              notificacion.id_instrumento !== null && onAbrirConvenio(notificacion.id_instrumento)
+            }
+            style={({ pressed }) => [
+              styles.fila,
+              {
+                borderColor: tema.border,
+                borderLeftColor: notificacion.leida ? tema.border : tema.info,
+              },
+              pressed && { backgroundColor: tema.rowAlternate },
+            ]}>
+            <Txt negrita={!notificacion.leida} numberOfLines={3}>
+              {notificacion.mensaje}
+            </Txt>
+            <Txt variante="etiqueta" color="textSecondary">
+              {/* El estado no depende solo del color del borde: también se escribe. */}
+              {notificacion.leida ? '' : 'Nueva · '}
+              {formatRelativo(notificacion.fecha_generacion)}
+            </Txt>
+          </PressableA11y>
+        );
+      })}
 
       {onVerTodas && notificaciones.length > MAXIMO_NOTIFICACIONES ? (
-        <Enlace texto="Ver todas las notificaciones" onPress={onVerTodas} />
+        <Enlace
+          texto="Ver todas las notificaciones"
+          pista="Abre la lista completa de notificaciones"
+          onPress={onVerTodas}
+        />
       ) : null}
     </Card>
   );

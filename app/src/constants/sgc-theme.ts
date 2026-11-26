@@ -3,6 +3,10 @@ import { Platform } from 'react-native';
 /**
  * Paleta de la aplicación web (web/app/globals.css) llevada a la app móvil:
  * rojo institucional de la UNLPam, barra superior oscura y superficies neutras.
+ *
+ * Fase 7: `danger` (claro) y `fieldPlaceholder` (oscuro) se ajustaron para cumplir el
+ * contraste AA de WCAG (4.5:1 en texto). Los tests de `__tests__/accesibilidad.test.ts`
+ * verifican todos los pares texto/fondo.
  */
 export type SgcPalette = {
   page: string;
@@ -44,7 +48,7 @@ export const SgcColors: { light: SgcPalette; dark: SgcPalette } = {
     success: '#16a34a',
     warning: '#d97706',
     info: '#2563eb',
-    danger: '#d13b3b',
+    danger: '#b9302e',
   },
   dark: {
     page: '#17181e',
@@ -53,7 +57,7 @@ export const SgcColors: { light: SgcPalette; dark: SgcPalette } = {
     onTopbar: '#ededed',
     field: '#2b2d35',
     onField: '#ededed',
-    fieldPlaceholder: '#8e919d',
+    fieldPlaceholder: '#9a9da9',
     border: '#454751',
     text: '#ededed',
     textSecondary: '#b0b4ba',

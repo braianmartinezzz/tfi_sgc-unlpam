@@ -9,7 +9,10 @@ export function EstadoBadge({ estado }: { estado: string }) {
   const colores = tema.estadoColor(estado);
 
   return (
-    <View style={[styles.badge, { backgroundColor: colores.bg }]}>
+    <View
+      accessible
+      accessibilityLabel={`Estado: ${estado}`}
+      style={[styles.badge, { backgroundColor: colores.bg }]}>
       <Txt variante="etiqueta" style={{ color: colores.fg }}>
         {estado}
       </Txt>

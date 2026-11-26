@@ -4,7 +4,6 @@ import {
   Alert,
   BackHandler,
   Linking,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,9 +21,12 @@ import NetInfo from '@react-native-community/netinfo';
 import { ConflictoFirmaCard } from '@/components/firma/conflicto-firma-card';
 import { Card, EstadoVacio } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
+import { AREA_TACTIL_MINIMA } from '@/constants/accesibilidad';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
+import { anunciar } from '@/lib/accesibilidad';
 import { detectarConflicto, type ConflictoFirma } from '@/lib/concurrencia-firma';
 import { ApiError } from '@/services/api-client';
 import { confirmarConBiometria } from '@/services/biometria-login';
@@ -59,6 +61,13 @@ export default function FirmadorScreen() {
     seleccionadoRef.current = seleccionado;
   }, [seleccionado]);
 
+  // Guardar la firma no cambia nada a la vista salvo habilitar "Confirmar": se anuncia en voz alta.
+  const huboTrazo = useRef(false);
+  useEffect(() => {
+    if (trazo && !huboTrazo.current) anunciar('Firma guardada. Ya podés confirmar.');
+    huboTrazo.current = trazo !== null;
+  }, [trazo]);
+
   /**
    * Aplica la lista vigente del servidor. Si el convenio abierto cambió, NO se pisa en
    * silencio (la firma dibujada quedaría atada a datos que la persona nunca vio): se
@@ -76,6 +85,7 @@ export default function FirmadorScreen() {
 
       if (detectado) {
         setConflicto(detectado);
+        anunciar(`Conflicto de versión. ${detectado.mensaje}`);
         return false;
       }
 
@@ -320,6 +330,7 @@ export default function FirmadorScreen() {
       setComentarios((actuales) => [comentario, ...actuales]);
       setNuevoComentario('');
       if (comentario.ofensivo) Alert.alert('Comentario moderado', 'El texto fue reemplazado por “comentario ofensivo”.');
+      else anunciar('Comentario publicado.');
     } catch (exception) {
       Alert.alert('No se pudo publicar', exception instanceof Error ? exception.message : 'Intentá nuevamente.');
     }
@@ -344,12 +355,15 @@ export default function FirmadorScreen() {
     }
   };
 
+  const confirmarDeshabilitado = firmando || !trazo || conflicto !== null;
+
   return (
     <View style={[styles.pantalla, { backgroundColor: tema.page }]}>
       <EncabezadoPantalla titulo="Firmador de convenios" />
 
       <ScrollView
         contentContainerStyle={styles.contenido}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={actualizando}
@@ -359,7 +373,7 @@ export default function FirmadorScreen() {
           />
         }>
         {estado === 'cargando' ? (
-          <View style={styles.centrado}>
+          <View style={styles.centrado} accessibilityLiveRegion="polite">
             <ActivityIndicator color={tema.brand} />
             <Txt variante="detalle" color="textSecondary">Cargando pendientes…</Txt>
           </View>
@@ -367,10 +381,14 @@ export default function FirmadorScreen() {
 
         {estado === 'error' ? (
           <Card titulo="No se pudo cargar el firmador" bordeSuperior={tema.danger}>
-            <Txt color="textSecondary">{error}</Txt>
-            <Pressable accessibilityRole="button" onPress={() => cargar()} style={[styles.boton, { backgroundColor: tema.brand }]}>
+            <Txt color="textSecondary" accessibilityRole="alert">{error}</Txt>
+            <PressableA11y
+              accessibilityRole="button"
+              accessibilityHint="Vuelve a pedir los convenios pendientes"
+              onPress={() => cargar()}
+              style={[styles.boton, { backgroundColor: tema.brand }]}>
               <Txt negrita color="onBrand">Reintentar</Txt>
-            </Pressable>
+            </PressableA11y>
           </Card>
         ) : null}
 
@@ -380,36 +398,49 @@ export default function FirmadorScreen() {
 
         {estado === 'listo' && pendientes.length > 0 && !seleccionado ? (
           <View style={styles.lista}>
-            {pendientes.map((pendiente) => (
-              <Pressable
-                key={pendiente.id_instrumento}
-                accessibilityRole="button"
-                onPress={() => seleccionar(pendiente)}
-                style={({ pressed }) => [
-                  styles.item,
-                  { borderColor: tema.border, backgroundColor: tema.surface },
-                  pendiente.demorado && { borderLeftColor: tema.danger, borderLeftWidth: 4 },
-                  pressed && { opacity: 0.75 },
-                ]}>
-                <Txt negrita>{pendiente.titulo}</Txt>
-                <Txt variante="detalle" color="textSecondary">
-                  {[pendiente.unidad_academica, pendiente.firmantes.map((f) => `${f.nombre} ${f.apellido}`).join(', ')].filter(Boolean).join(' · ')}
-                </Txt>
-                {pendiente.demorado ? (
-                  <Txt variante="etiqueta" style={{ color: tema.danger }}>Firma demorada</Txt>
-                ) : null}
-              </Pressable>
-            ))}
+            {pendientes.map((pendiente) => {
+              const detalle = [pendiente.unidad_academica, pendiente.firmantes.map((f) => `${f.nombre} ${f.apellido}`).join(', ')].filter(Boolean).join(' · ');
+
+              return (
+                <PressableA11y
+                  key={pendiente.id_instrumento}
+                  accessibilityRole="button"
+                  accessibilityLabel={[pendiente.titulo, detalle, pendiente.demorado ? 'Firma demorada' : null]
+                    .filter(Boolean)
+                    .join('. ')}
+                  accessibilityHint="Abre el convenio para revisarlo y firmarlo"
+                  onPress={() => seleccionar(pendiente)}
+                  style={({ pressed }) => [
+                    styles.item,
+                    { borderColor: tema.border, backgroundColor: tema.surface },
+                    pendiente.demorado && { borderLeftColor: tema.danger, borderLeftWidth: 4 },
+                    pressed && { opacity: 0.75 },
+                  ]}>
+                  <Txt negrita>{pendiente.titulo}</Txt>
+                  <Txt variante="detalle" color="textSecondary">
+                    {detalle}
+                  </Txt>
+                  {pendiente.demorado ? (
+                    <Txt variante="etiqueta" style={{ color: tema.danger }}>Firma demorada</Txt>
+                  ) : null}
+                </PressableA11y>
+              );
+            })}
           </View>
         ) : null}
 
         {seleccionado ? (
           <View style={styles.seccion}>
-            <Pressable accessibilityRole="button" onPress={salirDeSeleccion} hitSlop={8}>
+            <PressableA11y
+              accessibilityRole="button"
+              accessibilityHint={vinoDeFicha ? 'Vuelve a la ficha del convenio' : 'Vuelve a la lista de pendientes'}
+              onPress={salirDeSeleccion}
+              hitSlop={8}
+              style={styles.volver}>
               <Txt variante="detalle" negrita style={{ color: tema.brandText }}>
                 {vinoDeFicha ? '‹ Volver al convenio' : '‹ Volver a pendientes'}
               </Txt>
-            </Pressable>
+            </PressableA11y>
 
             {conflicto ? (
               <ConflictoFirmaCard
@@ -438,23 +469,37 @@ export default function FirmadorScreen() {
                 </Txt>
               ) : null}
 
-              <Pressable
+              <PressableA11y
                 accessibilityRole="button"
+                accessibilityHint={
+                  seleccionado.documento
+                    ? 'Abre el PDF del convenio para leerlo antes de firmar'
+                    : 'Este convenio no tiene un PDF disponible'
+                }
+                accessibilityState={{ disabled: !seleccionado.documento }}
                 onPress={abrirPdf}
                 disabled={!seleccionado.documento}
                 style={[styles.botonSecundario, { borderColor: tema.brand }, !seleccionado.documento && { opacity: 0.5 }]}>
                 <Txt negrita style={{ color: tema.brandText }}>Abrir / descargar PDF</Txt>
-              </Pressable>
+              </PressableA11y>
 
-              <Txt variante="subtitulo">Firmantes</Txt>
+              <Txt encabezado variante="subtitulo">Firmantes</Txt>
               {seleccionado.firmantes.map((firmante) => (
                 <Txt key={firmante.id_persona} variante="detalle" color="textSecondary">
                   {firmante.nombre} {firmante.apellido}{firmante.firmado ? ' · Firmado' : ' · Pendiente'}
                 </Txt>
               ))}
 
-              <Txt variante="subtitulo">Tu firma</Txt>
-              <View style={[styles.firma, { borderColor: tema.border, backgroundColor: '#FFFFFF' }]}>
+              <Txt encabezado variante="subtitulo">Tu firma</Txt>
+              <Txt variante="detalle" color="textSecondary" accessibilityLiveRegion="polite">
+                {trazo
+                  ? 'Firma guardada. Ya podés confirmar.'
+                  : 'Dibujá tu firma con el dedo y tocá "Guardar firma".'}
+              </Txt>
+              <View
+                accessible
+                accessibilityLabel="Recuadro de firma. Dibujá tu firma con el dedo."
+                style={[styles.firma, { borderColor: tema.border, backgroundColor: '#FFFFFF' }]}>
                 <SignatureCanvas
                   ref={firmaRef}
                   onOK={setTrazo}
@@ -470,32 +515,43 @@ export default function FirmadorScreen() {
               </View>
 
               <View style={styles.botonesFirma}>
-                <Pressable
+                <PressableA11y
                   accessibilityRole="button"
-                  onPress={() => firmaRef.current?.clearSignature()}
+                  accessibilityHint="Borra el dibujo para empezar de nuevo"
+                  onPress={() => {
+                    firmaRef.current?.clearSignature();
+                    setTrazo(null);
+                  }}
                   style={[styles.botonSecundario, { borderColor: tema.border }]}>
                   <Txt negrita>Limpiar</Txt>
-                </Pressable>
-                <Pressable
+                </PressableA11y>
+                <PressableA11y
                   accessibilityRole="button"
+                  accessibilityHint="Guarda el dibujo como tu firma; después se habilita Confirmar firma"
                   onPress={() => firmaRef.current?.readSignature()}
                   style={[styles.botonSecundario, { borderColor: tema.brand }]}>
                   <Txt negrita style={{ color: tema.brandText }}>Guardar firma</Txt>
-                </Pressable>
+                </PressableA11y>
               </View>
 
-              <Pressable
+              <PressableA11y
                 accessibilityRole="button"
+                accessibilityHint={
+                  trazo
+                    ? 'Pide tu huella o rostro y registra la firma con tu ubicación'
+                    : 'Primero dibujá y guardá tu firma'
+                }
+                accessibilityState={{ disabled: confirmarDeshabilitado, busy: firmando }}
                 onPress={confirmarFirma}
-                disabled={firmando || !trazo || conflicto !== null}
-                style={[styles.boton, { backgroundColor: tema.brand }, (firmando || !trazo || conflicto !== null) && { opacity: 0.5 }]}
+                disabled={confirmarDeshabilitado}
+                style={[styles.boton, { backgroundColor: tema.brand }, confirmarDeshabilitado && { opacity: 0.5 }]}
               >
                 {firmando ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color="#FFFFFF" accessibilityLabel="Registrando la firma" />
                 ) : (
                   <Txt negrita color="onBrand">Confirmar firma</Txt>
                 )}
-              </Pressable>
+              </PressableA11y>
             </Card>
 
             <Card titulo="Comentarios" bordeSuperior={tema.brand}>
@@ -505,27 +561,36 @@ export default function FirmadorScreen() {
                 placeholder="Escribí un comentario para los firmantes…"
                 placeholderTextColor={tema.textSecondary}
                 multiline
+                accessibilityLabel="Comentario para los firmantes"
+                accessibilityHint="Escribí el texto y después tocá Publicar comentario"
                 style={[styles.comentarioInput, {
                   borderColor: tema.border,
                   color: tema.text,
                   backgroundColor: tema.surface,
+                  fontSize: 15 * tema.fontScale,
                 }]}
               />
-              <Pressable
+              <PressableA11y
                 accessibilityRole="button"
+                accessibilityHint="Publica el comentario para los demás firmantes"
+                accessibilityState={{ disabled: nuevoComentario.trim() === '' }}
                 onPress={publicarComentario}
                 disabled={nuevoComentario.trim() === ''}
                 style={[styles.botonSecundario, { borderColor: tema.brand }, nuevoComentario.trim() === '' && { opacity: 0.5 }]}
               >
                 <Txt negrita style={{ color: tema.brandText }}>Publicar comentario</Txt>
-              </Pressable>
+              </PressableA11y>
 
               {comentarios.length === 0 ? (
                 <Txt variante="detalle" color="textSecondary">No hay comentarios aún.</Txt>
               ) : null}
 
               {comentarios.map((comentario) => (
-                <View key={comentario.id_comentario} style={[styles.comentario, { borderColor: tema.border }]}>
+                <View
+                  key={comentario.id_comentario}
+                  accessible
+                  accessibilityLabel={`${comentario.usuario.nombre}. ${comentario.contenido}. ${new Date(comentario.fecha).toLocaleString()}`}
+                  style={[styles.comentario, { borderColor: tema.border }]}>
                   <Txt negrita>{comentario.usuario.nombre}</Txt>
                   <Txt variante="detalle" color={comentario.ofensivo ? 'textSecondary' : 'text'}>
                     {comentario.contenido}
@@ -539,13 +604,14 @@ export default function FirmadorScreen() {
 
             <Card titulo="Acciones" bordeSuperior={tema.brand}>
               <View style={styles.botonesAcciones}>
-                <Pressable
+                <PressableA11y
                   accessibilityRole="button"
+                  accessibilityHint="Genera la constancia de firma en PDF y abre el menú para compartirla"
                   onPress={compartirConstancia}
                   style={[styles.botonAccion, { borderColor: tema.brand }]}
                 >
                   <Txt negrita style={{ color: tema.brandText }}>Compartir constancia</Txt>
-                </Pressable>
+                </PressableA11y>
               </View>
             </Card>
           </View>
@@ -562,6 +628,7 @@ const styles = StyleSheet.create({
   lista: { gap: SgcSpacing.sm },
   item: { borderWidth: 1, borderRadius: SgcRadius.md, padding: SgcSpacing.md, gap: SgcSpacing.sm },
   seccion: { gap: SgcSpacing.md },
+  volver: { minHeight: AREA_TACTIL_MINIMA, justifyContent: 'center' },
   firma: { height: 220, borderWidth: 1, borderRadius: SgcRadius.md, overflow: 'hidden' },
   botonesFirma: { flexDirection: 'row', gap: SgcSpacing.sm },
   boton: { borderRadius: SgcRadius.sm, paddingVertical: SgcSpacing.md, alignItems: 'center' },

@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 
 import { Card } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { usePanel } from '@/hooks/use-panel';
@@ -80,14 +81,17 @@ export default function PerfilScreen() {
         <View style={styles.columna}>
           {!me && estado === 'cargando' ? (
             <View style={styles.centrado}>
-              <ActivityIndicator color={tema.brand} />
+              <ActivityIndicator color={tema.brand} accessibilityLabel="Cargando perfil" />
             </View>
           ) : null}
 
           {me ? (
             <Card bordeSuperior={tema.brand}>
               <View style={styles.cabecera}>
-                <View style={[styles.avatar, { backgroundColor: tema.brand, overflow: 'hidden' }]}>
+                <View
+                  importantForAccessibility="no-hide-descendants"
+                  accessibilityElementsHidden
+                  style={[styles.avatar, { backgroundColor: tema.brand, overflow: 'hidden' }]}>
                   {fotoPerfil ? (
                     <Image source={{ uri: fotoPerfil }} style={styles.avatarImagen} contentFit="cover" />
                   ) : (
@@ -97,7 +101,7 @@ export default function PerfilScreen() {
                   )}
                 </View>
                 <View style={styles.cabeceraTexto}>
-                  <Txt variante="subtitulo">{me.nombre}</Txt>
+                  <Txt encabezado variante="subtitulo">{me.nombre}</Txt>
                   <Txt variante="detalle" color="textSecondary">
                     {me.mail}
                   </Txt>
@@ -130,8 +134,9 @@ export default function PerfilScreen() {
             <Txt variante="detalle" color="textSecondary">
               Registrá tu firma, tu reconocimiento facial y tu huella digital en este dispositivo.
             </Txt>
-            <Pressable
+            <PressableA11y
               accessibilityRole="button"
+              accessibilityHint="Abre el registro de firma, rostro y huella"
               onPress={() => router.push('/identidad')}
               style={({ pressed }) => [
                 styles.opcion,
@@ -141,11 +146,11 @@ export default function PerfilScreen() {
               <Txt negrita style={{ color: tema.brandText }}>
                 Registrar mi identidad
               </Txt>
-            </Pressable>
+            </PressableA11y>
           </Card>
 
           <Card titulo="Apariencia">
-            <View style={styles.opciones}>
+            <View accessibilityRole="radiogroup" style={styles.opciones}>
               <Opcion
                 texto="Claro"
                 activa={tema.scheme === 'light'}
@@ -172,8 +177,11 @@ export default function PerfilScreen() {
                     style={styles.fotoPerfil}
                     contentFit="cover"
                     transition={100}
+                    accessibilityLabel="Tu foto de perfil"
                   />
-                  <Pressable
+                  <PressableA11y
+                    accessibilityRole="button"
+                    accessibilityHint="Borra la foto guardada en este dispositivo"
                     onPress={quitarFoto}
                     style={({ pressed }) => [
                       styles.botonEliminarFoto,
@@ -182,19 +190,23 @@ export default function PerfilScreen() {
                     <Txt color="text" negrita>
                       Eliminar foto
                     </Txt>
-                  </Pressable>
+                  </PressableA11y>
                 </>
               ) : (
-                <Pressable
+                <PressableA11y
+                  accessibilityRole="button"
+                  accessibilityHint="Elegí una imagen de tu galería"
                   onPress={elegirFoto}
+                  // Antes el texto era blanco sobre fondo blanco (no se leía): ahora lleva el color institucional.
                   style={({ pressed }) => [
                     styles.botonAgregarFoto,
+                    { backgroundColor: tema.brand, borderColor: tema.brand },
                     pressed && { opacity: 0.7 },
                   ]}>
                   <Txt color="onBrand" negrita>
                     Agregar foto de perfil
                   </Txt>
-                </Pressable>
+                </PressableA11y>
               )}
             </View>
           </Card>
@@ -203,15 +215,17 @@ export default function PerfilScreen() {
             <Txt variante="detalle" color="textSecondary">
               Cambia el tamaño del texto en toda la app.
             </Txt>
-            <View style={styles.opciones}>
+            <View accessibilityRole="radiogroup" style={styles.opciones}>
               <Opcion texto="Chica" activa={tema.textSize === 'small'} onPress={() => tema.setTextSize('small')} />
               <Opcion texto="Mediana" activa={tema.textSize === 'medium'} onPress={() => tema.setTextSize('medium')} />
               <Opcion texto="Grande" activa={tema.textSize === 'large'} onPress={() => tema.setTextSize('large')} />
             </View>
           </Card>
 
-          <Pressable
+          <PressableA11y
             accessibilityRole="button"
+            accessibilityHint="Pide confirmación y cierra la sesión en este dispositivo"
+            accessibilityState={{ disabled: saliendo, busy: saliendo }}
             disabled={saliendo}
             onPress={confirmarSalida}
             style={({ pressed }) => [
@@ -220,13 +234,13 @@ export default function PerfilScreen() {
               (pressed || saliendo) && { opacity: 0.6 },
             ]}>
             {saliendo ? (
-              <ActivityIndicator color={tema.danger} />
+              <ActivityIndicator color={tema.danger} accessibilityLabel="Cerrando sesión" />
             ) : (
               <Txt negrita style={{ color: tema.danger }}>
                 Cerrar sesión
               </Txt>
             )}
-          </Pressable>
+          </PressableA11y>
         </View>
       </ScrollView>
     </View>
@@ -237,7 +251,7 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null }) {
   if (!valor) return null;
 
   return (
-    <View style={styles.dato}>
+    <View accessible accessibilityLabel={`${etiqueta}: ${valor}`} style={styles.dato}>
       <Txt variante="etiqueta" color="textSecondary">
         {etiqueta}
       </Txt>
@@ -250,9 +264,9 @@ function Opcion({ texto, activa, onPress }: { texto: string; activa: boolean; on
   const tema = useSgcTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: activa }}
+    <PressableA11y
+      accessibilityRole="radio"
+      accessibilityState={{ checked: activa, selected: activa }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.opcion,
@@ -265,7 +279,7 @@ function Opcion({ texto, activa, onPress }: { texto: string; activa: boolean; on
       <Txt negrita style={{ color: activa ? tema.onBrand : tema.text }}>
         {texto}
       </Txt>
-    </Pressable>
+    </PressableA11y>
   );
 }
 

@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { SgcRadius } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 
@@ -39,11 +40,13 @@ export function ThemeToggle() {
   const oscuro = tema.scheme === 'dark';
 
   return (
-    <Pressable
+    <PressableA11y
       accessibilityRole="switch"
       accessibilityLabel="Modo oscuro"
+      accessibilityHint="Cambia entre el tema claro y el oscuro"
       accessibilityState={{ checked: oscuro }}
-      hitSlop={6}
+      // La píldora mide 28 de alto: el área extra completa los 44 recomendados.
+      hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
       onPress={() => tema.setPreference(oscuro ? 'light' : 'dark')}
       style={({ pressed }) => [
         styles.pildora,
@@ -52,18 +55,20 @@ export function ThemeToggle() {
       ]}>
       <View
         pointerEvents="none"
+        importantForAccessibility="no-hide-descendants"
         style={[styles.segmento, !oscuro && { backgroundColor: tema.brand }]}>
         <IconoSol color={!oscuro ? tema.onBrand : tema.fieldPlaceholder} />
       </View>
       <View
         pointerEvents="none"
+        importantForAccessibility="no-hide-descendants"
         style={[styles.segmento, oscuro && { backgroundColor: tema.brand }]}>
         <IconoLuna
           color={oscuro ? tema.onBrand : tema.fieldPlaceholder}
           fondo={oscuro ? tema.brand : tema.field}
         />
       </View>
-    </Pressable>
+    </PressableA11y>
   );
 }
 

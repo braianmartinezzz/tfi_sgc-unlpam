@@ -1,7 +1,9 @@
 import { type ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
+import { AREA_TACTIL_MINIMA } from '@/constants/accesibilidad';
 import { SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
 
@@ -28,7 +30,9 @@ export function Card({ titulo, acento, bordeSuperior, children, style }: CardPro
       ]}>
       {titulo ? (
         <View style={styles.encabezado}>
-          <Txt variante="subtitulo">{titulo}</Txt>
+          <Txt encabezado variante="subtitulo">
+            {titulo}
+          </Txt>
           {acento}
         </View>
       ) : null}
@@ -41,23 +45,31 @@ type EnlaceProps = {
   texto: string;
   onPress: () => void;
   deshabilitado?: boolean;
+  /** Qué pasa al tocarlo; lo lee el lector de pantalla después del nombre. */
+  pista?: string;
 };
 
 /** Texto accionable en el color institucional, usado como "Ver todos". */
-export function Enlace({ texto, onPress, deshabilitado }: EnlaceProps) {
+export function Enlace({ texto, onPress, deshabilitado, pista }: EnlaceProps) {
   const tema = useSgcTheme();
 
   return (
-    <Pressable
+    <PressableA11y
       accessibilityRole="button"
+      accessibilityHint={pista}
+      accessibilityState={{ disabled: !!deshabilitado }}
       disabled={deshabilitado}
       onPress={onPress}
       hitSlop={8}
-      style={({ pressed }) => [pressed && { opacity: 0.6 }, deshabilitado && { opacity: 0.4 }]}>
+      style={({ pressed }) => [
+        styles.enlace,
+        pressed && { opacity: 0.6 },
+        deshabilitado && { opacity: 0.4 },
+      ]}>
       <Txt variante="detalle" negrita style={{ color: tema.brandText }}>
         {texto}
       </Txt>
-    </Pressable>
+    </PressableA11y>
   );
 }
 
@@ -83,6 +95,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: SgcSpacing.sm,
+  },
+  enlace: {
+    minHeight: AREA_TACTIL_MINIMA,
+    justifyContent: 'center',
   },
   vacio: {
     paddingVertical: SgcSpacing.sm,

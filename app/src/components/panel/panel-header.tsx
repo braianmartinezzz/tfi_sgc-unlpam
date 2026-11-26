@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { ThemeToggle } from '@/components/panel/theme-toggle';
 import { Txt } from '@/components/panel/txt';
+import { AREA_TACTIL_MINIMA } from '@/constants/accesibilidad';
 import { SgcFont, SgcRadius, SgcSpacing } from '@/constants/sgc-theme';
 import { useProfilePhoto } from '@/hooks/use-profile-photo';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
@@ -39,8 +41,16 @@ export function PanelHeader({
         { backgroundColor: tema.topbar, paddingTop: insets.top + SgcSpacing.sm },
       ]}>
       <View style={styles.fila}>
-        <View style={styles.marca}>
-          <View style={[styles.logo, { backgroundColor: tema.brand }]}>
+        {/* Marca: un solo elemento para el lector de pantalla (el logo es decorativo). */}
+        <View
+          accessible
+          accessibilityRole="header"
+          accessibilityLabel="UNLPam, Sistema de Convenios"
+          style={styles.marca}>
+          <View
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden
+            style={[styles.logo, { backgroundColor: tema.brand }]}>
             <View style={[styles.logoLineaSuperior, { backgroundColor: tema.onBrand }]} />
             <Txt variante="etiqueta" color="onBrand" negrita>
               SGC
@@ -58,9 +68,10 @@ export function PanelHeader({
 
         <ThemeToggle />
 
-        <Pressable
+        <PressableA11y
           accessibilityRole="button"
           accessibilityLabel="Abrir menú del perfil"
+          accessibilityHint="Muestra Mi perfil, Ayuda y Cerrar sesión"
           onPress={onAbrirPerfil}
           style={({ pressed }) => [
             styles.avatar,
@@ -68,18 +79,24 @@ export function PanelHeader({
             pressed && { opacity: 0.8 },
           ]}>
           {fotoPerfil ? (
-            <Image source={{ uri: fotoPerfil }} style={styles.avatarImagen} contentFit="cover" />
+            <Image
+              source={{ uri: fotoPerfil }}
+              style={styles.avatarImagen}
+              contentFit="cover"
+              accessible={false}
+            />
           ) : (
             <Txt variante="etiqueta" color="onBrand">
               {iniciales(nombreUsuario)}
             </Txt>
           )}
-        </Pressable>
+        </PressableA11y>
       </View>
 
       <View style={styles.fila}>
         <TextInput
           accessibilityLabel="Buscar convenios"
+          accessibilityHint="Escribí parte del título y tocá Buscar en el teclado"
           editable={!sinConexion}
           value={texto}
           onChangeText={setTexto}
@@ -89,13 +106,15 @@ export function PanelHeader({
           placeholderTextColor={tema.fieldPlaceholder}
           style={[
             styles.buscador,
-            { backgroundColor: tema.field, color: tema.onField },
+            { backgroundColor: tema.field, color: tema.onField, fontSize: 15 * tema.fontScale },
             sinConexion && { opacity: 0.6 },
           ]}
         />
-        <Pressable
+        <PressableA11y
           accessibilityRole="button"
           accessibilityLabel="Búsqueda avanzada con filtros"
+          accessibilityHint="Abre la búsqueda por estado, tipo y unidad académica"
+          accessibilityState={{ disabled: sinConexion }}
           disabled={sinConexion}
           onPress={onBusquedaAvanzada}
           style={({ pressed }) => [
@@ -107,7 +126,7 @@ export function PanelHeader({
           <Txt variante="detalle" color="onTopbar" negrita>
             Filtros
           </Txt>
-        </Pressable>
+        </PressableA11y>
       </View>
     </View>
   );
@@ -150,12 +169,13 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   avatar: {
-    width: 38,
-    height: 38,
+    width: AREA_TACTIL_MINIMA,
+    height: AREA_TACTIL_MINIMA,
     borderRadius: SgcRadius.pill,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   avatarImagen: {
     width: '100%',
@@ -163,14 +183,13 @@ const styles = StyleSheet.create({
   },
   buscador: {
     flex: 1,
-    height: 42,
+    height: AREA_TACTIL_MINIMA,
     borderRadius: SgcRadius.md,
     paddingHorizontal: SgcSpacing.md,
-    fontSize: 15,
     fontFamily: SgcFont,
   },
   filtros: {
-    height: 42,
+    height: AREA_TACTIL_MINIMA,
     borderWidth: 1,
     borderRadius: SgcRadius.md,
     paddingHorizontal: SgcSpacing.md,

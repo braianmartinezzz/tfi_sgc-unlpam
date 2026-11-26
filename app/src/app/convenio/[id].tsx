@@ -1,14 +1,16 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/panel/card';
 import { EncabezadoPantalla } from '@/components/panel/encabezado-pantalla';
 import { EstadoBadge } from '@/components/panel/estado-badge';
+import { PressableA11y } from '@/components/panel/pressable-a11y';
 import { Txt } from '@/components/panel/txt';
 import { Destinos } from '@/constants/navigation';
 import { SgcSpacing } from '@/constants/sgc-theme';
 import { useSgcTheme } from '@/hooks/use-sgc-theme';
+import { diasHastaVencimiento, textoVencimiento } from '@/lib/accesibilidad';
 import { formatFecha } from '@/lib/format';
 import { ApiError, NetworkError } from '@/services/api-client';
 import { guardarOffline, leerOffline } from '@/lib/offline-storage';
@@ -22,6 +24,14 @@ type Datos = {
   /** Presente solo si este convenio está esperando la firma del usuario actual. */
   pendiente: PendienteFirmaCompleto | null;
 };
+
+/** "12/12/2026 · Vence en 17 días": la fecha y cuánto falta, escrito (no solo con color). */
+function textoDeVencimiento(vencimiento: string): string {
+  const dias = diasHastaVencimiento(vencimiento);
+  const fecha = formatFecha(vencimiento);
+
+  return dias === null ? fecha : `${fecha} · ${textoVencimiento(dias)}`;
+}
 
 export default function ConvenioScreen() {
   const tema = useSgcTheme();
@@ -113,7 +123,7 @@ export default function ConvenioScreen() {
           ) : null}
 
           {idValido && !convenio && !error ? (
-            <View style={styles.centrado}>
+            <View style={styles.centrado} accessibilityLiveRegion="polite">
               <ActivityIndicator color={tema.brand} />
               <Txt variante="detalle" color="textSecondary">
                 Cargando convenio…
@@ -123,8 +133,14 @@ export default function ConvenioScreen() {
 
           {error ? (
             <Card titulo="No se pudo cargar el convenio" bordeSuperior={tema.danger}>
-              <Txt color="textSecondary">{error}</Txt>
-              <Boton texto="Reintentar" onPress={actualizar} />
+              <Txt color="textSecondary" accessibilityRole="alert">
+                {error}
+              </Txt>
+              <Boton
+                texto="Reintentar"
+                pista="Vuelve a pedir los datos del convenio"
+                onPress={actualizar}
+              />
             </Card>
           ) : null}
 
@@ -145,7 +161,7 @@ export default function ConvenioScreen() {
                 />
                 <Dato
                   etiqueta="Vencimiento"
-                  valor={instrumento?.vencimiento ? formatFecha(instrumento.vencimiento) : null}
+                  valor={instrumento?.vencimiento ? textoDeVencimiento(instrumento.vencimiento) : null}
                 />
               </Card>
 
@@ -167,6 +183,7 @@ export default function ConvenioScreen() {
                   ))}
                   <Boton
                     texto="Ir a firmar"
+                    pista="Abre el firmador con este convenio"
                     onPress={() => router.push(Destinos.firmador(pendiente.id_instrumento))}
                   />
                 </Card>
@@ -183,7 +200,7 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null }) {
   if (!valor) return null;
 
   return (
-    <View style={styles.dato}>
+    <View accessible accessibilityLabel={`${etiqueta}: ${valor}`} style={styles.dato}>
       <Txt variante="etiqueta" color="textSecondary">
         {etiqueta}
       </Txt>
@@ -192,18 +209,19 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null }) {
   );
 }
 
-function Boton({ texto, onPress }: { texto: string; onPress: () => void }) {
+function Boton({ texto, pista, onPress }: { texto: string; pista: string; onPress: () => void }) {
   const tema = useSgcTheme();
 
   return (
-    <Pressable
+    <PressableA11y
       accessibilityRole="button"
+      accessibilityHint={pista}
       onPress={onPress}
       style={({ pressed }) => [styles.boton, { backgroundColor: tema.brand }, pressed && { opacity: 0.85 }]}>
       <Txt negrita color="onBrand">
         {texto}
       </Txt>
-    </Pressable>
+    </PressableA11y>
   );
 }
 
